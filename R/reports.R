@@ -18,7 +18,7 @@ write_report <- function(..., report, parameters = NULL, output_file = NULL, out
     rmd_path <- report
   } else {
     checkmate::assert_choice(report, choices = supported_reports())
-    rmd_path <- system.file(file.path("reports", report), package = "adapop")
+    rmd_path <- system.file(file.path("reports", report), package = "stanpop")
   }
 
   # Store files to use
@@ -74,7 +74,7 @@ write_report <- function(..., report, parameters = NULL, output_file = NULL, out
 #' Supported reports
 #' @export
 supported_reports <- function(){
-  dir(system.file(file.path("reports"), package = "adapop"))
+  dir(system.file(file.path("reports"), package = "stanpop"))
 }
 
 

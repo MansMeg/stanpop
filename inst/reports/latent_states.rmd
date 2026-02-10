@@ -9,9 +9,9 @@ output:
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
-library(adapop)
+library(stanpop)
 paths_to_pop_objects <- "[pop_paths]"
-pops <- adapop:::rmd_read_pops(paths_to_pop_objects)
+pops <- stanpop:::rmd_read_pops(paths_to_pop_objects)
 
 parameter_path <- "[parameter_path]"
 param_default <- list("full_period" = TRUE, 
@@ -24,10 +24,10 @@ param_default <- list("full_period" = TRUE,
                       "summary_parameters" = NULL,
                       "diagnostics_table" = TRUE,
                       "model_information" = TRUE)
-params <- adapop:::rmd_read_params(parameter_path)
-params <- adapop:::rmd_parse_parameters(params, param_default)
+params <- stanpop:::rmd_read_params(parameter_path)
+params <- stanpop:::rmd_parse_parameters(params, param_default)
 
-parties <- adapop:::rmd_pops_unique_parties(pops)
+parties <- stanpop:::rmd_pops_unique_parties(pops)
 ```
 
 \pagebreak
@@ -46,7 +46,7 @@ if(params$full_period){
     for(j in seq_along(pops)){
       plt <- plot(pops[[j]], 
                   party, 
-                  latent_state_colour = adapop:::party_color(party),
+                  latent_state_colour = stanpop:::party_color(party),
                   shift_latent_days = 6L) + 
         geom_known_state(pops[[j]], party) + 
         ggplot2::theme_bw()
@@ -64,7 +64,7 @@ if(params$full_period){
 if(params$last_election_period){
   cat("## Last election period\n")
 
-  trs <- adapop:::rmd_known_state_period_time_range(pops)
+  trs <- stanpop:::rmd_known_state_period_time_range(pops)
   K <- length(trs)
   
   for(i in seq_along(parties)){
@@ -77,7 +77,7 @@ if(params$last_election_period){
                   shift_latent_days = 6L,
                   from = unname(trs[[K]]["from"]), 
                   to = unname(trs[[K]]["to"]), 
-                  latent_state_colour = adapop:::party_color(party)) + 
+                  latent_state_colour = stanpop:::party_color(party)) + 
         geom_known_state(pops[[j]], party) + 
         ggplot2::theme_bw()
       tit <- paste0(lubridate::year(trs[[K]]["from"]))
@@ -113,7 +113,7 @@ if(params$last_latent_state_summary){
 if(params$election_periods){
   cat("## Election periods\n")
 
-  trs <- adapop:::rmd_known_state_period_time_range(pops)
+  trs <- stanpop:::rmd_known_state_period_time_range(pops)
   
   for(i in seq_along(parties)){
     party <- parties[i]
@@ -126,7 +126,7 @@ if(params$election_periods){
                     shift_latent_days = 6L,
                     from = unname(trs[[k]]["from"]), 
                     to = unname(trs[[k]]["to"]), 
-                    latent_state_colour = adapop:::party_color(party)) + 
+                    latent_state_colour = stanpop:::party_color(party)) + 
           geom_known_state(pops[[j]], party) + 
           ggplot2::theme_bw()
         tit <- paste0(lubridate::year(trs[[k]]["from"]), "-", lubridate::year(trs[[k]]["to"]))
@@ -150,7 +150,7 @@ if(params$election_periods){
 
 if(params$election_campaigns){
   cat("## Election campaigns\n")
-  trs <- adapop:::rmd_known_state_campaign_time_range(pops, months = 6L)
+  trs <- stanpop:::rmd_known_state_campaign_time_range(pops, months = 6L)
   
   for(i in seq_along(parties)){
     party <- parties[i]
@@ -162,7 +162,7 @@ if(params$election_campaigns){
                     shift_latent_days = 6L,
                     from = unname(trs[[k]]["from"]), 
                     to = unname(trs[[k]]["to"]), 
-                    latent_state_colour = adapop:::party_color(party)) + 
+                    latent_state_colour = stanpop:::party_color(party)) + 
           geom_known_state(pops[[j]], party) + 
           ggplot2::theme_bw()
         tit <- lubridate::year(trs[[k]]["to"])
@@ -311,7 +311,7 @@ if(!is.null(params$summary_parameters)){
 if(params$diagnostics_table){
   
   cat("## Model diagnostics\n")
-  knitr::kable(adapop:::rmd_model_diagnostic_table(pops), 
+  knitr::kable(stanpop:::rmd_model_diagnostic_table(pops), 
                digits = 1, 
                caption = "Model diagnostics", 
                row.names = TRUE)
@@ -327,7 +327,7 @@ if(params$model_information){
 
   cat("\n## Model settings\n")
   
-  mi <- adapop:::rmd_model_settings(pops)
+  mi <- stanpop:::rmd_model_settings(pops)
   rownames(mi) <- paste("Model", mi$i)
   rmn <- c("model_time_from", "i", "y", "model_time_to", "polls_time_from", "polls_time_to", "known_state_time_from", "known_state_time_to")
   mi <- mi[,!colnames(mi) %in% rmn]

@@ -1,4 +1,4 @@
-# Stan Models used in adapop
+# Stan Models used in stanpop
 
 ## Semantic versioning of models
 

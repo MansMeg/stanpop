@@ -63,7 +63,7 @@ parse_date <- function(d, info){
   checkmate::assert_string(d)
   checkmate::assert_string(info)
 
-  month_abbr <- adapop:::month_abbr_en()
+  month_abbr <- stanpop:::month_abbr_en()
 
   ds <- strsplit(d, split = "–")[[1]]
   ds <- stringr::str_trim(ds)

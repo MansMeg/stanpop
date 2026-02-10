@@ -16,7 +16,7 @@ rerun_poll_of_polls <- function(x, ...){
   if(!is.null(rstan_arguments$data)) warning("The 'data' argument has been overwritten")
   rstan_arguments$data <- x$stan_data$stan_data
   if(is.null(rstan_arguments$model_code)) rstan_arguments$model_code = x$stan_fit@stanmodel@model_code
-  if(is.null(rstan_arguments$pars)) rstan_arguments$pars <- adapop:::stan_parameters_to_store(x$model)
+  if(is.null(rstan_arguments$pars)) rstan_arguments$pars <- stanpop:::stan_parameters_to_store(x$model)
 
 
   # Run Stan

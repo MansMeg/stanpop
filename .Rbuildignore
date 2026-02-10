@@ -1,3 +1,3 @@
-^rpackage\.Rproj$
+*.Rproj$
 ^\.Rproj\.user$
 ^data-raw$

@@ -12,15 +12,15 @@
 \usage{
 log_prob(object, ...)
 
-\method{log_prob}{poll_of_polls}(object, ...)
+log_prob.poll_of_polls(object, ...)
 
-\method{log_prob}{default}(object, ...)
+log_prob.default(object, ...)
 
 get_num_upars(object, ...)
 
-\method{get_num_upars}{poll_of_polls}(object, ...)
+get_num_upars.poll_of_polls(object, ...)
 
-\method{get_num_upars}{default}(object, ...)
+get_num_upars.default(object, ...)
 
 get_num_pars(object)
 }
