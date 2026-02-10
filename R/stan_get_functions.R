@@ -5,7 +5,7 @@
 #'
 #' @export
 log_prob <- function(object, ...){
-  UseMethod("log_prob")
+  NextMethod("log_prob")
 }
 #' @rdname log_prob
 #' @export
@@ -21,7 +21,7 @@ log_prob.default <- function(object, ...){
 #' @rdname log_prob
 #' @export
 get_num_upars <- function(object, ...){
-  UseMethod("get_num_upars")
+  NextMethod("get_num_upars")
 }
 #' @rdname log_prob
 #' @export
