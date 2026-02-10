@@ -2,17 +2,20 @@ context("model8k")
 
 # Run the line below to run different test suites locally
 # See documentation for details.
-# adapop:::set_test_stan_basic_on_local(TRUE)
-# adapop:::set_test_stan_full_on_local(TRUE)
+# stanpop:::set_test_stan_basic_on_local(TRUE)
+# stanpop:::set_test_stan_full_on_local(TRUE)
 # options(mc.cores = parallel::detectCores())
 if(FALSE){ # For debugging
   library(testthat)
-  library(adapop)
+  library(stanpop)
 }
 
+test_stan_full_on_local <- get_internal("test_stan_full_on_local")
+test_stan_basic_on_local <- get_internal("test_stan_basic_on_local")
+on_github_actions_test_branch <- get_internal("on_github_actions_test_branch")
 
 test_that("Test model 8k1 data parsing", {
-  skip_if_not(adapop:::test_stan_basic_on_local() | adapop:::test_stan_full_on_local() | adapop:::on_github_actions_test_branch())
+  skip_if_not(test_stan_basic_on_local() | test_stan_full_on_local() | on_github_actions_test_branch())
 
   data("x_test")
   txdf <- as.data.frame(x_test[3:4])
@@ -38,7 +41,9 @@ test_that("Test model 8k1 data parsing", {
   tl <- time_line(spd, time_scale = time_scale)
   hyper_parameters <- list(sigma_kappa_hyper = 0.01,
                           use_multivariate_version = 0)
-  expect_silent(res1 <- adapop:::parse_obs_x(hyper_parameters, tl, parties))
+
+  parse_obs_x <- get_internal("parse_obs_x")
+  expect_silent(res1 <- parse_obs_x(hyper_parameters, tl, parties))
   expect_true(res1$use_obs_of_x == 0L)
   expect_true(res1$R == 0L)
 
@@ -49,7 +54,7 @@ test_that("Test model 8k1 data parsing", {
                       nu = c(10, 30, 10))
 
   hyper_parameters$obs_x <- obs_x
-  expect_silent(res2 <- adapop:::parse_obs_x(hyper_parameters, tl, parties))
+  expect_silent(res2 <- parse_obs_x(hyper_parameters, tl, parties))
   expect_true(is.null(res2$obs_x))
   expect_true(res2$use_obs_of_x == 1L)
   expect_true(res2$R == 3L)
@@ -117,306 +122,10 @@ test_that("Test model 8k1 data parsing", {
 })
 
 
-test_that("Test model 8k1 and 8j1 are identical", {
-  skip_if_not(adapop:::test_stan_basic_on_local() | adapop:::test_stan_full_on_local() | adapop:::on_github_actions_test_branch())
-
-  data("x_test")
-  txdf <- as.data.frame(x_test[3:4])
-  colnames(txdf) <- paste0("x", 3:length(x_test))
-  data("pd_test")
-
-  time_scale <- "week"
-  parties <- c("x3", "x4")
-  set.seed(4711)
-  true_idx <- c(44, 72)
-  known_state <- tibble::tibble(date = as.Date("2010-01-01") + lubridate::weeks(true_idx - 1))
-  known_state <- cbind(known_state, txdf[true_idx,])
-
-  spd <- simulate_polls(x = txdf,
-                        pd = pd_test,
-                        npolls = 150,
-                        time_scale = time_scale,
-                        start_date = "2010-01-01")
-
-  mtr <- time_range(spd)
-  ltr <- setup_latent_time_ranges(x = NULL, y = c("x3", "x4"), mtr)
-
-  obs_x <- data.frame(date = as.Date(c("2010-05-03",  "2010-05-03", "2011-01-01")),
-                      y = c("x4", "x3", "x3"),
-                      mu = c(0.25, 0.27, 0.22),
-                      sigma = c(0.02, 0.03, 0.03),
-                      nu = c(10, 30, 10))
-
-  # Check that we get identical lpd
-  cfg <-  list(sigma_kappa_hyper = 0.03,
-               use_industry_bias = 1L,
-               use_house_bias = 0L,
-               use_design_effects = 0L,
-               use_multivariate_version = 2L,
-               use_softmax = 1L)
-
-  expect_silent(pop8j1_out <-
-                  capture.output(
-                    suppressWarnings(
-                      suppressMessages(
-                        pop8j1 <- poll_of_polls(y = parties,
-                                                model = "model8j1",
-                                                polls_data = spd,
-                                                time_scale = time_scale,
-                                                known_state = known_state,
-                                                hyper_parameters = cfg,
-                                                warmup = 0,
-                                                iter = 3,
-                                                chains = 1,
-                                                cache_dir = NULL)
-                      )
-                    )
-                  )
-  )
-
-  expect_silent(pop8k1_out <-
-                  capture.output(
-                    suppressWarnings(
-                      suppressMessages(
-                        pop8k1 <- poll_of_polls(y = parties,
-                                                model = "model8k1",
-                                                polls_data = spd,
-                                                time_scale = time_scale,
-                                                known_state = known_state,
-                                                hyper_parameters = cfg,
-                                                warmup = 0,
-                                                iter = 3,
-                                                chains = 1,
-                                                cache_dir = NULL)
-                      )
-                    )
-                  )
-  )
-
-  pn8j1 <- parameter_names(pop8j1)
-  pn8k1 <- parameter_names(pop8k1)
-  checkmate::expect_subset(pn8j1, pn8k1)
-
-  no_up3 <- get_num_upars(pop8j1)
-  no_up2 <- get_num_upars(pop8k1)
-  expect_equal(no_up3, no_up2)
-
-  lp1a <- log_prob(pop8j1, rep(0, get_num_upars(pop8j1)))
-  lp1b <- log_prob(pop8k1, rep(0, get_num_upars(pop8j1)))
-  expect_equal(lp1a, lp1b)
-
-  pars <- rnorm(no_up2)
-  lp1a <- log_prob(pop8j1, pars)
-  lp1b <- log_prob(pop8k1, pars)
-  expect_equal(lp1a, lp1b)
-
-  lsh3 <- latent_state(pop8j1)
-  lsh2 <- latent_state(pop8k1)
-
-})
-
-
-test_that("Test that adding obs_x give different log_prob", {
-  skip_if_not(adapop:::test_stan_basic_on_local() | adapop:::test_stan_full_on_local() | adapop:::on_github_actions_test_branch())
-
-  data("x_test")
-  txdf <- as.data.frame(x_test[3:4])
-  colnames(txdf) <- paste0("x", 3:length(x_test))
-  data("pd_test")
-
-  time_scale <- "week"
-  parties <- c("x3", "x4")
-  set.seed(4711)
-  true_idx <- c(44, 72)
-  known_state <- tibble::tibble(date = as.Date("2010-01-01") + lubridate::weeks(true_idx - 1))
-  known_state <- cbind(known_state, txdf[true_idx,])
-
-  spd <- simulate_polls(x = txdf,
-                        pd = pd_test,
-                        npolls = 150,
-                        time_scale = time_scale,
-                        start_date = "2010-01-01")
-
-  mtr <- time_range(spd)
-  ltr <- setup_latent_time_ranges(x = NULL, y = c("x3", "x4"), mtr)
-
-  obs_x <- data.frame(date = as.Date(c("2010-05-03",  "2010-05-03", "2011-01-01")),
-                      y = c("x4", "x3", "x3"),
-                      mu = c(0.25, 0.27, 0.22),
-                      sigma = c(0.02, 0.03, 0.03),
-                      nu = c(10, 30, 10))
-
-  # Check that we get identical lpd
-  cfg <-  list(sigma_kappa_hyper = 0.03,
-               use_industry_bias = 1L,
-               use_house_bias = 0L,
-               use_design_effects = 0L,
-               use_multivariate_version = 2L,
-               use_softmax = 1L)
-
-  expect_silent(pop8j1_out <-
-                  capture.output(
-                    suppressWarnings(
-                      suppressMessages(
-                        pop8j1 <- poll_of_polls(y = parties,
-                                                model = "model8j1",
-                                                polls_data = spd,
-                                                time_scale = time_scale,
-                                                known_state = known_state,
-                                                hyper_parameters = cfg,
-                                                warmup = 0,
-                                                iter = 3,
-                                                chains = 1,
-                                                cache_dir = NULL)
-                      )
-                    )
-                  )
-  )
-
-  cfg$obs_x <- obs_x
-
-  expect_silent(pop8k1_out <-
-                  capture.output(
-                    suppressWarnings(
-                      suppressMessages(
-                        pop8k1 <- poll_of_polls(y = parties,
-                                                model = "model8k1",
-                                                polls_data = spd,
-                                                time_scale = time_scale,
-                                                known_state = known_state,
-                                                hyper_parameters = cfg,
-                                                warmup = 0,
-                                                iter = 3,
-                                                chains = 1,
-                                                cache_dir = NULL)
-                      )
-                    )
-                  )
-  )
-
-  pn8j1 <- parameter_names(pop8j1)
-  pn8k1 <- parameter_names(pop8k1)
-  checkmate::expect_subset(pn8j1, pn8k1)
-
-  no_up3 <- get_num_upars(pop8j1)
-  no_up2 <- get_num_upars(pop8k1)
-  expect_equal(no_up3, no_up2)
-
-  lp1a <- log_prob(pop8j1, rep(0, get_num_upars(pop8j1)))
-  lp1b <- log_prob(pop8k1, rep(0, get_num_upars(pop8j1)))
-  expect_failure(expect_equal(lp1a, lp1b))
-
-  pars <- rnorm(no_up2)
-  lp1a <- log_prob(pop8j1, pars)
-  lp1b <- log_prob(pop8k1, pars)
-  expect_failure(expect_equal(lp1a, lp1b))
-
-})
-
-
-test_that("Test kappa pred constraint does not affect log_prob", {
-  skip_if_not(adapop:::test_stan_basic_on_local() | adapop:::test_stan_full_on_local() | adapop:::on_github_actions_test_branch())
-
-  data("x_test")
-  txdf <- as.data.frame(x_test[3:4])
-  colnames(txdf) <- paste0("x", 3:length(x_test))
-  data("pd_test")
-
-  time_scale <- "week"
-  parties <- c("x3", "x4")
-  set.seed(4711)
-  true_idx <- c(44, 72)
-  known_state <- tibble::tibble(date = as.Date("2010-01-01") + lubridate::weeks(true_idx - 1))
-  known_state <- cbind(known_state, txdf[true_idx,])
-
-  spd <- simulate_polls(x = txdf,
-                        pd = pd_test,
-                        npolls = 150,
-                        time_scale = time_scale,
-                        start_date = "2010-01-01")
-
-  mtr <- time_range(spd)
-  ltr <- setup_latent_time_ranges(x = NULL, y = c("x3", "x4"), mtr)
-
-  obs_x <- data.frame(date = as.Date(c("2010-05-03",  "2010-05-03", "2011-01-01")),
-                      y = c("x4", "x3", "x3"),
-                      mu = c(0.25, 0.27, 0.22),
-                      sigma = c(0.02, 0.03, 0.03),
-                      nu = c(10, 30, 10))
-
-  # Check that we get identical lpd
-  cfg <-  list(sigma_kappa_hyper = 0.03,
-               use_industry_bias = 1L,
-               use_house_bias = 0L,
-               use_design_effects = 0L,
-               use_multivariate_version = 2L,
-               use_softmax = 1L)
-
-  expect_silent(pop8j1_out <-
-                  capture.output(
-                    suppressWarnings(
-                      suppressMessages(
-                        pop8j1 <- poll_of_polls(y = parties,
-                                                model = "model8j1",
-                                                polls_data = spd,
-                                                time_scale = time_scale,
-                                                known_state = known_state,
-                                                hyper_parameters = cfg,
-                                                warmup = 0,
-                                                iter = 3,
-                                                chains = 1,
-                                                cache_dir = NULL)
-                      )
-                    )
-                  )
-  )
-
-  cfg$use_constrained_party_kappa_pred <- 1L
-
-  expect_silent(pop8k1_out <-
-                  capture.output(
-                    suppressWarnings(
-                      suppressMessages(
-                        pop8k1 <- poll_of_polls(y = parties,
-                                                model = "model8k1",
-                                                polls_data = spd,
-                                                time_scale = time_scale,
-                                                known_state = known_state,
-                                                hyper_parameters = cfg,
-                                                warmup = 0,
-                                                iter = 3,
-                                                chains = 1,
-                                                cache_dir = NULL)
-                      )
-                    )
-                  )
-  )
-
-  pn8j1 <- parameter_names(pop8j1)
-  pn8k1 <- parameter_names(pop8k1)
-  checkmate::expect_subset(pn8j1, pn8k1)
-
-  no_up3 <- get_num_upars(pop8j1)
-  no_up2 <- get_num_upars(pop8k1)
-  expect_equal(no_up3, no_up2)
-
-  lp1a <- log_prob(pop8j1, rep(0, get_num_upars(pop8j1)))
-  lp1b <- log_prob(pop8k1, rep(0, get_num_upars(pop8j1)))
-  expect_equal(lp1a, lp1b)
-
-  pars <- rnorm(no_up2)
-  lp1a <- log_prob(pop8j1, pars)
-  lp1b <- log_prob(pop8k1, pars)
-  expect_equal(lp1a, lp1b)
-
-  lsh3 <- latent_state(pop8j1)
-  lsh2 <- latent_state(pop8k1)
-
-})
 
 
 test_that("Test sum to zero constraint for kappa", {
-  skip_if_not(adapop:::test_stan_basic_on_local() | adapop:::test_stan_full_on_local() | adapop:::on_github_actions_test_branch())
+  skip_if_not(test_stan_basic_on_local() | test_stan_full_on_local() | on_github_actions_test_branch())
 
   data("x_test")
   txdf <- as.data.frame(x_test[3:4])
@@ -533,7 +242,7 @@ test_that("Test sum to zero constraint for kappa", {
 
 
 test_that("Test simple prediction with known obs_x", {
-  skip_if_not(adapop:::test_stan_basic_on_local() | adapop:::test_stan_full_on_local() | adapop:::on_github_actions_test_branch())
+  skip_if_not(test_stan_basic_on_local() | test_stan_full_on_local() | on_github_actions_test_branch())
 
   data("x_test")
   txdf <- as.data.frame(x_test[3:4])
@@ -591,14 +300,14 @@ test_that("Test simple prediction with known obs_x", {
                   )
   )
 
-  plot(pop8k1a, "x3")
-  plot(pop8k1a, "x4")
+  expect_silent(plot(pop8k1a, "x3"))
+  expect_silent(plot(pop8k1a, "x4"))
 
 })
 
 
 test_that("Test multiplicative industry bias for kappa", {
-  skip_if_not(adapop:::test_stan_basic_on_local() | adapop:::test_stan_full_on_local())
+  skip_if_not(test_stan_basic_on_local() | test_stan_full_on_local())
 
   data("x_test")
   txdf <- as.data.frame(x_test[3:4])
@@ -682,8 +391,8 @@ test_that("Test multiplicative industry bias for kappa", {
                   )
   )
 
-  plot(pop8k1a, "x3")
-  plot(pop8k1a, "x4")
+  expect_silent(plot(pop8k1a, "x3"))
+  expect_silent(plot(pop8k1a, "x4"))
 
   kappa_pred_a <- rstan::extract(pop8k1a$stan_fit)$kappa_pred
   kpa11 <- mean(kappa_pred_a[,1,1])

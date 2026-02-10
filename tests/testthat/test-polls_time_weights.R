@@ -1,5 +1,6 @@
 context("polls_time_weight")
 
+
 test_that("polls_time_weights constructor works", {
   data("swedish_polls_curated")
   swedish_polls <- swedish_polls_curated

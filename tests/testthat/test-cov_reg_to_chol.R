@@ -9,10 +9,9 @@ if(FALSE){ # For debugging
   library(rstan)
 }
 
-
 test_that("Test cov_reg_to_chol", {
-  # First we test that we get a similar result with 8g and 8g1
-  skip_if_not(stanpop:::test_stan_full_on_local())
+  test_stan_full_on_local <- get_internal("test_stan_full_on_local")
+  skip_if_not(test_stan_full_on_local())
 
   set.seed(4711)
   n = 1000

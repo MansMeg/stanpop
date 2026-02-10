@@ -2,8 +2,8 @@ context("model8k3")
 
 # Run the line below to run different test suites locally
 # See documentation for details.
-# adapop:::set_test_stan_basic_on_local(TRUE)
-# adapop:::set_test_stan_full_on_local(TRUE)
+# stanpop:::set_test_stan_basic_on_local(TRUE)
+# stanpop:::set_test_stan_full_on_local(TRUE)
 # options(mc.cores = parallel::detectCores())
 if(FALSE){ # For debugging
   library(testthat)
@@ -11,8 +11,13 @@ if(FALSE){ # For debugging
 }
 
 
+test_stan_full_on_local <- get_internal("test_stan_full_on_local")
+test_stan_basic_on_local <- get_internal("test_stan_basic_on_local")
+on_github_actions_test_branch <- get_internal("on_github_actions_test_branch")
+
+
 test_that("Test model 8k3 data parsing", {
-  skip_if_not(adapop:::test_stan_basic_on_local() | adapop:::test_stan_full_on_local() | adapop:::on_github_actions_test_branch())
+  skip_if_not(test_stan_basic_on_local() | test_stan_full_on_local() | on_github_actions_test_branch())
 
   data("x_test")
   txdf <- as.data.frame(x_test[3:4])
@@ -38,7 +43,8 @@ test_that("Test model 8k3 data parsing", {
   tl <- time_line(spd, time_scale = time_scale)
   hyper_parameters <- list(sigma_kappa_hyper = 0.01,
                           use_multivariate_version = 0)
-  expect_silent(res1 <- adapop:::parse_obs_x(hyper_parameters, tl, parties))
+  parse_obs_x <- get_internal("parse_obs_x")
+  expect_silent(res1 <- parse_obs_x(hyper_parameters, tl, parties))
   expect_true(res1$use_obs_of_x == 0L)
   expect_true(res1$R == 0L)
 
@@ -49,7 +55,7 @@ test_that("Test model 8k3 data parsing", {
                       nu = c(10, 30, 10))
 
   hyper_parameters$obs_x <- obs_x
-  expect_silent(res2 <- adapop:::parse_obs_x(hyper_parameters, tl, parties))
+  expect_silent(res2 <- parse_obs_x(hyper_parameters, tl, parties))
   expect_true(is.null(res2$obs_x))
   expect_true(res2$use_obs_of_x == 1L)
   expect_true(res2$R == 3L)
@@ -118,7 +124,7 @@ test_that("Test model 8k3 data parsing", {
 
 
 test_that("Test model 8k2 and 8k3 are identical", {
-  skip_if_not(adapop:::test_stan_basic_on_local() | adapop:::test_stan_full_on_local() | adapop:::on_github_actions_test_branch())
+  skip_if_not(test_stan_basic_on_local() | test_stan_full_on_local() | on_github_actions_test_branch())
 
   data("x_test")
   txdf <- as.data.frame(x_test[3:4])
@@ -212,197 +218,3 @@ test_that("Test model 8k2 and 8k3 are identical", {
 
 })
 
-
-test_that("Test model 8k2 and 8k3 are identical for house bias", {
-  skip("This should not pass since the models are actually different.")
-  skip_if_not(adapop:::test_stan_basic_on_local() | adapop:::test_stan_full_on_local() | adapop:::on_github_actions_test_branch())
-
-  data("x_test")
-  txdf <- as.data.frame(x_test[3:4])
-  colnames(txdf) <- paste0("x", 3:length(x_test))
-  data("pd_test")
-
-  time_scale <- "week"
-  parties <- c("x3", "x4")
-  set.seed(4711)
-  true_idx <- c(44, 72)
-  known_state <- tibble::tibble(date = as.Date("2010-01-01") + lubridate::weeks(true_idx - 1))
-  known_state <- cbind(known_state, txdf[true_idx,])
-
-  spd <- simulate_polls(x = txdf,
-                        pd = pd_test,
-                        npolls = 150,
-                        time_scale = time_scale,
-                        start_date = "2010-01-01")
-
-  mtr <- time_range(spd)
-  ltr <- setup_latent_time_ranges(x = NULL, y = c("x3", "x4"), mtr)
-
-  # Check that we get identical lpd
-  cfg <-  list(sigma_kappa_hyper = 0.03,
-               beta_sigma_1_sigma_hyper = 0.9,
-               use_industry_bias = 1L,
-               use_house_bias = 1L,
-               use_design_effects = 0L,
-               use_multivariate_version = 2L,
-               use_softmax = 1L)
-
-  expect_silent(pop8k2_out <-
-                  capture.output(
-                    suppressWarnings(
-                      suppressMessages(
-                        pop8k2hb <- poll_of_polls(y = parties,
-                                                model = "model8k2",
-                                                polls_data = spd,
-                                                time_scale = time_scale,
-                                                known_state = known_state,
-                                                hyper_parameters = cfg,
-                                                slow_scales = known_state$date,
-                                                warmup = 0,
-                                                iter = 3,
-                                                chains = 1,
-                                                cache_dir = NULL)
-                      )
-                    )
-                  )
-  )
-
-  expect_silent(pop8k3_out <-
-                  capture.output(
-                    suppressWarnings(
-                      suppressMessages(
-                        pop8k3hb <- poll_of_polls(y = parties,
-                                                model = "model8k3",
-                                                polls_data = spd,
-                                                time_scale = time_scale,
-                                                known_state = known_state,
-                                                hyper_parameters = cfg,
-                                                slow_scales = known_state$date,
-                                                warmup = 0,
-                                                iter = 3,
-                                                chains = 1,
-                                                cache_dir = NULL)
-                      )
-                    )
-                  )
-  )
-
-  # Check that S is > 1
-  expect_true(pop8k2hb$stan_data$stan_data$S > 1L)
-  expect_true(pop8k3hb$stan_data$stan_data$S > 1L)
-
-  pn8k2 <- parameter_names(pop8k2hb)
-  pn8k3 <- parameter_names(pop8k3hb)
-  checkmate::expect_subset(pn8k2, pn8k3)
-
-  no_up2 <- get_num_upars(pop8k2hb)
-  no_up3 <- get_num_upars(pop8k3hb)
-  expect_equal(no_up3, no_up2)
-
-  lp1a <- log_prob(pop8k2hb, rep(0, get_num_upars(pop8k2hb)))
-  lp1b <- log_prob(pop8k3hb, rep(0, get_num_upars(pop8k2hb)))
-  expect_equal(lp1a, lp1b)
-
-  pars <- rnorm(no_up2)
-  lp1a <- log_prob(pop8k2hb, pars)
-  lp1b <- log_prob(pop8k3hb, pars)
-  expect_equal(lp1a, lp1b)
-
-  # Check that we get identical lpd
-  cfg <-  list(sigma_kappa_hyper = 0.03,
-               beta_sigma_1_sigma_hyper = 0.9,
-               use_industry_bias = 1L,
-               use_house_bias = 0L,
-               use_design_effects = 1L,
-               use_multivariate_version = 2L,
-               use_softmax = 1L)
-
-  expect_silent(pop8k2_out <-
-                  capture.output(
-                    suppressWarnings(
-                      suppressMessages(
-                        pop8k2de <- poll_of_polls(y = parties,
-                                                model = "model8k2",
-                                                polls_data = spd,
-                                                time_scale = time_scale,
-                                                known_state = known_state,
-                                                hyper_parameters = cfg,
-                                                slow_scales = known_state$date,
-                                                warmup = 0,
-                                                iter = 3,
-                                                chains = 1,
-                                                cache_dir = NULL)
-                      )
-                    )
-                  )
-  )
-
-  expect_silent(pop8k3_out <-
-                  capture.output(
-                    suppressWarnings(
-                      suppressMessages(
-                        pop8k3de <- poll_of_polls(y = parties,
-                                                model = "model8k3",
-                                                polls_data = spd,
-                                                time_scale = time_scale,
-                                                known_state = known_state,
-                                                hyper_parameters = cfg,
-                                                slow_scales = known_state$date,
-                                                warmup = 0,
-                                                iter = 3,
-                                                chains = 1,
-                                                cache_dir = NULL)
-                      )
-                    )
-                  )
-  )
-
-  # Check that S is > 1
-  expect_true(pop8k2de$stan_data$stan_data$S > 1L)
-  expect_true(pop8k3de$stan_data$stan_data$S > 1L)
-
-  pn8k2 <- parameter_names(pop8k2de)
-  pn8k3 <- parameter_names(pop8k3de)
-  checkmate::expect_subset(pn8k2, pn8k3)
-
-  no_up2 <- get_num_upars(pop8k2de)
-  no_up3 <- get_num_upars(pop8k3de)
-  expect_equal(no_up3, no_up2)
-
-  lp1a <- log_prob(pop8k2de, rep(0, get_num_upars(pop8k2de)))
-  lp1b <- log_prob(pop8k3de, rep(0, get_num_upars(pop8k2de)))
-  expect_equal(lp1a, lp1b)
-
-  pars <- rnorm(no_up2)
-  lp1a <- log_prob(pop8k2de, pars)
-  lp1b <- log_prob(pop8k3de, pars)
-  expect_equal(lp1a, lp1b)
-
-})
-
-if(FALSE){
-pop8k2 <- poll_of_polls(y = parties,
-                        model = "model8k2",
-                        polls_data = spd,
-                        time_scale = time_scale,
-                        known_state = known_state,
-                        hyper_parameters = cfg,
-                        slow_scales = known_state$date,
-                        warmup = 1000,
-                        iter = 2000,
-                        chains = 3,
-                        cache_dir = NULL)
-
-
-pop8k3 <- poll_of_polls(y = parties,
-                        model = "model8k3",
-                        polls_data = spd,
-                        time_scale = time_scale,
-                        known_state = known_state,
-                        hyper_parameters = cfg,
-                        slow_scales = known_state$date,
-                        warmup = 1000,
-                        iter = 2000,
-                        chains = 3,
-                        cache_dir = NULL)
-}

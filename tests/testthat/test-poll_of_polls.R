@@ -1,7 +1,7 @@
 context("poll_of_polls")
 
 test_that("test model pop", {
-  skip("Implement a simple testrun with 1 iteration with a simple case")
+  skip("TODO: Implement a simple testrun with 1 iteration with a simple case")
   skip("Test that error if polls data object with zero observations")
   skip("Test that all y() values are larger than exactly 0")
 

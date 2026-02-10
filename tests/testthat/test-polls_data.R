@@ -1,5 +1,6 @@
 context("polls_data")
 
+
 test_that("polls_data constructor works", {
   data("swedish_polls_curated")
   expect_silent(pd <- polls_data(y = swedish_polls_curated[,3:11],

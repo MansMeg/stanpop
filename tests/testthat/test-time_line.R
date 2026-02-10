@@ -1,5 +1,6 @@
 context("time_line")
 
+
 test_that("time_line constructor works", {
   x <- 1:10
   expect_silent(tl1 <- time_line(x, time_scale = "week", start_date = "2010-01-04"))

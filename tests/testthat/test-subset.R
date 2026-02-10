@@ -1,3 +1,5 @@
+context("subset")
+
 test_that("subset_publish_dates works", {
   data("swedish_polls_curated")
   swedish_polls <- swedish_polls_curated

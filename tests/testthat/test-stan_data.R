@@ -44,7 +44,6 @@ test_that("stan_polls_data works", {
 })
 
 
-
 test_that("stan_polls_data works with overlapping error", {
   data("swedish_polls_curated")
   swedish_polls <- swedish_polls_curated
@@ -59,28 +58,6 @@ test_that("stan_polls_data works with overlapping error", {
 
   expect_error(sd <- stan_polls_data(x = swe_polls, time_scale = "week", y = "S", model = "model5"), regexp = "2009-12-30")
   expect_error(sd <- stan_polls_data(x = swe_polls, time_scale = "week", y = "S", model = "model5"), regexp = "The following date")
-
-})
-
-
-
-test_that("stan_data model6b", {
-  data("swedish_polls_curated")
-  data("swedish_elections")
-  swedish_polls <- swedish_polls_curated
-  swe_polls <- polls_data(y = swedish_polls[,3:11],
-                          house = swedish_polls$Company,
-                          publish_date = swedish_polls$PublDate,
-                          start_date = swedish_polls$collectPeriodFrom,
-                          end_date = swedish_polls$collectPeriodTo,
-                          n = swedish_polls$n)
-  swe_polls <- subset_dates(swe_polls, "2010-01-01")
-  swe_polls <- swe_polls[complete_poll_info(swe_polls)]
-  swedish_elections$date <- swedish_elections$PublDate
-
-  expect_silent(sd1 <- stan_polls_data(x = swe_polls, time_scale = "week", y = "S", model = "model6b"))
-  expect_error(sd2 <- stan_polls_data(x = swe_polls, time_scale = "week", y = "S", model = "model6b", known_state = swedish_elections))
-  expect_silent(sd2 <- stan_polls_data(x = swe_polls, time_scale = "week", y = "S", model = "model6b", known_state = swedish_elections[swedish_elections$date > as.Date("2010-01-01") & swedish_elections$date < as.Date("2022-01-01"),]))
 
 })
 

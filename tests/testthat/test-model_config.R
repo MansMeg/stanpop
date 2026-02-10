@@ -1,5 +1,6 @@
 context("model_config")
 
+
 test_that("model_config works", {
 
   cfg1 <- list("sigma_kappa_hyper" = 0.01)

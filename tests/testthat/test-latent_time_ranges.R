@@ -7,10 +7,12 @@ test_that("time_line constructor works", {
   ltr_list <- list(a = list(from = "2010-05-01", to = "2010-10-01"),
                    b = list(from = "2010-04-01"),
                    d = list(to = "2010-05-01"))
+  assert_latent_time_range_list <- get_internal("assert_latent_time_range_list")
   expect_silent(assert_latent_time_range_list(ltr_list))
 
   expect_silent(ltr <- setup_latent_time_ranges(ltr_list, y, mtr))
 
+  assert_latent_time_ranges <- get_internal("assert_latent_time_ranges")
   expect_silent(assert_latent_time_ranges(ltr, y))
   expect_silent(assert_latent_time_ranges(ltr, y, mtr))
 
