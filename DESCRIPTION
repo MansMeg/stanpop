@@ -1,0 +1,38 @@
+Package: stanpop
+Title: Stan-based Poll of Polls Models
+Version: 0.1.0
+Authors@R: 
+    person(given = "Mans",
+           family = "Magnusson",
+           role = c("aut", "cre"),
+           email = "mons.magnusson@gmail.com")
+Description: Stan Models and code to run Bayesian poll of polls models.
+License: MIT + file LICENSE
+Encoding: UTF-8
+LazyData: true
+RoxygenNote: 7.3.2
+Depends: R (>= 3.5.0)
+Imports:
+  checkmate,
+  digest,  
+  dplyr,
+  ggplot2,  
+  lubridate,
+  rlang,
+  rstan,
+  tibble,  
+  yaml
+Suggests: 
+  BH,
+  abind,
+  bayesplot,
+  matrixStats,
+  git2r,
+  jsonlite,  
+  knitr,
+  plyr,
+  RcppEigen,  
+  rmarkdown,  
+  stringr,
+  testthat (>= 2.1.0),  
+  xtable
