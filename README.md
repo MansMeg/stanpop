@@ -1,5 +1,9 @@
 # stanpop
 
+<!-- badges: start -->
+  [![R-CMD-check](https://github.com/MansMeg/stanpop/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/MansMeg/stanpop/actions/workflows/R-CMD-check.yaml)
+<!-- badges: end -->
+
 **stanpop** is an R package that fits Bayesian *poll-of-polls* models using Stan.  
 It provides a clean, reusable API for preparing polling data, building Stan inputs, running inference, and extracting diagnostics and outputs.
 
