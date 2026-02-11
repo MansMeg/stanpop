@@ -1,7 +1,8 @@
 # stanpop
 
 <!-- badges: start -->
-  [![R-CMD-check](https://github.com/MansMeg/stanpop/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/MansMeg/stanpop/actions/workflows/R-CMD-check.yaml)
+[![R-CMD-check](https://github.com/MansMeg/stanpop/actions/workflows/R-CMD-check.yaml/badge.svg)](https://github.com/MansMeg/stanpop/actions/workflows/R-CMD-check.yaml)
+[![R-CMD-check](https://github.com/MansMeg/stanpop/actions/workflows/R-CMD-check-stan.yaml/badge.svg)](https://github.com/MansMeg/stanpop/actions/workflows/R-CMD-check-stan.yaml)
 [![Codecov test coverage](https://codecov.io/gh/MansMeg/stanpop/graph/badge.svg)](https://app.codecov.io/gh/MansMeg/stanpop)
 <!-- badges: end -->
 
