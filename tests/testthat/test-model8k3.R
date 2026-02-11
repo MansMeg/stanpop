@@ -172,6 +172,7 @@ test_that("Test model 8k2 and 8k3 are identical", {
                     )
                   )
   )
+  expect_output(print(pop8k2))
 
   expect_silent(pop8k3_out <-
                   capture.output(
@@ -191,6 +192,8 @@ test_that("Test model 8k2 and 8k3 are identical", {
                     )
                   )
   )
+
+  expect_output(print(pop8k3))
 
   pn8k2 <- parameter_names(pop8k2)
   pn8k3 <- parameter_names(pop8k3)

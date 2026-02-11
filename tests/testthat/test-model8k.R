@@ -204,6 +204,8 @@ test_that("Test sum to zero constraint for kappa", {
                   )
   )
 
+  expect_output(print(pop8k1a))
+
   kappa_pred_a <- rstan::extract(pop8k1a$stan_fit)$kappa_pred
   kappa_pred_next_sum_a <- kappa_pred_a[,3,1] + kappa_pred_a[,3,2]
   expect_failure(expect_equal(mean(kappa_pred_next_sum_a), 0))
@@ -295,6 +297,7 @@ test_that("Test simple prediction with known obs_x", {
                     )
                   )
   )
+  expect_output(print(pop8k1a))
 
   expect_silent(plot(pop8k1a, "x3"))
   expect_silent(plot(pop8k1a, "x4"))
@@ -386,6 +389,8 @@ test_that("Test multiplicative industry bias for kappa", {
                     )
                   )
   )
+
+  expect_output(print(pop8k1a))
 
   expect_silent(plot(pop8k1a, "x3"))
   expect_silent(plot(pop8k1a, "x4"))
