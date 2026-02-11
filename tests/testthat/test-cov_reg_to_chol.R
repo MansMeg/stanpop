@@ -25,7 +25,7 @@ test_that("Test cov_reg_to_chol", {
   }
   stan_data = list(Y=Y, N=n, P=p)
 
-  test_model_path <- "tests/testthat/stan_code/cov_reg_to_chol.stan"
+  test_model_path <- testthat::test_path("stan_code", "cov_reg_to_chol.stan")
   fit <- rstan::stan(file = test_model_path,
               data    = stan_data,
               warmup  = 500,
@@ -34,7 +34,7 @@ test_that("Test cov_reg_to_chol", {
               cores   = 2,
               thin    = 1)
 
-  Sigma_hat <- extract(fit,'Q')$Q[1,,]
+  Sigma_hat <- rstan::extract(fit,'Q')$Q[1,,]
   expect_true(all(abs(Sigma_hat - Sigma) < 0.2))
 
 })
