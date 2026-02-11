@@ -11,6 +11,7 @@ if(FALSE){ # For debugging
 
 test_that("Test cov_reg_to_chol", {
   skip_if_no_stan_tests()
+  skip("cov_reg_to_chol.stan is currently not in use")
 
   set.seed(4711)
   n = 1000
