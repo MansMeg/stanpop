@@ -1,3 +1,4 @@
 stanpop.Rproj$
 ^\.Rproj\.user$
 ^data-raw$
+^.*\.Rproj$

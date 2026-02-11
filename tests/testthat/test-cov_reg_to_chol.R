@@ -10,8 +10,7 @@ if(FALSE){ # For debugging
 }
 
 test_that("Test cov_reg_to_chol", {
-  test_stan_full_on_local <- get_internal("test_stan_full_on_local")
-  skip_if_not(test_stan_full_on_local())
+  skip_if_no_stan_tests()
 
   set.seed(4711)
   n = 1000

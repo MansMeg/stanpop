@@ -10,14 +10,7 @@ if(FALSE){ # For debugging
   library(stanpop)
 }
 
-
-test_stan_full_on_local <- get_internal("test_stan_full_on_local")
-test_stan_basic_on_local <- get_internal("test_stan_basic_on_local")
-on_github_actions_test_branch <- get_internal("on_github_actions_test_branch")
-
-
 test_that("Test model 8k3 data parsing", {
-  skip_if_not(test_stan_basic_on_local() | test_stan_full_on_local() | on_github_actions_test_branch())
 
   data("x_test")
   txdf <- as.data.frame(x_test[3:4])
@@ -124,7 +117,6 @@ test_that("Test model 8k3 data parsing", {
 
 
 test_that("Test model 8k2 and 8k3 are identical", {
-  skip_if_not(test_stan_basic_on_local() | test_stan_full_on_local() | on_github_actions_test_branch())
 
   data("x_test")
   txdf <- as.data.frame(x_test[3:4])
@@ -161,6 +153,7 @@ test_that("Test model 8k2 and 8k3 are identical", {
                use_multivariate_version = 2L,
                use_softmax = 1L)
 
+  skip_if_no_stan_tests()
   expect_silent(pop8k2_out <-
                   capture.output(
                     suppressWarnings(

@@ -10,12 +10,8 @@ if(FALSE){ # For debugging
   library(stanpop)
 }
 
-test_stan_full_on_local <- get_internal("test_stan_full_on_local")
-test_stan_basic_on_local <- get_internal("test_stan_basic_on_local")
-on_github_actions_test_branch <- get_internal("on_github_actions_test_branch")
-
 test_that("Test model 8k1 data parsing", {
-  skip_if_not(test_stan_basic_on_local() | test_stan_full_on_local() | on_github_actions_test_branch())
+
 
   data("x_test")
   txdf <- as.data.frame(x_test[3:4])
@@ -125,7 +121,6 @@ test_that("Test model 8k1 data parsing", {
 
 
 test_that("Test sum to zero constraint for kappa", {
-  skip_if_not(test_stan_basic_on_local() | test_stan_full_on_local() | on_github_actions_test_branch())
 
   data("x_test")
   txdf <- as.data.frame(x_test[3:4])
@@ -189,6 +184,7 @@ test_that("Test sum to zero constraint for kappa", {
   spd$y[is_s3,"x4"] <-  spd$y[is_s3,"x4"] + sd$stan_data$g_i[is_s3] * kappa_x4_s3
 
   # Takes 80 seconds
+  skip_if_no_stan_tests()
   expect_silent(pop8k1_out <-
                   capture.output(
                     suppressWarnings(
@@ -242,7 +238,6 @@ test_that("Test sum to zero constraint for kappa", {
 
 
 test_that("Test simple prediction with known obs_x", {
-  skip_if_not(test_stan_basic_on_local() | test_stan_full_on_local() | on_github_actions_test_branch())
 
   data("x_test")
   txdf <- as.data.frame(x_test[3:4])
@@ -281,6 +276,7 @@ test_that("Test simple prediction with known obs_x", {
   # plot(spd2, "x3")
   # plot(spd2, "x4")
 
+  skip_if_no_stan_tests()
   expect_silent(pop8k1_out <-
                   capture.output(
                     suppressWarnings(
@@ -307,7 +303,6 @@ test_that("Test simple prediction with known obs_x", {
 
 
 test_that("Test multiplicative industry bias for kappa", {
-  skip_if_not(test_stan_basic_on_local() | test_stan_full_on_local())
 
   data("x_test")
   txdf <- as.data.frame(x_test[3:4])
@@ -371,6 +366,7 @@ test_that("Test multiplicative industry bias for kappa", {
   spd$y[is_s2,"x4"] <-  spd$y[is_s2,"x4"] * exp(sd$stan_data$g_i[is_s2] * kappa_x4_s2)
   spd$y[is_s3,"x4"] <-  spd$y[is_s3,"x4"] * exp(sd$stan_data$g_i[is_s3] * kappa_x4_s3)
 
+  skip_if_no_stan_tests()
   # Takes 120 seconds
   expect_silent(pop8k1_out <-
                   capture.output(
