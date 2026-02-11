@@ -389,6 +389,7 @@ test_that("Test multiplicative industry bias for kappa", {
                     )
                   )
   )
+  # saveRDS(pop8k1a, file = "test.rds")
 
   expect_output(print(pop8k1a))
 
