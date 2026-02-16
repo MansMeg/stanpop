@@ -28,22 +28,7 @@ latent_state.stanfit <- function(x, time_line, dimnames, ...){
   checkmate::assert_names(names(dimnames), identical.to = c("iterations", "t", "categories"))
   checkmate::assert_character(dimnames$categories)
 
-  if(x@model_name %in% c("model2", "model3", "model4", "model5")){
-    xs <- rstan::extract(x, pars = "x")[[1]]
-    xs <- array(xs, dim = c(nrow(xs),ncol(xs),1))
-  } else if (x@model_name %in% c("model6", "model6b", "model6c",
-                                "model7",
-                                "model8a", "model8a1", "model8a3", "model8a4",
-                                "model8b", "model8b1",
-                                "model8c", "model8c2",
-                                "model8d", "model8d2", "model8d3",
-                                "model8e", "model8e2",
-                                "model8f",
-                                "model9","model10e","model10d","model11a","model11b")){
-    xs <- rstan::extract(x, pars = "x")[[1]]
-  } else if (x@model_name %in% c("model8f1", "model8f2", "model8f3", "model8g", "model8g1", "model8g2", "model8g3", "model8h2", "model8h3", "model8h4")){
-    xs <- rstan::extract(x, pars = "x_pred")[[1]]
-  } else if (grepl(x@model_name, pattern = "^model8[ijklm][0-9]+$")){
+  if (grepl(x@model_name, pattern = "^model8[ijklm][0-9]+$")){
     xs <- rstan::extract(x, pars = "x_pred")[[1]]
   } else {
     stop("'", x@model_name, "' not implemented in latent_state().")

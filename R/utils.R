@@ -29,7 +29,11 @@ model_dates_data_frame <- function(x){
   dat
 }
 
-
+#' Remove file extension
+#'
+#' @param x a string with a file name
+#'
+#' @export
 remove_file_extension <- function(x){
   checkmate::assert_string(x)
   splt <- strsplit(x, "\\.")[[1]]
@@ -70,5 +74,28 @@ get_stan_date <- function(object){
 logMeanExp <- function(x) {
   logS <- log(length(x))
   matrixStats::logSumExp(x) - logS
+}
+
+
+
+#' Return parties existing in a given model range
+#'
+#' @param y a character vector of party names
+#' @param ltr the [time_range] of the latent series
+#' @param mtr the [time_range] of the model
+#'
+#' @export
+existing_parties <- function(y, ltr, mtr){
+  assert_latent_time_range_list(ltr)
+  in_mtr <- !logical(length(y))
+  for(i in seq_along(y)){
+    if(is.null(ltr[[y[i]]])) next
+    tests <- c(mtr["from"] > ltr[[y[i]]]$to, mtr["to"] < ltr[[y[i]]]$from)
+    if(any(tests)) {
+      in_mtr[i] <- FALSE
+      message("Category '", y[i], "' is exluded. The latent time range is not included in the model time range (", paste0(mtr, collapse = "--"), ").")
+    }
+  }
+  y[in_mtr]
 }
 

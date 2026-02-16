@@ -12,6 +12,7 @@
 \alias{stan_polls_data_model8a1}
 \alias{stan_polls_data_model8b}
 \alias{stan_polls_data_model8c}
+\alias{stan_polls_data_model8d}
 \title{Generate Stan Data from [polls_data] objects}
 \usage{
 stan_polls_data(
@@ -104,6 +105,18 @@ stan_polls_data_model8c(
   latent_time_ranges = NULL,
   hyper_parameters = NULL,
   slow_scales = NULL
+)
+
+stan_polls_data_model8d(
+  x,
+  y_name,
+  time_scale = "week",
+  known_state = NULL,
+  model_time_range = NULL,
+  latent_time_ranges = NULL,
+  hyper_parameters = NULL,
+  slow_scales = NULL,
+  model
 )
 }
 \arguments{

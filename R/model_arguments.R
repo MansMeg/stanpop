@@ -476,7 +476,12 @@ set_default_model_argument_value <- function(arg, x = NULL, stan_data = NULL){
     res <- compute_gamma_parameters(x$sigma_kappa_hyper)
     return(round(res$b, 1))
   } else if (arg %in% c("g_scale")) {
-    res <- compute_g_scale_default(stan_data)
+    if(is.null(stan_data)){
+      message("Using default value for g_scale = 1, as stan_data is not provided.")
+      res <- 1.0
+    } else {
+      res <- compute_g_scale_default(stan_data)
+    }
     return(res)
   } else if (arg %in% c("use_ar_kappa")) {
     return(0L)
@@ -503,7 +508,12 @@ set_default_model_argument_value <- function(arg, x = NULL, stan_data = NULL){
   } else if (arg %in% c("x1_prior_alpha0")) {
     return(100.0)
   } else if (arg %in% c("x1_prior_p")) {
-    prior_p <- get_first_poll_as_simplex(stan_data)
+    if(is.null(stan_data$tw_i)){
+      message("Using default value for prior_p = 1, as stan_data is not provided.")
+      prior_p <- 1.0
+    } else {
+      prior_p <- get_first_poll_as_simplex(stan_data)
+    }
     return(prior_p)
   } else if (arg %in% c("psi_sigma_hyper")) {
     return(1.0)
@@ -526,9 +536,19 @@ set_default_model_argument_value <- function(arg, x = NULL, stan_data = NULL){
   } else if (arg %in% c("sigma_ep_sd")) {
     return(1.0)
   } else if (arg %in% c("sigma_ep_mean_vector")) {
-    return(rep(1.0, stan_data$P))
+    if(is.null(stan_data)){
+      message("Using default value for P = 1 (in sigma_ep_mean_vector), as stan_data is not provided.")
+      return(rep(1.0, 1L))
+    } else {
+      return(rep(1.0, stan_data$P))
+    }
   } else if (arg %in% c("sigma_ep_sd_vector")) {
-    return(rep(1.0, stan_data$P))
+    if(is.null(stan_data)){
+      message("Using default value for P = 1 (in sigma_ep_sd_vector), as stan_data is not provided.")
+      return(rep(1.0, 1L))
+    } else {
+      return(rep(1.0, stan_data$P))
+    }
   } else if (arg %in% c("EP")) {
     return(0L)
   } else if (arg %in% c("ep_inv_x")) {
