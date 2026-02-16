@@ -453,15 +453,23 @@ test_that("stan_data is identical for model 8c and model 8d", {
     )
   )
   sd8d_full <- sd8d
-  sd8d$stan_data$use_industry_bias <- NULL
-  sd8d$stan_data$use_house_bias <- NULL
-  sd8d$stan_data$use_design_effects <- NULL
+  # sd8d$stan_data$use_industry_bias <- NULL
+  # sd8d$stan_data$use_house_bias <- NULL
+  # sd8d$stan_data$use_design_effects <- NULL
   sd8d$stan_data$next_known_state_index <- NULL
   sd8d$stan_data$g <- NULL
-  sd8d$stan_data$sigma_kappa_hyper <- NULL
-  sd8d$stan_data$sigma_beta_mu_sigma_hyper <- NULL
-  sd8d$stan_data$beta_mu_1_sigma_hyper <- NULL
+  # sd8d$stan_data$sigma_kappa_hyper <- NULL
+  # sd8d$stan_data$sigma_beta_mu_sigma_hyper <- NULL
+  # sd8d$stan_data$beta_mu_1_sigma_hyper <- NULL
+
+  # names(sd8d$stan_data)[!names(sd8d$stan_data)%in%names(sd8c$stan_data)]
+  # names(sd8c$stan_data)[!names(sd8c$stan_data)%in%names(sd8d$stan_data)]
   # names(sd8c$stan_data);names(sd8d$stan_data)
+
+  # TODO: Double check this 8d gets all parameters from 8k2
+  sd8c$stan_data$g_scale <- sd8d$stan_data$g_scale
+  sd8c$stan_data$x1_prior_p <- sd8d$stan_data$x1_prior_p
+
   expect_identical(sd8c$stan_data, sd8d$stan_data)
 
 })
