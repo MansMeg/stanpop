@@ -212,8 +212,8 @@ supported_pop_models <- function() {
   # c. Update stan_non_state_parameters() with info on what parameters should be stored and used
   # d. Update latent_state.stanfit() with info on how the latent state is extracted
   # e. Update compute_prediction_error()
-  c(paste0("model8k", 1:4),
-    paste0("model8m", 1:4))
+  c(paste0("model8k", 1:9),
+    paste0("model8m", 1:9))
 }
 
 get_pop_stan_model_file_path <-function(model){
