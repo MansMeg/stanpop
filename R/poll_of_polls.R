@@ -161,63 +161,7 @@ cache_file_path <- function(sha, cache_dir){
 #' @keywords internal
 stan_parameters_to_store <- function(model){
   checkmate::assert_choice(model, choices = supported_pop_models())
-  if(model %in% c("model2", "model3", "model5", "model6", "model6b", "model6c")){
-    return(c("x", "sigma_x", "lp__"))
-  } else if(model %in% c("model4")){
-      return(c("x", "sigma_x", "nu", "lp__"))
-  } else if(model %in% c("model7")){
-    return(c("x", "sigma_x", "lp__","V_known","y_pred","nu"))
-  } else if(model %in% c("model8a", "model8a1", "model8a3", "model8a4")){
-    return(c("x", "sigma_x", "lp__", "kappa", "sigma_kappa"))
-  } else if(model %in% c("model8b", "model8b1")){
-    return(c("x", "sigma_x", "lp__", "beta_mu", "sigma_beta_mu"))
-  } else if(model %in% c("model8c", "model8c2")){
-    return(c("x", "sigma_x", "lp__", "beta_sigma", "sigma_beta_sigma"))
-  } else if(substr(model,1,7) %in% c("model8d")){
-    return(c("x", "sigma_x", "lp__", "kappa", "sigma_kappa", "beta_mu", "sigma_beta_mu", "beta_sigma", "sigma_beta_sigma"))
-  } else if(substr(model,1,7) %in% c("model8e")){
-    return(c("x", "sigma_x", "lp__", "kappa", "sigma_kappa", "beta_mu", "sigma_beta_mu", "beta_sigma", "sigma_beta_sigma", "alpha_kappa", "alpha_beta_mu", "alpha_beta_sigma", "sigma_xc"))
-  } else if(model %in% c("model8f")){
-    return(c("x", "x_pred", "sigma_x", "lp__", "kappa", "sigma_kappa", "beta_mu", "sigma_beta_mu", "beta_sigma", "sigma_beta_sigma", "alpha_kappa", "alpha_beta_mu", "alpha_beta_sigma", "sigma_xc", "kappa_next_pred"))
-  } else if(model %in% c("model8f1")){
-    return(c("x_pred", "sigma_x", "lp__", "kappa_pred", "sigma_kappa", "beta_mu", "sigma_beta_mu", "beta_sigma", "sigma_beta_sigma", "alpha_kappa", "alpha_beta_mu", "alpha_beta_sigma", "sigma_xc"))
-  } else if(model %in% c("model8f2")){
-    return(c("x_pred", "sigma_x", "lp__", "kappa_pred", "sigma_kappa", "beta_mu", "sigma_beta_mu", "beta_sigma", "sigma_beta_sigma", "alpha_kappa", "alpha_beta_mu", "alpha_beta_sigma", "sigma_xc", "nu_kappa", "v_kappa"))
-  } else if(model %in% c("model8f3")){
-    return(c("x_pred", "sigma_x", "lp__",
-             "kappa_pred", "sigma_kappa", "sigma_xc",
-             "beta_mu", "sigma_beta_mu",
-             "beta_sigma", "sigma_beta_sigma",
-             "alpha_kappa", "alpha_beta_mu", "alpha_beta_sigma",
-             "nu_kappa", "v_kappa",
-             "alpha_V","theta_x","ar_V", "V"))
-  } else if(model %in% c("model8g")){
-    return(c("x_pred", "sigma_x", "lp__",
-             "Omega",
-             "kappa_pred", "sigma_kappa", "sigma_xc",
-             "beta_mu", "sigma_beta_mu",
-             "beta_sigma", "sigma_beta_sigma",
-             "alpha_kappa", "alpha_beta_mu", "alpha_beta_sigma",
-             "nu_kappa", "v_kappa",
-             "alpha_V","theta_x","ar_V", "V"))
-  } else if(model %in% c("model8g1", "model8g2", "model8g3", "model8h2", "model8h3",  "model8h4")){
-    return(c("x_pred", "sigma_x", "lp__", "x", "eta",
-             "Omega",
-             "kappa_pred", "sigma_kappa", "sigma_xc",
-             "beta_mu", "sigma_beta_mu",
-             "beta_sigma", "sigma_beta_sigma",
-             "alpha_kappa", "alpha_beta_mu", "alpha_beta_sigma",
-             "nu_kappa", "v_kappa",
-             "alpha_V","theta_x","ar_V", "V"))
-  } else if(grepl(model, pattern = "^model8[i][0-9]+$")){
-    return(c("x_pred", "sigma_x", "lp__", "eta",
-             "kappa_pred", "sigma_kappa", "sigma_xc",
-             "beta_mu", "sigma_beta_mu",
-             "beta_sigma", "sigma_beta_sigma",
-             "alpha_kappa", "alpha_beta_mu", "alpha_beta_sigma",
-             "nu_kappa", "v_kappa",
-             "alpha_V","theta_x","ar_V", "V"))
-  } else if(grepl(model, pattern = "^model8[jk][0-9]+$")){
+  if(grepl(model, pattern = "^model8[jk][0-9]+$")){
     return(c("x_pred", "sigma_x", "lp__", "eta",
              "kappa_pred", "sigma_kappa", "sigma_xc",
              "beta_mu", "sigma_beta_mu",
@@ -235,19 +179,7 @@ stan_parameters_to_store <- function(model){
              "nu_kappa", "v_kappa",
              "psi", "sigma_psi",
              "alpha_V","theta_x","ar_V", "V", "sigma_ep"))
-  } else if(model %in% c("model9")){
-    return(c("x", "lp__", "Omega_z","Sigma_Z"))
-  } else if(model %in% c("model10d")){
-    return(c("x","V", "theta_x", "sigma_x", "lp__", "kappa", "sigma_kappa", "beta_mu", "sigma_beta_mu", "beta_sigma", "sigma_beta_sigma"))
-  }else if(model %in% c("model10e")){
-    return(c("alpha_V","theta_x","ar_V","ar_x","x","V", "sigma_x", "lp__", "kappa", "sigma_kappa", "beta_mu", "sigma_beta_mu", "beta_sigma", "sigma_beta_sigma"))
-  }else if(model %in% c("model11a")){
-    return(c("tau_x","Omega_x","x", "lp__", "kappa", "sigma_kappa", "beta_mu", "sigma_beta_mu", "beta_sigma", "sigma_beta_sigma"))
-  }else if(model %in% c("model11b")){
-    return(c("tau_x","Omega_x","x", "lp__", "kappa", "sigma_kappa",
-             "beta_mu", "sigma_beta_mu", "beta_sigma", "sigma_beta_sigma",
-             "alpha_kappa", "alpha_beta_mu", "alpha_beta_sigma", "sigma_xc"))
-  }else {
+  } else {
     stop("'", model, "' not implemented in stan_parameters_to_store().")
   }
 }
@@ -263,18 +195,11 @@ stan_parameters_to_store <- function(model){
 #' @keywords internal
 stan_non_state_parameters <- function(model){
   checkmate::assert_choice(model, choices = supported_pop_models())
-  if(model %in% c("model2", "model3", "model5", "model6", "model6b", "model6c")){
-    return(c("sigma_x"))
-  } else if(model %in% c("model7")){
-    return(c("sigma_x", "V_known","y_pred","nu"))
-  } else if(model %in% c("model4")){
-      return(c("sigma_x", "nu"))
-  } else if(model %in% c("model8a", "model8a1", "model8a3", "model8a4")){
-    return(c("sigma_x", "kappa", "sigma_kappa"))
-  } else if(model %in% c("model8b", "model8b1")){
-    return(c("sigma_x", "beta_mu", "sigma_beta_mu"))
-  } else if(model %in% c("model8c")){
-    return(c("sigma_x", "beta_sigma", "sigma_beta_sigma"))
+  if(grepl(model, pattern = "^model8[jk][0-9]+$")){
+    stop("'", model, "' not implemented in stan_non_state_parameters().")
+    # return(c("sigma_x"))
+  } else if(grepl(model, pattern = "^model8[lm][0-9]+$")){
+    stop("'", model, "' not implemented in stan_non_state_parameters().")
   } else {
     stop("'", model, "' not implemented in stan_non_state_parameters().")
   }
@@ -287,25 +212,8 @@ supported_pop_models <- function() {
   # c. Update stan_non_state_parameters() with info on what parameters should be stored and used
   # d. Update latent_state.stanfit() with info on how the latent state is extracted
   # e. Update compute_prediction_error()
-  c("model2", "model3", "model4", "model5",
-    "model6", "model6b",  "model6c",
-    "model7",
-    "model8a", "model8a1", "model8a3", "model8a4",
-    "model8b", "model8b1",
-    "model8c", "model8c2",
-    "model8d", "model8d2", "model8d3",
-    "model8e", "model8e2",
-    "model8f", "model8f1", "model8f2", "model8f3",
-    "model8g", "model8g1", "model8g2", "model8g3",
-    "model8h2", "model8h3", "model8h4",
-    paste0("model8i", 1:2),
-    paste0("model8j", 1:2),
-    paste0("model8k", 1:4),
-    paste0("model8l", 1:3),
-    paste0("model8m", 1:4),
-    "model9",
-    "model10d", "model10e",
-    "model11a", "model11b")
+  c(paste0("model8k", 1:4),
+    paste0("model8m", 1:4))
 }
 
 get_pop_stan_model_file_path <-function(model){
