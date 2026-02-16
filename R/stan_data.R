@@ -644,7 +644,7 @@ stan_polls_data_model8b <- function(x, y_name, time_scale = "week", known_state 
   spd$stan_data$S <- stan_data_S(tls)
   spd$stan_data$s_i <- get_time_points_from_time_line(collection_midpoint_dates(x), tls, "time_line_s")
 
-  mc <- model_config("model8b", hyper_parameters)
+  mc <- model_config("model8k2", hyper_parameters)
   spd$stan_data <- c(spd$stan_data, mc)
 
   class(spd) <- c("model8b", "stan_polls_data")
@@ -733,7 +733,7 @@ stan_polls_data_model8c <- function(x, y_name, time_scale = "week", known_state 
   spd$stan_data$S <- stan_data_S(tls)
   spd$stan_data$s_i <- get_time_points_from_time_line(collection_midpoint_dates(x), tls, "time_line_s")
 
-  mc <- model_config("model8c", hyper_parameters)
+  mc <- model_config("model8k2", hyper_parameters)
   spd$stan_data <- c(spd$stan_data, mc)
 
   class(spd) <- c("model8c", "stan_polls_data")
@@ -843,7 +843,8 @@ assert_stan_data_model.model8b <- function(x){
 }
 
 
-
+#' @rdname stan_polls_data
+#' @export
 stan_polls_data_model8d <- function(x, y_name, time_scale = "week", known_state = NULL, model_time_range = NULL, latent_time_ranges = NULL, hyper_parameters = NULL, slow_scales = NULL, model){
   assert_polls_data(x)
   assert_y_name(y_name, x)
@@ -872,7 +873,7 @@ stan_polls_data_model8d <- function(x, y_name, time_scale = "week", known_state 
   spd$stan_data$s_i <- get_time_points_from_time_line(collection_midpoint_dates(x), tls, "time_line_s")
 
   # Model configs
-  mc <- model_config(model, hyper_parameters, spd$stan_data)
+  mc <- model_config("model8k2", hyper_parameters, spd$stan_data)
   spd$stan_data <- c(spd$stan_data, mc)
 
   class(spd) <- c("model8d", "stan_polls_data")
