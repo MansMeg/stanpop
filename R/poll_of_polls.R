@@ -169,7 +169,11 @@ stan_parameters_to_store <- function(model){
              "alpha_kappa", "alpha_beta_mu", "alpha_beta_sigma",
              "nu_kappa", "v_kappa",
              "psi", "sigma_psi",
-             "alpha_V","theta_x","ar_V", "V"))
+             "alpha_V","theta_x","ar_V", "V",
+             # additional parameters used ro make the results full for analysis
+             "x_unknown", "eta_z_unknown", "kappa_raw",
+             "alpha_kappa_unknown", "alpha_beta_mu_unknown",
+             "alpha_beta_sigma_unknown", "nu_kappa_raw", "V_noise", "L_Omega_x"))
   } else if(grepl(model, pattern = "^model8[lm][0-9]+$")){
     return(c("x_pred", "sigma_x", "lp__", "eta",
              "kappa_pred", "sigma_kappa", "sigma_xc",
