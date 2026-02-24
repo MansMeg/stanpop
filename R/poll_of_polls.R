@@ -410,6 +410,10 @@ parameter_names <- function(x, rm_idx = FALSE){
 
 #' @rdname parameter_names
 #' @export
+extract_parameter_names <- parameter_names
+
+#' @rdname parameter_names
+#' @export
 parameter_block_names <- function(x){
   parameters_names_remove_indecies(parameter_names(x))
 }

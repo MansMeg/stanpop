@@ -2,12 +2,15 @@
 % Please edit documentation in R/poll_of_polls.R
 \name{parameter_names}
 \alias{parameter_names}
+\alias{extract_parameter_names}
 \alias{parameter_block_names}
 \alias{parameters_counts}
 \alias{get_parameter_names}
 \title{Extract the parameter names and parameter counts from a poll_of_polls object}
 \usage{
 parameter_names(x, rm_idx = FALSE)
+
+extract_parameter_names(x, rm_idx = FALSE)
 
 parameter_block_names(x)
 

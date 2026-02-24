@@ -37,6 +37,6 @@ test_that("Test model 8k2 full model", {
                     )
                   )
   )
-  expect_silent(pn1 <- parameter_names(pop8k2_1, TRUE))
+  expect_silent(pn1 <- unique(parameter_names(pop8k2_1, TRUE)))
 })
 
