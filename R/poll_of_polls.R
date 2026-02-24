@@ -12,6 +12,11 @@
 #' @param ... further arguments to [rstan::stan()] function
 #' @param cache_dir directory to cache model. Default is cache in tempdir(). [NULL], no cache.
 #'
+#' @details
+#' The [input_args] slot contain all input arguments except polls data and known state that are stored in the original object instead.
+#' The [stan_arguments] slot contains all arguments that are supplied to the [rstan::stan()] function, except for the data argument which is stored in the [stan_data] slot.
+#'
+#'
 #' @export
 poll_of_polls <- function(y,
                           model,
@@ -94,10 +99,12 @@ poll_of_polls <- function(y,
 
   # Setup rstan arguments
   rstan_arguments <- list(...)
+  stan_arguments <- list(...)
   if(!is.null(rstan_arguments$data)) warning("The 'data' argument has been overwritten")
   rstan_arguments$data <- sd$stan_data
   if(is.null(rstan_arguments$file)) rstan_arguments$file <- smfp
   if(is.null(rstan_arguments$model_name)) rstan_arguments$model_name <- model
+  # The parameters to store should be supplied as an argument to stan instead.
   if(is.null(rstan_arguments$pars)) rstan_arguments$pars <- stan_parameters_to_store(model)
 
   # Run Stan
@@ -110,8 +117,18 @@ poll_of_polls <- function(y,
                known_state = known_state,
                model_time_range = mtr,
                latent_time_range = ltr,
-               stan_arguments = list(...),
+               stan_arguments = stan_arguments,
                sha = sha,
+               input_args = list(y = y,
+                                 model = model,
+                                 time_scale = time_scale,
+                                 model_time_range = model_time_range,
+                                 latent_time_ranges = latent_time_ranges,
+                                 hyper_parameters = hyper_parameters,
+                                 slow_scales = slow_scales,
+                                 stan_arguments = stan_arguments,
+                                 cache_dir = cache_dir
+                                 ),
                git_sha = get_git_sha(),
                cache_dir = cache_dir,
                time_line = sd$time_line,
@@ -377,9 +394,12 @@ assert_poll_data_and_latent_time_range_list_agree <- function(x, ltr){
 #' Extract the parameter names and parameter counts from a poll_of_polls object
 #'
 #' @param x a [poll_of_polls] object
+#' @param rm_idx remove parameter indecies (e.g. [1], [1,1], [1,1,1]) from the parameter names. Default is FALSE.
 #' @export
-parameter_names <- function(x){
+parameter_names <- function(x, rm_idx = FALSE){
   res <- try(names(x$stan_fit), silent = TRUE)
+  if(rm_idx) res <- parameters_names_remove_indecies(res)
+
   if(inherits(res, "try-error")){
     warning("Stan model does not contain samples.")
     return(NULL)
@@ -523,4 +543,28 @@ compute_diagnostics <- function(x){
   fit_summary <- rstan::summary(x)
   list(n_eff = fit_summary$summary[,"n_eff"],
        Rhat = fit_summary$summary[,"Rhat"])
+}
+
+
+
+#' Extract all pop arguments for poll_of_polls() from a pop object
+#'
+#' @description
+#' This function takes a pop object and extracts the relevant arguments for the poll_of_polls() function.
+#' It ensures that the pop object is valid and then retrieves the necessary information to be used as input for poll_of_polls().
+#'
+#' @param x A pop object
+#'
+#' @export
+extract_poll_of_polls_input_arguments <- function(x){
+  assert_pop(x)
+  # Extract the arguments for poll_of_polls() from the pop object
+  args <- list()
+
+  # Extract relevant information from the pop object
+  args <- pop$input_args
+  args$polls_data <- x$polls_data
+  args$known_state <- x$known_state
+
+  return(args)
 }

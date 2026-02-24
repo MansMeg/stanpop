@@ -44,3 +44,7 @@ poll_of_polls(
 \description{
 Fit a poll of polls object
 }
+\details{
+The [input_args] slot contain all input arguments except polls data and known state that are stored in the original object instead.
+The [stan_arguments] slot contains all arguments that are supplied to the [rstan::stan()] function, except for the data argument which is stored in the [stan_data] slot.
+}

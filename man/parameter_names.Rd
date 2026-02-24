@@ -7,16 +7,18 @@
 \alias{get_parameter_names}
 \title{Extract the parameter names and parameter counts from a poll_of_polls object}
 \usage{
-parameter_names(x)
+parameter_names(x, rm_idx = FALSE)
 
 parameter_block_names(x)
 
 parameters_counts(x)
 
-get_parameter_names(x)
+get_parameter_names(x, rm_idx = FALSE)
 }
 \arguments{
 \item{x}{a [poll_of_polls] object}
+
+\item{rm_idx}{remove parameter indecies (e.g. [1], [1,1], [1,1,1]) from the parameter names. Default is FALSE.}
 }
 \description{
 Extract the parameter names and parameter counts from a poll_of_polls object
