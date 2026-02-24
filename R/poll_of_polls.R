@@ -566,5 +566,7 @@ extract_poll_of_polls_input_arguments <- function(x){
   args$polls_data <- x$polls_data
   args$known_state <- x$known_state
 
+  class(args) <- c("poll_of_polls_input_arguments", "list")
+
   return(args)
 }
