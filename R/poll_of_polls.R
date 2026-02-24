@@ -105,7 +105,7 @@ poll_of_polls <- function(y,
   if(is.null(rstan_arguments$file)) rstan_arguments$file <- smfp
   if(is.null(rstan_arguments$model_name)) rstan_arguments$model_name <- model
   # The parameters to store should be supplied as an argument to stan instead.
-  if(is.null(rstan_arguments$pars)) rstan_arguments$pars <- stan_parameters_to_store(model)
+  # if(is.null(rstan_arguments$pars)) rstan_arguments$pars <- stan_parameters_to_store(model)
 
   # Run Stan
   stan_fit <- do.call(rstan::stan, rstan_arguments)
