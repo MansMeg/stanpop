@@ -106,6 +106,7 @@ poll_of_polls <- function(y,
   if(is.null(rstan_arguments$model_name)) rstan_arguments$model_name <- model
   # The parameters to store should be supplied as an argument to stan instead.
   # if(is.null(rstan_arguments$pars)) rstan_arguments$pars <- stan_parameters_to_store(model)
+  # TODO: rm stan_parameters_to_store() and just use the pars argument supplied by the user
 
   # Run Stan
   stan_fit <- do.call(rstan::stan, rstan_arguments)
