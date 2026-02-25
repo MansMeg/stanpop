@@ -214,3 +214,88 @@ test_that("Test model 8k2 and 8k3 are identical", {
 
 })
 
+
+test_that("Test model 8k2 pars variable", {
+
+  data("x_test")
+  txdf <- as.data.frame(x_test[3:4])
+  colnames(txdf) <- paste0("x", 3:length(x_test))
+  data("pd_test")
+
+  time_scale <- "week"
+  parties <- c("x3", "x4")
+  set.seed(4711)
+  true_idx <- c(44, 72)
+  known_state <- tibble::tibble(date = as.Date("2010-01-01") + lubridate::weeks(true_idx - 1))
+  known_state <- cbind(known_state, txdf[true_idx,])
+
+  spd <- simulate_polls(x = txdf,
+                        pd = pd_test,
+                        npolls = 150,
+                        time_scale = time_scale,
+                        start_date = "2010-01-01")
+
+  mtr <- time_range(spd)
+  ltr <- setup_latent_time_ranges(x = NULL, y = c("x3", "x4"), mtr)
+
+  obs_x <- data.frame(date = as.Date(c("2010-05-03",  "2010-05-03", "2011-01-01")),
+                      y = c("x4", "x3", "x3"),
+                      mu = c(0.25, 0.27, 0.22),
+                      sigma = c(0.02, 0.03, 0.03),
+                      nu = c(10, 30, 10))
+
+  # Check that we get identical lpd
+  cfg <-  list(sigma_kappa_hyper = 0.03,
+               use_industry_bias = 1L,
+               use_house_bias = 0L,
+               use_design_effects = 0L,
+               use_multivariate_version = 2L,
+               use_softmax = 1L)
+
+  skip_if_no_stan_tests()
+  expect_silent(pop8k2_out <-
+                  capture.output(
+                    suppressWarnings(
+                      suppressMessages(
+                        pop8k2_1 <- poll_of_polls(y = parties,
+                                                model = "model8k2",
+                                                polls_data = spd,
+                                                time_scale = time_scale,
+                                                known_state = known_state,
+                                                hyper_parameters = cfg,
+                                                warmup = 0,
+                                                iter = 3,
+                                                chains = 1,
+                                                cache_dir = NULL)
+                      )
+                    )
+                  )
+  )
+
+  pn1 <- unique(parameter_names(pop8k2_1, TRUE))
+
+  expect_silent(pop8k3_out <-
+                  capture.output(
+                    suppressWarnings(
+                      suppressMessages(
+                        pop8k2_2 <- poll_of_polls(y = parties,
+                                                model = "model8k2",
+                                                polls_data = spd,
+                                                time_scale = time_scale,
+                                                known_state = known_state,
+                                                hyper_parameters = cfg,
+                                                warmup = 0,
+                                                iter = 3,
+                                                chains = 1,
+                                                pars = c("eta_z_unknown", "sigma_x"),
+                                                cache_dir = NULL)
+                      )
+                    )
+                  )
+  )
+
+  pn2 <- unique(parameter_names(pop8k2_2, TRUE))
+
+  expect_contains(pn1, pn2)
+  expect_false(all(pn1 %in% pn2))
+})
