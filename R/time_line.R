@@ -376,6 +376,54 @@ assert_time_scale_overrides <- function(x, dates, null.ok = TRUE){
   invisible(TRUE)
 }
 
+#' Normalize Time Scale Overrides
+#'
+#' @description
+#' Create a daily schedule of effective time scales over a model time range.
+#' The default [time_scale] is used for all dates unless overridden by the
+#' inclusive ranges in [time_scale_overrides].
+#'
+#' @param time_scale the default time scale to use outside override ranges.
+#' @param time_scale_overrides an optional [data.frame] with columns [from], [to],
+#'   and [time_scale] defining inclusive override ranges.
+#' @param model_time_range a [time_range] object describing the full date range
+#'   to normalize over.
+#'
+#' @return A [tibble::tibble] with columns [date], [time_scale], and
+#'   [time_scale_days]. This is a daily table with the effective scale
+#'   for each calendar date in the model time range, and the corresponding
+#'   number of days for that scale. Its used to annotate the time scale for each
+#'   individual date in the model time range.
+#'
+#' @keywords internal
+normalize_time_scale_overrides <- function(time_scale, time_scale_overrides = NULL, model_time_range){
+  assert_time_scale(time_scale)
+  assert_time_range(model_time_range)
+  dates <- tibble::tibble(date = seq(from = model_time_range["from"], to = model_time_range["to"], by = 1))
+  assert_time_scale_overrides(time_scale_overrides, dates = dates)
+
+  schedule <- tibble::tibble(
+    date = dates$date,
+    time_scale = rep(time_scale, nrow(dates))
+  )
+
+  if(!is.null(time_scale_overrides) && nrow(time_scale_overrides) > 0){
+    time_scale_overrides <- time_scale_overrides[order(time_scale_overrides$from, time_scale_overrides$to), , drop = FALSE]
+    for(i in seq_len(nrow(time_scale_overrides))){
+      idx <- schedule$date >= time_scale_overrides$from[i] & schedule$date <= time_scale_overrides$to[i]
+      schedule$time_scale[idx] <- time_scale_overrides$time_scale[i]
+    }
+  }
+
+  schedule$time_scale_days <- unname(vapply(
+    schedule$time_scale,
+    FUN = function(x) as.integer(time_scale_as_days(x)),
+    FUN.VALUE = integer(1)
+  ))
+
+  schedule
+}
+
 #' Expand a time_line object to a new time range
 #' but keep the same time point index.
 #'
