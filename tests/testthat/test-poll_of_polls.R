@@ -110,3 +110,7 @@ test_that("test model pop", {
 })
 
 
+test_that("poll_of_polls API", {
+  expect_true("time_scale_overrides" %in% names(formals(poll_of_polls)))
+})
+

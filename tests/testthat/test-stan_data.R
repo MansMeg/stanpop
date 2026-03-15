@@ -1,6 +1,11 @@
 context("stan_polls_data")
 
+test_that("stan_polls_data API", {
+  expect_true("time_scale_overrides" %in% names(formals(stan_polls_data)))
+})
+
 test_that("stan_polls_data works", {
+
   data("swedish_polls_curated")
   swedish_polls <- swedish_polls_curated
   expect_silent(pd <- polls_data(y = swedish_polls[,3:11],
@@ -473,4 +478,3 @@ test_that("stan_data is identical for model 8c and model 8d", {
   expect_identical(sd8c$stan_data, sd8d$stan_data)
 
 })
-
