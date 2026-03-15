@@ -96,5 +96,40 @@ test_that("time_line_with_overrides handles overrides that start on a weekly anc
   )
 })
 
-# TODO: Add a test with dayly as the base time scale and a weekly override, to check that the function can handle overrides that are coarser than the base time scale.
-# Change sqrt(delta_days / 7) to extract 7 based on the base time scale, and add a test to check that the step_scale is calculated correctly when the base time scale is not week.
+test_that("time_line_with_overrides handles weekly overrides on a daily base grid", {
+  time_line_with_overrides <- get_internal("time_line_with_overrides")
+  tr <- time_range(c("2020-01-01", "2020-01-12"))
+  overrides <- tibble::tibble(
+    from = as.Date("2020-01-06"),
+    to = as.Date("2020-01-10"),
+    time_scale = "week"
+  )
+
+  expect_silent(
+    tl <- time_line_with_overrides(
+      model_time_range = tr,
+      time_scale = "day",
+      time_scale_overrides = overrides
+    )
+  )
+
+  expect_identical(
+    tl$time_line$date,
+    as.Date(c(
+      "2020-01-01", "2020-01-02", "2020-01-03", "2020-01-04", "2020-01-05",
+      "2020-01-06", "2020-01-11", "2020-01-12"
+    ))
+  )
+  expect_identical(tl$time_line$delta_days[-1], c(1L, 1L, 1L, 1L, 1L, 5L, 1L))
+
+  expect_identical(
+    tl$daily$time_line_date[tl$daily$date %in% as.Date(c("2020-01-05", "2020-01-06", "2020-01-07", "2020-01-10", "2020-01-11"))],
+    as.Date(c("2020-01-05", "2020-01-06", "2020-01-06", "2020-01-06", "2020-01-11"))
+  )
+
+  expect_identical(
+    tl$daily$time_scale[tl$daily$date %in% as.Date(c("2020-01-05", "2020-01-06", "2020-01-07", "2020-01-10", "2020-01-11"))],
+    c("day", "week", "week", "week", "day")
+  )
+})
+
