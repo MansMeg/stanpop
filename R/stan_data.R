@@ -2,6 +2,9 @@
 #'
 #' @param x a [polls_data] object
 #' @param time_scale to use.
+#' @param time_scale_overrides a [data.frame] with columns [from], [to], and [time_scale]
+#'   that override the default [time_scale] for inclusive date ranges in the latent state.
+#'   The [from] and [to] bounds are inclusive and override ranges must not overlap.
 #' @param y_name a character vector indicating y variables in polls object.
 #' @param model model to get data for.
 #' @param known_state known time points in the latent state
@@ -16,6 +19,7 @@ stan_polls_data <- function(x,
                             y_name,
                             model,
                             time_scale = "week",
+                            time_scale_overrides = NULL,
                             known_state = NULL,
                             model_time_range = NULL,
                             latent_time_ranges = NULL,
@@ -28,6 +32,15 @@ stan_polls_data <- function(x,
   assert_known_state(known_state)
   assert_latent_time_ranges(latent_time_ranges)
   assert_slow_scales(slow_scales, null.ok = TRUE)
+  if(is.null(model_time_range)) {
+    mtr <- time_range(x)
+  } else {
+    mtr <- time_range(model_time_range)
+  }
+  assert_time_scale_overrides(
+    x = time_scale_overrides,
+    dates = tibble::tibble(date = seq(from = mtr["from"], to = mtr["to"], by = 1))
+  )
   spd <- structure(list(), class = c(model,"stan_polls_data"))
   if(model %in% c("model2","model3","model4","model5","model6","model6b", "model6c","model7","model9")){
     spd <- stan_polls_data_model(spd = spd,

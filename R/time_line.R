@@ -300,6 +300,67 @@ assert_time_scale <- function(x){
   checkmate::assert_choice(x, choices = supported_time_scales())
 }
 
+assert_time_scale_overrides <- function(x, dates, null.ok = TRUE){
+  checkmate::assert_data_frame(dates, min.rows = 1)
+  checkmate::assert_names(names(dates), must.include = "date")
+  checkmate::assert_date(dates$date, any.missing = FALSE, min.len = 1)
+
+  if(is.null(x)){
+    if(null.ok){
+      return(invisible(TRUE))
+    } else {
+      stop("'time_scale_overrides' is NULL.", call. = FALSE)
+    }
+  }
+
+  checkmate::assert_data_frame(x)
+  checkmate::assert_names(names(x), identical.to = c("from", "to", "time_scale"))
+  if(nrow(x) == 0){
+    return(invisible(TRUE))
+  }
+
+  checkmate::assert_date(x$from, any.missing = FALSE, len = nrow(x))
+  checkmate::assert_date(x$to, any.missing = FALSE, len = nrow(x))
+  checkmate::assert_character(x$time_scale, any.missing = FALSE, len = nrow(x))
+  checkmate::assert_subset(x$time_scale, choices = supported_time_scales())
+
+  invalid_ranges <- x$from > x$to
+  if(any(invalid_ranges)){
+    stop(
+      "'time_scale_overrides' has rows where 'from' is after 'to'. ",
+      "Override ranges are inclusive.",
+      call. = FALSE
+    )
+  }
+
+  available_dates <- unique(dates$date)
+  for(i in seq_len(nrow(x))){
+    override_dates <- seq(from = x$from[i], to = x$to[i], by = 1)
+    if(!all(override_dates %in% available_dates)){
+      stop(
+        "Row ", i, " in 'time_scale_overrides' is not fully contained in 'dates$date'. ",
+        "Override ranges are inclusive.",
+        call. = FALSE
+      )
+    }
+  }
+
+  x_sorted <- x[order(x$from, x$to), , drop = FALSE]
+  if(nrow(x_sorted) > 1){
+    overlapping <- x_sorted$from[-1] <= x_sorted$to[-nrow(x_sorted)]
+    if(any(overlapping)){
+      overlap_idx <- which(overlapping)[1]
+      stop(
+        "'time_scale_overrides' contains overlapping ranges. ",
+        "Ranges are inclusive, so row ", overlap_idx, " overlaps with row ", overlap_idx + 1, ".",
+        call. = FALSE
+      )
+    }
+  }
+
+  invisible(TRUE)
+}
+
 #' Expand a time_line object to a new time range
 #' but keep the same time point index.
 #'
