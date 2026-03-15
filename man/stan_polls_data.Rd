@@ -20,6 +20,7 @@ stan_polls_data(
   y_name,
   model,
   time_scale = "week",
+  time_scale_overrides = NULL,
   known_state = NULL,
   model_time_range = NULL,
   latent_time_ranges = NULL,
@@ -127,6 +128,10 @@ stan_polls_data_model8d(
 \item{model}{model to get data for.}
 
 \item{time_scale}{to use.}
+
+\item{time_scale_overrides}{a [data.frame] with columns [from], [to], and [time_scale]
+that override the default [time_scale] for inclusive date ranges in the latent state.
+The [from] and [to] bounds are inclusive and override ranges must not overlap.}
 
 \item{known_state}{known time points in the latent state}
 

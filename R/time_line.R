@@ -300,6 +300,21 @@ assert_time_scale <- function(x){
   checkmate::assert_choice(x, choices = supported_time_scales())
 }
 
+#' Validate Time Scale Overrides
+#'
+#' @description
+#' Validate a [time_scale_overrides] object against a data frame of available dates.
+#' Override ranges are inclusive, must be fully contained in [dates$date], and
+#' must not overlap.
+#'
+#' @param x a [data.frame] with columns [from], [to], and [time_scale].
+#' @param dates a [data.frame] with a [date] column containing the dates that
+#'   may be covered by the inclusive override ranges.
+#' @param null.ok logical flag indicating if [NULL] is allowed for [x].
+#'
+#' @return Invisibly returns [TRUE] if the object is valid.
+#'
+#' @keywords internal
 assert_time_scale_overrides <- function(x, dates, null.ok = TRUE){
   checkmate::assert_data_frame(dates, min.rows = 1)
   checkmate::assert_names(names(dates), must.include = "date")
