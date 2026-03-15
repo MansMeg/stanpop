@@ -14,6 +14,11 @@
 #' @param slow_scales a vector of [Date]s that indicate breaks (right-inclusive) for a slower moving time scale.
 #'        Example: If only 2010-01-15 is used, all dates up to and including 2010-01-15, will have s=1,
 #'                 Dates after 2010-01-15 will have s=2.
+#' @details
+#' The returned object keeps the existing [stan_data] and [time_line] fields
+#' unchanged for current models. A parallel future path is attached in
+#' [stan_data_with_overrides] and [time_line_with_overrides], built using
+#' [time_line_with_overrides()].
 #' @export
 stan_polls_data <- function(x,
                             y_name,
@@ -50,48 +55,60 @@ stan_polls_data <- function(x,
                                  known_state = known_state,
                                  latent_time_ranges = latent_time_ranges,
                                  model_time_range = model_time_range)
-    assert_stan_polls_data(x = spd)
-    assert_stan_data_model(x = spd)
-    return(spd)
   } else if(model %in% c("model8a")) {
-    return(stan_polls_data_model8a(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters))
+    spd <- stan_polls_data_model8a(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters)
   } else if(model %in% c("model8a3", "model8a4")) {
-    return(stan_polls_data_model8a3(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters))
+    spd <- stan_polls_data_model8a3(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters)
   } else if(model %in% c("model8a1")) {
-    return(stan_polls_data_model8a1(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters))
+    spd <- stan_polls_data_model8a1(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters)
   } else if(model %in% c("model8b", "model8b1")) {
-    return(stan_polls_data_model8b(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales))
+    spd <- stan_polls_data_model8b(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales)
   } else if(model %in% c("model8c", "model8c2")) {
-    return(stan_polls_data_model8c(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales))
+    spd <- stan_polls_data_model8c(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales)
   } else if(substr(model,1,8) %in% c("model10d")) {
-    return(stan_polls_data_model10d(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales,'model8d3'))
+    spd <- stan_polls_data_model10d(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales,'model8d3')
   } else if(substr(model,1,8) %in% c("model10e")) {
-    return(stan_polls_data_model10e(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales,'model8d3'))
+    spd <- stan_polls_data_model10e(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales,'model8d3')
   } else if(substr(model,1,7) %in% c("model8d")) {
-    return(stan_polls_data_model8d(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model))
+    spd <- stan_polls_data_model8d(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model)
   } else if(substr(model,1,8) %in% c("model11a")) {
-    return(stan_polls_data_model11a(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales,'model8d3'))
+    spd <- stan_polls_data_model11a(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales,'model8d3')
   } else if(substr(model,1,8) %in% c("model11b")) {
-    return(stan_polls_data_model11b(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales,'model8e'))
+    spd <- stan_polls_data_model11b(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales,'model8e')
   } else if(substr(model,1,7) %in% c("model8e")) {
-    return(stan_polls_data_model8e(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model))
+    spd <- stan_polls_data_model8e(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model)
   } else if(substr(model,1,7) %in% c("model8f")) {
-    return(stan_polls_data_model8f(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model))
+    spd <- stan_polls_data_model8f(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model)
   } else if(substr(model,1,7) %in% c("model8g","model8h")) {
-    return(stan_polls_data_model8g(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model))
+    spd <- stan_polls_data_model8g(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model)
   } else if(grepl(model, pattern = "^model8i[0-9]+$")) {
-    return(stan_polls_data_model8i(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model))
+    spd <- stan_polls_data_model8i(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model)
   } else if(grepl(model, pattern = "^model8j[0-9]+$")) {
-    return(stan_polls_data_model8i(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model))
+    spd <- stan_polls_data_model8i(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model)
   } else if(grepl(model, pattern = "^model8k[0-9]+$")) {
-    return(stan_polls_data_model8k(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model))
+    spd <- stan_polls_data_model8k(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model)
   } else if(grepl(model, pattern = "^model8l[0-9]+$")) {
-    return(stan_polls_data_model8l(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model))
+    spd <- stan_polls_data_model8l(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model)
   } else if(grepl(model, pattern = "^model8m[0-9]+$")) {
-    return(stan_polls_data_model8m(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model))
+    spd <- stan_polls_data_model8m(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model)
   } else {
     stop("'", model, "' not implemented in stan_polls_data().")
   }
+
+  spd <- attach_stan_data_with_overrides(
+    spd = spd,
+    x = x,
+    y_name = y_name,
+    time_scale = time_scale,
+    time_scale_overrides = time_scale_overrides,
+    known_state = known_state,
+    model_time_range = mtr,
+    latent_time_ranges = latent_time_ranges
+  )
+
+  assert_stan_polls_data(x = spd)
+  assert_stan_data_model(x = spd)
+  spd
 }
 
 
@@ -239,6 +256,98 @@ stan_data_known_state <- function(y_name, stan_data_time_line, known_state){
     sdks$x_unknown_t <- as.array((1:T)[-sdks$x_known_t])
   }
   sdks
+}
+
+
+#' Build a Parallel Stan Data Path with Time Scale Overrides
+#'
+#' @description
+#' Build a parallel future [stan_data] path using [time_line_with_overrides()].
+#' The current [stan_data] and [time_line] fields are left unchanged; the future
+#' path is attached in [stan_data_with_overrides] and [time_line_with_overrides].
+#'
+#' @param spd a [stan_polls_data] object.
+#' @param x a [polls_data] object.
+#' @param y_name a character vector indicating y variables in polls object.
+#' @param time_scale the base time scale.
+#' @param time_scale_overrides optional inclusive time scale override ranges.
+#' @param known_state known time points in the latent state.
+#' @param model_time_range the time range to model.
+#' @param latent_time_ranges the time range of the latent state.
+#'
+#' @return The input [stan_polls_data] object with [stan_data_with_overrides]
+#'   and [time_line_with_overrides] added.
+#'
+#' @keywords internal
+attach_stan_data_with_overrides <- function(spd,
+                                            x,
+                                            y_name,
+                                            time_scale,
+                                            time_scale_overrides = NULL,
+                                            known_state = NULL,
+                                            model_time_range = NULL,
+                                            latent_time_ranges = NULL){
+  assert_stan_polls_data(spd)
+  assert_polls_data(x)
+  checkmate::assert_subset(y_name, choices = names(y(x)))
+  assert_time_scale(time_scale)
+  assert_known_state(known_state)
+  assert_time_range(model_time_range)
+  assert_latent_time_ranges(latent_time_ranges)
+
+  if(is.null(latent_time_ranges)){
+    latent_time_ranges <- setup_latent_time_ranges(x = latent_time_ranges, y = y_name, model_time_range)
+  }
+
+  poll_ids <- tibble::tibble(.poll_id = poll_ids(x), i = 1:length(poll_ids(x)))
+  tl <- time_line_with_overrides(
+    model_time_range = model_time_range,
+    time_scale = time_scale,
+    time_scale_overrides = time_scale_overrides
+  )
+  assert_poll_data_in_time_line(x, tl)
+  if(!is.null(known_state)){
+    known_state <- known_state[dates_in_time_line(known_state$date, tl), , drop = FALSE]
+  }
+
+  tws <- polls_time_weights(x)
+  tws <- summarize_polls_time_weights(ptw = tws, tl)
+  tws <- dplyr::left_join(tws, tl$time_line[, c("date", "t")], by = "date")
+  tws <- dplyr::left_join(tws, poll_ids, by = ".poll_id")
+
+  ymat <- as.matrix(y(x)[, y_name, drop = FALSE])
+  sigma_y <- ymat * (1 - ymat)
+  for(i in 1:nrow(sigma_y)){
+    sigma_y[i, ] <- sqrt(sigma_y[i, ] / n(x)[i])
+  }
+
+  sdks <- stan_data_known_state(y_name, stan_data_time_line = tl, known_state)
+  sd <- list(T = get_total_time_points_from_time_line(tl),
+             N = length(x),
+             L = nrow(tws),
+             P = ncol(ymat),
+             y = ymat,
+             sigma_y = sigma_y,
+             tw = tws$weight,
+             tw_t = tws$t,
+             tw_i = tws$i,
+             time_scale_length = time_scale_length(time_scale),
+             T_known = sdks$T_known,
+             x_known = sdks$x_known,
+             x_known_t = sdks$x_known_t,
+             x_unknown_t = sdks$x_unknown_t)
+  sd <- stan_data_add_missing(sd)
+
+  from_dates <- do.call(c, lapply(latent_time_ranges[y_name], function(x) x["from"]))
+  to_dates <- do.call(c, lapply(latent_time_ranges[y_name], function(x) x["to"]))
+  sd$t_start <- as.array(get_time_points_from_time_line(dates = from_dates, tl = tl) + 1L)
+  sd$t_end <- as.array(get_time_points_from_time_line(dates = to_dates, tl = tl))
+  sd$delta_days_t <- as.array(ifelse(is.na(tl$time_line$delta_days), 0L, tl$time_line$delta_days))
+  sd$step_scale_t <- as.array(ifelse(is.na(tl$time_line$step_scale), 0.0, tl$time_line$step_scale))
+
+  spd$stan_data_with_overrides <- sd
+  spd$time_line_with_overrides <- tl
+  spd
 }
 
 #' @rdname stan_polls_data

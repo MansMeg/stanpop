@@ -148,3 +148,9 @@ Example: If only 2010-01-15 is used, all dates up to and including 2010-01-15, w
 \description{
 Generate Stan Data from [polls_data] objects
 }
+\details{
+The returned object keeps the existing [stan_data] and [time_line] fields
+unchanged for current models. A parallel future path is attached in
+[stan_data_with_overrides] and [time_line_with_overrides], built using
+[time_line_with_overrides()].
+}
