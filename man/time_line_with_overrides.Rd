@@ -28,7 +28,7 @@ A [time_line] object. The [daily] table contains the effective
   day to the most recent latent date through [time_line_date] and
   [time_line_t]. The [time_line] table contains the latent dates together
   with [delta_days], the number of days since the previous latent date,
-  and [step_scale], equal to `sqrt(delta_days / 7)`.
+  and [step_scale], equal to `sqrt(delta_days / base_time_scale_days)`.
 }
 \description{
 Build a future latent grid using a default [time_scale] and optional

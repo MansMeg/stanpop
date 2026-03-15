@@ -121,6 +121,7 @@ test_that("time_line_with_overrides handles weekly overrides on a daily base gri
     ))
   )
   expect_identical(tl$time_line$delta_days[-1], c(1L, 1L, 1L, 1L, 1L, 5L, 1L))
+  expect_equal(tl$time_line$step_scale[-1], c(1, 1, 1, 1, 1, sqrt(5), 1))
 
   expect_identical(
     tl$daily$time_line_date[tl$daily$date %in% as.Date(c("2020-01-05", "2020-01-06", "2020-01-07", "2020-01-10", "2020-01-11"))],
@@ -132,4 +133,3 @@ test_that("time_line_with_overrides handles weekly overrides on a daily base gri
     c("day", "week", "week", "week", "day")
   )
 })
-

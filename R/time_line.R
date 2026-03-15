@@ -442,7 +442,7 @@ normalize_time_scale_overrides <- function(time_scale, time_scale_overrides = NU
 #'   day to the most recent latent date through [time_line_date] and
 #'   [time_line_t]. The [time_line] table contains the latent dates together
 #'   with [delta_days], the number of days since the previous latent date,
-#'   and [step_scale], equal to `sqrt(delta_days / 7)`.
+#'   and [step_scale], equal to `sqrt(delta_days / base_time_scale_days)`.
 #'
 #' @keywords internal
 time_line_with_overrides <- function(model_time_range,
@@ -482,8 +482,9 @@ time_line_with_overrides <- function(model_time_range,
   daily$time_line_date <- latent_dates[time_line_t]
   daily <- daily[, c("date", "t", "time_scale", "time_scale_days", "time_line_date", "time_line_t")]
 
+  base_time_scale_days <- as.integer(time_scale_as_days(time_scale))
   delta_days <- c(NA_integer_, as.integer(diff(latent_dates)))
-  step_scale <- c(NA_real_, sqrt(delta_days[-1] / 7))
+  step_scale <- c(NA_real_, sqrt(delta_days[-1] / base_time_scale_days))
 
   tl <- list(
     daily = daily,
