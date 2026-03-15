@@ -424,6 +424,83 @@ normalize_time_scale_overrides <- function(time_scale, time_scale_overrides = NU
   schedule
 }
 
+#' Build a Time Line with Time Scale Overrides
+#'
+#' @description
+#' Build a future latent grid using a default [time_scale] and optional
+#' inclusive [time_scale_overrides]. The returned object follows the
+#' [time_line] structure, with one row per calendar day in [daily] and one row
+#' per latent time point in [time_line].
+#'
+#' @param model_time_range a [time_range] object describing the full date range
+#'   to build the latent grid over.
+#' @inheritParams normalize_time_scale_overrides
+#' @param week_start What is week starting day (1 = Monday, Default or 7 = Sunday).
+#'
+#' @return A [time_line] object. The [daily] table contains the effective
+#'   [time_scale] and [time_scale_days] for each calendar date, and maps each
+#'   day to the most recent latent date through [time_line_date] and
+#'   [time_line_t]. The [time_line] table contains the latent dates together
+#'   with [delta_days], the number of days since the previous latent date,
+#'   and [step_scale], equal to `sqrt(delta_days / 7)`.
+#'
+#' @keywords internal
+time_line_with_overrides <- function(model_time_range,
+                                     time_scale,
+                                     time_scale_overrides = NULL,
+                                     week_start = getOption("lubridate.week.start", 1)) {
+  assert_time_range(model_time_range)
+  assert_time_scale(time_scale)
+
+  schedule <- normalize_time_scale_overrides(
+    time_scale = time_scale,
+    time_scale_overrides = time_scale_overrides,
+    model_time_range = model_time_range
+  )
+
+  get_anchor_date <- function(date, scale) {
+    time_scale_dates(as.Date(date), scale, week_start = week_start)
+  }
+
+  latent_dates <- get_anchor_date(schedule$date[1], schedule$time_scale[1])
+  current_latent_date <- latent_dates[1]
+  if(nrow(schedule) > 1){
+    for(i in 2:nrow(schedule)){
+      anchor_date <- get_anchor_date(schedule$date[i], schedule$time_scale[i])
+      if(anchor_date > current_latent_date){
+        latent_dates <- c(latent_dates, anchor_date)
+        current_latent_date <- anchor_date
+      }
+    }
+  }
+
+  daily <- schedule
+  daily$t <- seq_len(nrow(daily))
+  latent_date_num <- as.numeric(latent_dates)
+  time_line_t <- findInterval(as.numeric(daily$date), latent_date_num)
+  daily$time_line_t <- time_line_t
+  daily$time_line_date <- latent_dates[time_line_t]
+  daily <- daily[, c("date", "t", "time_scale", "time_scale_days", "time_line_date", "time_line_t")]
+
+  delta_days <- c(NA_integer_, as.integer(diff(latent_dates)))
+  step_scale <- c(NA_real_, sqrt(delta_days[-1] / 7))
+
+  tl <- list(
+    daily = daily,
+    time_line = tibble::tibble(
+      date = latent_dates,
+      t = seq_along(latent_dates),
+      delta_days = delta_days,
+      step_scale = step_scale
+    ),
+    time_scale = time_scale,
+    week_start = week_start
+  )
+  class(tl) <- "time_line"
+  assert_time_line(tl)
+  tl
+}
+
 #' Expand a time_line object to a new time range
 #' but keep the same time point index.
 #'
