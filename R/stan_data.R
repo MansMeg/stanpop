@@ -14,6 +14,11 @@
 #' @param slow_scales a vector of [Date]s that indicate breaks (right-inclusive) for a slower moving time scale.
 #'        Example: If only 2010-01-15 is used, all dates up to and including 2010-01-15, will have s=1,
 #'                 Dates after 2010-01-15 will have s=2.
+#' @details
+#' The returned object keeps the existing [stan_data] and [time_line] fields
+#' unchanged for current models. A parallel future path is attached in
+#' [stan_data_with_overrides] and [time_line_with_overrides], built using
+#' [time_line_with_overrides()].
 #' @export
 stan_polls_data <- function(x,
                             y_name,
@@ -50,48 +55,50 @@ stan_polls_data <- function(x,
                                  known_state = known_state,
                                  latent_time_ranges = latent_time_ranges,
                                  model_time_range = model_time_range)
-    assert_stan_polls_data(x = spd)
-    assert_stan_data_model(x = spd)
-    return(spd)
   } else if(model %in% c("model8a")) {
-    return(stan_polls_data_model8a(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters))
+    spd <- stan_polls_data_model8a(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters)
   } else if(model %in% c("model8a3", "model8a4")) {
-    return(stan_polls_data_model8a3(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters))
+    spd <- stan_polls_data_model8a3(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters)
   } else if(model %in% c("model8a1")) {
-    return(stan_polls_data_model8a1(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters))
+    spd <- stan_polls_data_model8a1(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters)
   } else if(model %in% c("model8b", "model8b1")) {
-    return(stan_polls_data_model8b(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales))
+    spd <- stan_polls_data_model8b(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales)
   } else if(model %in% c("model8c", "model8c2")) {
-    return(stan_polls_data_model8c(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales))
+    spd <- stan_polls_data_model8c(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales)
   } else if(substr(model,1,8) %in% c("model10d")) {
-    return(stan_polls_data_model10d(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales,'model8d3'))
+    spd <- stan_polls_data_model10d(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales,'model8d3')
   } else if(substr(model,1,8) %in% c("model10e")) {
-    return(stan_polls_data_model10e(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales,'model8d3'))
+    spd <- stan_polls_data_model10e(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales,'model8d3')
   } else if(substr(model,1,7) %in% c("model8d")) {
-    return(stan_polls_data_model8d(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model))
+    spd <- stan_polls_data_model8d(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model)
   } else if(substr(model,1,8) %in% c("model11a")) {
-    return(stan_polls_data_model11a(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales,'model8d3'))
+    spd <- stan_polls_data_model11a(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales,'model8d3')
   } else if(substr(model,1,8) %in% c("model11b")) {
-    return(stan_polls_data_model11b(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales,'model8e'))
+    spd <- stan_polls_data_model11b(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales,'model8e')
   } else if(substr(model,1,7) %in% c("model8e")) {
-    return(stan_polls_data_model8e(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model))
+    spd <- stan_polls_data_model8e(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model)
   } else if(substr(model,1,7) %in% c("model8f")) {
-    return(stan_polls_data_model8f(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model))
+    spd <- stan_polls_data_model8f(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model)
   } else if(substr(model,1,7) %in% c("model8g","model8h")) {
-    return(stan_polls_data_model8g(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model))
+    spd <- stan_polls_data_model8g(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model)
   } else if(grepl(model, pattern = "^model8i[0-9]+$")) {
-    return(stan_polls_data_model8i(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model))
+    spd <- stan_polls_data_model8i(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model)
   } else if(grepl(model, pattern = "^model8j[0-9]+$")) {
-    return(stan_polls_data_model8i(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model))
+    spd <- stan_polls_data_model8i(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model)
   } else if(grepl(model, pattern = "^model8k[0-9]+$")) {
-    return(stan_polls_data_model8k(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model))
+    spd <- stan_polls_data_model8k(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model)
   } else if(grepl(model, pattern = "^model8l[0-9]+$")) {
-    return(stan_polls_data_model8l(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model))
+    spd <- stan_polls_data_model8l(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model)
   } else if(grepl(model, pattern = "^model8m[0-9]+$")) {
-    return(stan_polls_data_model8m(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model))
+    spd <- stan_polls_data_model8m(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model)
   } else {
     stop("'", model, "' not implemented in stan_polls_data().")
   }
+
+
+  assert_stan_polls_data(x = spd)
+  assert_stan_data_model(x = spd)
+  spd
 }
 
 
