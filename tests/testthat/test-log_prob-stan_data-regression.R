@@ -3,6 +3,7 @@ context("log_prob stan_data regression")
 # Run the line below to run different test suites locally
 # See documentation for details.
 # Sys.setenv(STANPOP_RUN_STAN_TESTS = "true")
+# Sys.setenv(STANPOP_RUN_STAN_TESTS = "false")
 # options(mc.cores = parallel::detectCores())
 if(FALSE){ # For debugging
   library(testthat)
