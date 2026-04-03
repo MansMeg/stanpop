@@ -248,7 +248,6 @@ test_that("model8k2 override-aware path recomputes g_t, g_i, and next_known_stat
 
 
 test_that("model8k2 override-aware path recomputes next_known_state_t_index on the mixed grid", {
-  skip("For now")
   tr <- time_range(c("2020-01-06", "2020-01-15"))
   overrides <- tibble::tibble(
     from = as.Date("2020-01-08"),
