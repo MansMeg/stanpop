@@ -130,4 +130,54 @@ test_that("parallel override-aware path respects known_state filtering", {
   expect_identical(sd$stan_data_with_overrides$x_known_t, sd$stan_data$x_known_t)
 })
 
-# TODO: Build own tests for stan data
+
+test_that("minimal example shows how one poll changes on mixed and non-mixed paths", {
+  attach_stan_data_with_overrides <- get_internal("attach_stan_data_with_overrides")
+  tr <- time_range(c("2020-01-01", "2020-01-15"))
+  overrides <- tibble::tibble(
+    from = as.Date("2020-01-08"),
+    to = as.Date("2020-01-10"),
+    time_scale = "day"
+  )
+
+  pd <- polls_data(
+    y = tibble::tibble(x3 = 0.30, x4 = 0.20),
+    house = factor("A"),
+    publish_date = as.Date("2020-01-10"),
+    start_date = as.Date("2020-01-09"),
+    end_date = as.Date("2020-01-10"),
+    n = 1000L
+  )
+
+  sd_base <- stan_polls_data_model6b(
+    x = pd,
+    y_name = c("x3", "x4"),
+    time_scale = "week",
+    model_time_range = tr
+  )
+
+  sd_mixed <- attach_stan_data_with_overrides(
+    spd = sd_base,
+    x = pd,
+    y_name = c("x3", "x4"),
+    time_scale = "week",
+    time_scale_overrides = overrides,
+    model_time_range = tr
+  )
+
+  expect_identical(
+    sd_base$time_line$time_line$date,
+    as.Date(c("2019-12-30", "2020-01-06", "2020-01-13"))
+  )
+  expect_identical(sd_base$stan_data$tw, 1)
+  expect_identical(sd_base$stan_data$tw_t, 2L)
+  expect_identical(sd_base$stan_data$tw_i, 1L)
+
+  expect_identical(
+    sd_mixed$time_line_with_overrides$time_line$date,
+    as.Date(c("2019-12-30", "2020-01-06", "2020-01-08", "2020-01-09", "2020-01-10", "2020-01-13"))
+  )
+  expect_equal(sd_mixed$stan_data_with_overrides$tw, c(0.5, 0.5))
+  expect_identical(sd_mixed$stan_data_with_overrides$tw_t, c(4L, 5L))
+  expect_identical(sd_mixed$stan_data_with_overrides$tw_i, c(1L, 1L))
+})
