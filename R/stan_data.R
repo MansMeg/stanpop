@@ -352,7 +352,7 @@ attach_stan_data_with_overrides <- function(spd,
     sd$g_i <- suppressWarnings(stan_data_g_i_date_diff(x = x, known_state = known_state, type = "collection_midpoint"))
   }
   if("next_known_state_t_index" %in% legacy_stan_data_names && !is.null(known_state)){
-    sd$next_known_state_t_index <- as.array(get_time_line_next_known_state_index(time_line = tl, known_state = known_state))
+    sd$next_known_state_t_index <- as.integer(get_time_line_next_known_state_index(time_line = tl, known_state = known_state))
   }
 
   spd$stan_data_with_overrides <- sd
