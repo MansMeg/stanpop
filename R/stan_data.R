@@ -1465,6 +1465,30 @@ stan_data_finalize_model8k <- function(stan_data,
   stan_data
 }
 
+stan_data_finalize_model8m <- function(stan_data,
+                                       hyper_parameters,
+                                       time_line,
+                                       y_name,
+                                       model){
+  checkmate::assert_list(stan_data)
+  assert_time_line(time_line)
+  checkmate::assert_character(y_name)
+  checkmate::assert_string(model)
+
+  hyper_parameters <- parse_obs_x(hyper_parameters, time_line, y_name)
+  hyper_parameters <- parse_election_period(hyper_parameters, time_line)
+  if(is.null(hyper_parameters$EP)) hyper_parameters$EP <- as.integer(max(hyper_parameters$election_period))
+
+  mc <- model_config(model, hyper_parameters, stan_data)
+  stan_data <- c(stan_data, mc)
+
+  stan_data$alpha_kappa_known <- array(stan_data$alpha_kappa_known, dim = 1)
+  stan_data$alpha_beta_mu_known <- array(stan_data$alpha_beta_mu_known, dim = 1)
+  stan_data$alpha_beta_sigma_known <- array(stan_data$alpha_beta_sigma_known, dim = 1)
+
+  stan_data
+}
+
 
 
 stan_polls_data_model8k <- function(x, y_name, time_scale = "week", known_state = NULL, model_time_range = NULL, latent_time_ranges = NULL, hyper_parameters = NULL, slow_scales = NULL, model){
@@ -1667,21 +1691,13 @@ stan_polls_data_model8m <- function(x, y_name, time_scale = "week", known_state 
     slow_scales = slow_scales
   )
 
-
-  # Compute observations of x
-  hyper_parameters <- parse_obs_x(hyper_parameters, tl, y_name)
-  # Compute election period indicator
-  hyper_parameters <- parse_election_period(hyper_parameters, tl)
-  if(is.null(hyper_parameters$EP)) hyper_parameters$EP <- as.integer(max(hyper_parameters$election_period))
-
-  # Model configs
-  mc <- model_config(model, hyper_parameters, spd$stan_data)
-  spd$stan_data <- c(spd$stan_data, mc)
-
-  # Set known values to array of size 1
-  spd$stan_data$alpha_kappa_known <- array(spd$stan_data$alpha_kappa_known, dim=1)
-  spd$stan_data$alpha_beta_mu_known <- array(spd$stan_data$alpha_beta_mu_known, dim=1)
-  spd$stan_data$alpha_beta_sigma_known <- array(spd$stan_data$alpha_beta_sigma_known, dim=1)
+  spd$stan_data <- stan_data_finalize_model8m(
+    stan_data = spd$stan_data,
+    hyper_parameters = hyper_parameters,
+    time_line = tl,
+    y_name = y_name,
+    model = model
+  )
 
   class(spd) <- c("model8m", "stan_polls_data")
   assert_all_periods_has_observations_in_polls_data(spd)
