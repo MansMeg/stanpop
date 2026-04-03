@@ -345,6 +345,9 @@ attach_stan_data_with_overrides <- function(spd,
   sd$t_end <- as.array(get_time_points_from_time_line(dates = to_dates, tl = tl))
   sd$delta_days_t <- as.array(ifelse(is.na(tl$time_line$delta_days), 0L, tl$time_line$delta_days))
   sd$step_scale_t <- as.array(ifelse(is.na(tl$time_line$step_scale), 0.0, tl$time_line$step_scale))
+  if("g_t" %in% legacy_stan_data_names && !is.null(known_state)){
+    sd$g_t <- as.array(stan_data_g_t_date_diff(known_state = known_state, time_line = tl))
+  }
   if("next_known_state_t_index" %in% legacy_stan_data_names && !is.null(known_state)){
     sd$next_known_state_t_index <- as.array(get_time_line_next_known_state_index(time_line = tl, known_state = known_state))
   }
@@ -825,6 +828,23 @@ stan_data_g_t <- function(known_state, time_line, time_scale){
   dates <- time_line$time_line$date
   g <- get_dates_time_points_since_last_known_state(dates, known_state = known_state, tl = time_line)
   stan_data_normalize_g_by(g, time_scale, by = "year")
+}
+
+stan_data_g_t_date_diff <- function(known_state, time_line){
+  assert_known_state(known_state)
+  assert_time_line(time_line)
+
+  ks <- known_state[order(known_state$date), , drop = FALSE]
+  dates <- time_line$time_line$date
+  prev_known_state_index <- findInterval(dates, ks$date)
+  prev_known_state_dates <- ks$date[pmax(prev_known_state_index, 1L)]
+
+  if(any(prev_known_state_index < 1L)){
+    warning("'known_state' is missing before some dates.\n Assumes the previous 'known_state' is at the first latent time point.", call. = FALSE)
+    prev_known_state_dates[prev_known_state_index < 1L] <- dates[prev_known_state_index < 1L]
+  }
+
+  as.numeric(dates - prev_known_state_dates) / time_scale_as_days("year")
 }
 
 stan_data_normalize_g_by <- function(g, time_scale, by = "year"){
