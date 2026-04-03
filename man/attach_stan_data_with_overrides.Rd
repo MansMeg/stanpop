@@ -12,7 +12,8 @@ attach_stan_data_with_overrides(
   time_scale_overrides = NULL,
   known_state = NULL,
   model_time_range = NULL,
-  latent_time_ranges = NULL
+  latent_time_ranges = NULL,
+  slow_scales = NULL
 )
 }
 \arguments{
@@ -31,6 +32,8 @@ attach_stan_data_with_overrides(
 \item{model_time_range}{the time range to model.}
 
 \item{latent_time_ranges}{the time range of the latent state.}
+
+\item{slow_scales}{optional slow-scale break dates.}
 }
 \value{
 The input [stan_polls_data] object with [stan_data_with_overrides]

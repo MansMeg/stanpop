@@ -412,3 +412,61 @@ test_that("model8k2 override-aware path computes g_i from collection midpoint da
   expect_equal(unname(sd$stan_data_with_overrides$g_i[1]), 5 / 365, tolerance = 1e-12)
 })
 
+
+test_that("model8k2 override-aware path recomputes s_t on the mixed latent grid", {
+  tr <- time_range(c("2020-01-06", "2020-01-15"))
+  overrides <- tibble::tibble(
+    from = as.Date("2020-01-08"),
+    to = as.Date("2020-01-10"),
+    time_scale = "day"
+  )
+  slow_scales <- as.Date("2020-01-09")
+
+  pd <- polls_data(
+    y = tibble::tibble(x3 = 0.30, x4 = 0.20),
+    house = factor("A"),
+    publish_date = as.Date("2020-01-10"),
+    start_date = as.Date("2020-01-09"),
+    end_date = as.Date("2020-01-10"),
+    n = 1000L
+  )
+  known_state <- tibble::tibble(
+    date = as.Date(c("2020-01-06", "2020-01-13")),
+    x3 = c(0.25, 0.32),
+    x4 = c(0.20, 0.18)
+  )
+
+  sd <- suppressWarnings(
+    suppressMessages(
+      stan_polls_data(
+        x = pd,
+        time_scale = "week",
+        time_scale_overrides = overrides,
+        y_name = c("x3", "x4"),
+        model = "model8k2",
+        known_state = known_state,
+        model_time_range = tr,
+        slow_scales = slow_scales,
+        hyper_parameters = list(
+          sigma_kappa_hyper = 0.01,
+          use_industry_bias = 1L,
+          use_house_bias = 0L,
+          use_design_effects = 0L,
+          use_multivariate_version = 2L,
+          use_softmax = 1L
+        )
+      )
+    )
+  )
+
+  expect_identical(
+    sd$time_line_with_overrides$time_line$date,
+    as.Date(c("2020-01-06", "2020-01-08", "2020-01-09", "2020-01-10", "2020-01-13"))
+  )
+
+  has_s_t <- "s_t" %in% names(sd$stan_data_with_overrides)
+  expect_true(has_s_t)
+  if(has_s_t){
+    expect_identical(sd$stan_data_with_overrides$s_t, c(1L, 1L, 1L, 2L, 2L))
+  }
+})

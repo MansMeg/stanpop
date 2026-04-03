@@ -103,7 +103,8 @@ stan_polls_data <- function(x,
     time_scale_overrides = time_scale_overrides,
     known_state = known_state,
     model_time_range = mtr,
-    latent_time_ranges = latent_time_ranges
+    latent_time_ranges = latent_time_ranges,
+    slow_scales = slow_scales
   )
 
   assert_stan_polls_data(x = spd)
@@ -274,6 +275,7 @@ stan_data_known_state <- function(y_name, stan_data_time_line, known_state){
 #' @param known_state known time points in the latent state.
 #' @param model_time_range the time range to model.
 #' @param latent_time_ranges the time range of the latent state.
+#' @param slow_scales optional slow-scale break dates.
 #'
 #' @return The input [stan_polls_data] object with [stan_data_with_overrides]
 #'   and [time_line_with_overrides] added.
@@ -286,7 +288,8 @@ attach_stan_data_with_overrides <- function(spd,
                                             time_scale_overrides = NULL,
                                             known_state = NULL,
                                             model_time_range = NULL,
-                                            latent_time_ranges = NULL){
+                                            latent_time_ranges = NULL,
+                                            slow_scales = NULL){
   assert_stan_polls_data(spd)
   assert_polls_data(x)
   checkmate::assert_subset(y_name, choices = names(y(x)))
@@ -345,6 +348,10 @@ attach_stan_data_with_overrides <- function(spd,
   sd$t_end <- as.array(get_time_points_from_time_line(dates = to_dates, tl = tl))
   sd$delta_days_t <- as.array(ifelse(is.na(tl$time_line$delta_days), 0L, tl$time_line$delta_days))
   sd$step_scale_t <- as.array(ifelse(is.na(tl$time_line$step_scale), 0.0, tl$time_line$step_scale))
+  if("s_t" %in% legacy_stan_data_names){
+    tls <- time_line_add_slow_scale(tl, slow_scales)
+    sd$s_t <- stan_data_s_t(tls)
+  }
   if("g_t" %in% legacy_stan_data_names && !is.null(known_state)){
     sd$g_t <- as.array(stan_data_g_t_date_diff(known_state = known_state, time_line = tl))
   }
