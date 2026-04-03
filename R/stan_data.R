@@ -299,6 +299,7 @@ attach_stan_data_with_overrides <- function(spd,
     latent_time_ranges <- setup_latent_time_ranges(x = latent_time_ranges, y = y_name, model_time_range)
   }
 
+  legacy_stan_data_names <- names(spd$stan_data)
   poll_ids <- tibble::tibble(.poll_id = poll_ids(x), i = 1:length(poll_ids(x)))
   tl <- time_line_with_overrides(
     model_time_range = model_time_range,
@@ -344,6 +345,9 @@ attach_stan_data_with_overrides <- function(spd,
   sd$t_end <- as.array(get_time_points_from_time_line(dates = to_dates, tl = tl))
   sd$delta_days_t <- as.array(ifelse(is.na(tl$time_line$delta_days), 0L, tl$time_line$delta_days))
   sd$step_scale_t <- as.array(ifelse(is.na(tl$time_line$step_scale), 0.0, tl$time_line$step_scale))
+  if("next_known_state_t_index" %in% legacy_stan_data_names && !is.null(known_state)){
+    sd$next_known_state_t_index <- as.array(get_time_line_next_known_state_index(time_line = tl, known_state = known_state))
+  }
 
   spd$stan_data_with_overrides <- sd
   spd$time_line_with_overrides <- tl
