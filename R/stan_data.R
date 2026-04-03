@@ -348,6 +348,9 @@ attach_stan_data_with_overrides <- function(spd,
   if("g_t" %in% legacy_stan_data_names && !is.null(known_state)){
     sd$g_t <- as.array(stan_data_g_t_date_diff(known_state = known_state, time_line = tl))
   }
+  if("g_i" %in% legacy_stan_data_names && !is.null(known_state)){
+    sd$g_i <- suppressWarnings(stan_data_g_i_date_diff(x = x, known_state = known_state, type = "collection_midpoint"))
+  }
   if("next_known_state_t_index" %in% legacy_stan_data_names && !is.null(known_state)){
     sd$next_known_state_t_index <- as.array(get_time_line_next_known_state_index(time_line = tl, known_state = known_state))
   }
@@ -841,6 +844,29 @@ stan_data_g_t_date_diff <- function(known_state, time_line){
 
   if(any(prev_known_state_index < 1L)){
     warning("'known_state' is missing before some dates.\n Assumes the previous 'known_state' is at the first latent time point.", call. = FALSE)
+    prev_known_state_dates[prev_known_state_index < 1L] <- dates[prev_known_state_index < 1L]
+  }
+
+  as.numeric(dates - prev_known_state_dates) / time_scale_as_days("year")
+}
+
+stan_data_g_i_date_diff <- function(x, known_state, type = "collection_midpoint"){
+  assert_polls_data(x)
+  assert_known_state(known_state)
+  checkmate::assert_choice(type, choices = "collection_midpoint")
+
+  if(type == "collection_midpoint"){
+    dates <- collection_midpoint_dates(x)
+  } else {
+    stop("Incorrect type!")
+  }
+
+  ks <- known_state[order(known_state$date), , drop = FALSE]
+  prev_known_state_index <- findInterval(dates, ks$date)
+  prev_known_state_dates <- ks$date[pmax(prev_known_state_index, 1L)]
+
+  if(any(prev_known_state_index < 1L)){
+    warning("'known_state' is missing before some dates.\n Assumes the previous 'known_state' is at the collection midpoint date.", call. = FALSE)
     prev_known_state_dates[prev_known_state_index < 1L] <- dates[prev_known_state_index < 1L]
   }
 
