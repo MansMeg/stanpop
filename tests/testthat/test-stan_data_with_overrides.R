@@ -470,3 +470,59 @@ test_that("model8k2 override-aware path recomputes s_t on the mixed latent grid"
     expect_identical(sd$stan_data_with_overrides$s_t, c(1L, 1L, 1L, 2L, 2L))
   }
 })
+
+test_that("model8k2 override-aware path computes s_i from collection midpoint dates", {
+  tr <- time_range(c("2020-01-06", "2020-01-15"))
+  overrides <- tibble::tibble(
+    from = as.Date("2020-01-08"),
+    to = as.Date("2020-01-10"),
+    time_scale = "day"
+  )
+  slow_scales <- as.Date("2020-01-09")
+
+  pd <- polls_data(
+    y = tibble::tibble(
+      x3 = c(0.30, 0.31),
+      x4 = c(0.20, 0.19)
+    ),
+    house = factor(c("A", "A")),
+    publish_date = as.Date(c("2020-01-10", "2020-01-12")),
+    start_date = as.Date(c("2020-01-09", "2020-01-11")),
+    end_date = as.Date(c("2020-01-10", "2020-01-12")),
+    n = c(1000L, 1000L)
+  )
+  known_state <- tibble::tibble(
+    date = as.Date(c("2020-01-06", "2020-01-13")),
+    x3 = c(0.25, 0.32),
+    x4 = c(0.20, 0.18)
+  )
+
+  sd <- suppressWarnings(
+    suppressMessages(
+      stan_polls_data(
+        x = pd,
+        time_scale = "week",
+        time_scale_overrides = overrides,
+        y_name = c("x3", "x4"),
+        model = "model8k2",
+        known_state = known_state,
+        model_time_range = tr,
+        slow_scales = slow_scales,
+        hyper_parameters = list(
+          sigma_kappa_hyper = 0.01,
+          use_industry_bias = 1L,
+          use_house_bias = 0L,
+          use_design_effects = 0L,
+          use_multivariate_version = 2L,
+          use_softmax = 1L
+        )
+      )
+    )
+  )
+
+  expect_identical(collection_midpoint_dates(pd), as.Date(c("2020-01-09", "2020-01-11")))
+  expect_true("s_i" %in% names(sd$stan_data_with_overrides))
+  if("s_i" %in% names(sd$stan_data_with_overrides)){
+    expect_identical(sd$stan_data_with_overrides$s_i, c(1L, 2L))
+  }
+})

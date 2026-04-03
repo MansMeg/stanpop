@@ -348,8 +348,13 @@ attach_stan_data_with_overrides <- function(spd,
   sd$t_end <- as.array(get_time_points_from_time_line(dates = to_dates, tl = tl))
   sd$delta_days_t <- as.array(ifelse(is.na(tl$time_line$delta_days), 0L, tl$time_line$delta_days))
   sd$step_scale_t <- as.array(ifelse(is.na(tl$time_line$step_scale), 0.0, tl$time_line$step_scale))
-  if("s_t" %in% legacy_stan_data_names){
+  if(any(c("s_i", "s_t") %in% legacy_stan_data_names)){
     tls <- time_line_add_slow_scale(tl, slow_scales)
+  }
+  if("s_i" %in% legacy_stan_data_names){
+    sd$s_i <- get_time_points_from_time_line(collection_midpoint_dates(x), tls, "time_line_s")
+  }
+  if("s_t" %in% legacy_stan_data_names){
     sd$s_t <- stan_data_s_t(tls)
   }
   if("g_t" %in% legacy_stan_data_names && !is.null(known_state)){
