@@ -2,13 +2,13 @@ context("log_prob stan_data regression")
 
 # Run the line below to run different test suites locally
 # See documentation for details.
-# stanpop:::set_test_stan_basic_on_local(TRUE)
-# stanpop:::set_test_stan_full_on_local(TRUE)
+# Sys.setenv(STANPOP_RUN_STAN_TESTS = "true")
 # options(mc.cores = parallel::detectCores())
 if(FALSE){ # For debugging
   library(testthat)
   library(stanpop)
 }
+
 
 make_simple_log_prob_regression_case <- function() {
   data("x_test")

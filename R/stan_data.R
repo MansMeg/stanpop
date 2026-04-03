@@ -1391,6 +1391,58 @@ assert_stan_data_model.model8i <- function(x){
 }
 
 
+stan_data_add_model8km_common_fields <- function(stan_data,
+                                                 x,
+                                                 time_line,
+                                                 known_state,
+                                                 known_state_in_time_line,
+                                                 time_scale,
+                                                 slow_scales = NULL){
+  checkmate::assert_list(stan_data)
+  assert_polls_data(x)
+  assert_time_line(time_line)
+  assert_known_state(known_state, null.ok = FALSE)
+  assert_known_state(known_state_in_time_line, null.ok = FALSE)
+  assert_time_scale(time_scale)
+  assert_slow_scales(slow_scales, null.ok = TRUE)
+
+  stan_data$next_known_state_poll_index <- get_polls_next_known_state_index(
+    x = x,
+    known_state = known_state_in_time_line,
+    type = "collection_midpoint"
+  )
+  stan_data$next_known_state_t_index <- get_time_line_next_known_state_index(
+    time_line = time_line,
+    known_state = known_state_in_time_line
+  )
+  stan_data$g_t <- stan_data_g_t(
+    known_state = known_state,
+    time_line = time_line,
+    time_scale = time_scale
+  )
+  stan_data$g_i <- suppressWarnings(
+    stan_data_g(
+      x = x,
+      known_state = known_state,
+      time_line = time_line,
+      time_scale = time_scale,
+      type = "collection_midpoint"
+    )
+  )
+
+  stan_data$Pp <- as.integer(stan_data$P * (stan_data$P - 1) / 2)
+
+  tls <- time_line_add_slow_scale(time_line, slow_scales)
+  stan_data$H <- stan_data_H(x)
+  stan_data$h_i <- stan_data_h_i(x)
+  stan_data$S <- stan_data_S(tls)
+  stan_data$s_i <- get_time_points_from_time_line(collection_midpoint_dates(x), tls, "time_line_s")
+  stan_data$s_t <- stan_data_s_t(tls)
+
+  stan_data
+}
+
+
 
 stan_polls_data_model8k <- function(x, y_name, time_scale = "week", known_state = NULL, model_time_range = NULL, latent_time_ranges = NULL, hyper_parameters = NULL, slow_scales = NULL, model){
   assert_polls_data(x)
@@ -1408,22 +1460,15 @@ stan_polls_data_model8k <- function(x, y_name, time_scale = "week", known_state 
   ks <- known_state[dates_in_time_line(known_state$date, tl),]
   spd <- stan_polls_data_model6b(x, y_name, time_scale, ks, model_time_range, latent_time_ranges)
 
-  # Compute industry bias data
-  spd$stan_data$next_known_state_poll_index <- get_polls_next_known_state_index(x = x, known_state = ks, type = "collection_midpoint")
-  spd$stan_data$next_known_state_t_index <- get_time_line_next_known_state_index(time_line = tl, known_state = ks)
-  spd$stan_data$g_t <- stan_data_g_t(known_state = known_state, time_line = tl, time_scale = time_scale)
-  spd$stan_data$g_i <- suppressWarnings(stan_data_g(x = x, known_state = known_state, time_line = tl, time_scale = time_scale, type = "collection_midpoint"))
-
-  # Compute Pp
-  spd$stan_data$Pp <- as.integer(spd$stan_data$P * (spd$stan_data$P - 1) / 2)
-
-  # Compute S and H
-  tls <- time_line_add_slow_scale(tl, slow_scales)
-  spd$stan_data$H <- stan_data_H(x)
-  spd$stan_data$h_i <- stan_data_h_i(x)
-  spd$stan_data$S <- stan_data_S(tls)
-  spd$stan_data$s_i <- get_time_points_from_time_line(collection_midpoint_dates(x), tls, "time_line_s")
-  spd$stan_data$s_t <- stan_data_s_t(tls)
+  spd$stan_data <- stan_data_add_model8km_common_fields(
+    stan_data = spd$stan_data,
+    x = x,
+    time_line = tl,
+    known_state = known_state,
+    known_state_in_time_line = ks,
+    time_scale = time_scale,
+    slow_scales = slow_scales
+  )
 
   # Compute observations of x
   hyper_parameters <- parse_obs_x(hyper_parameters, tl, y_name)
