@@ -99,11 +99,13 @@ stan_polls_data <- function(x,
     spd = spd,
     x = x,
     y_name = y_name,
+    model = model,
     time_scale = time_scale,
     time_scale_overrides = time_scale_overrides,
     known_state = known_state,
     model_time_range = mtr,
     latent_time_ranges = latent_time_ranges,
+    hyper_parameters = hyper_parameters,
     slow_scales = slow_scales
   )
 
@@ -270,11 +272,13 @@ stan_data_known_state <- function(y_name, stan_data_time_line, known_state){
 #' @param spd a [stan_polls_data] object.
 #' @param x a [polls_data] object.
 #' @param y_name a character vector indicating y variables in polls object.
+#' @param model the Stan model name.
 #' @param time_scale the base time scale.
 #' @param time_scale_overrides optional inclusive time scale override ranges.
 #' @param known_state known time points in the latent state.
 #' @param model_time_range the time range to model.
 #' @param latent_time_ranges the time range of the latent state.
+#' @param hyper_parameters optional model hyper parameters.
 #' @param slow_scales optional slow-scale break dates.
 #'
 #' @return The input [stan_polls_data] object with [stan_data_with_overrides]
@@ -284,15 +288,18 @@ stan_data_known_state <- function(y_name, stan_data_time_line, known_state){
 attach_stan_data_with_overrides <- function(spd,
                                             x,
                                             y_name,
+                                            model = class(spd)[1],
                                             time_scale,
                                             time_scale_overrides = NULL,
                                             known_state = NULL,
                                             model_time_range = NULL,
                                             latent_time_ranges = NULL,
+                                            hyper_parameters = NULL,
                                             slow_scales = NULL){
   assert_stan_polls_data(spd)
   assert_polls_data(x)
   checkmate::assert_subset(y_name, choices = names(y(x)))
+  checkmate::assert_string(model)
   assert_time_scale(time_scale)
   assert_known_state(known_state)
   assert_time_range(model_time_range)
@@ -310,8 +317,9 @@ attach_stan_data_with_overrides <- function(spd,
     time_scale_overrides = time_scale_overrides
   )
   assert_poll_data_in_time_line(x, tl)
+  known_state_in_time_line <- known_state
   if(!is.null(known_state)){
-    known_state <- known_state[dates_in_time_line(known_state$date, tl), , drop = FALSE]
+    known_state_in_time_line <- known_state[dates_in_time_line(known_state$date, tl), , drop = FALSE]
   }
 
   tws <- polls_time_weights(x)
@@ -325,7 +333,7 @@ attach_stan_data_with_overrides <- function(spd,
     sigma_y[i, ] <- sqrt(sigma_y[i, ] / n(x)[i])
   }
 
-  sdks <- stan_data_known_state(y_name, stan_data_time_line = tl, known_state)
+  sdks <- stan_data_known_state(y_name, stan_data_time_line = tl, known_state_in_time_line)
   sd <- list(T = get_total_time_points_from_time_line(tl),
              N = length(x),
              L = nrow(tws),
@@ -348,23 +356,60 @@ attach_stan_data_with_overrides <- function(spd,
   sd$t_end <- as.array(get_time_points_from_time_line(dates = to_dates, tl = tl))
   sd$delta_days_t <- as.array(ifelse(is.na(tl$time_line$delta_days), 0L, tl$time_line$delta_days))
   sd$step_scale_t <- as.array(ifelse(is.na(tl$time_line$step_scale), 0.0, tl$time_line$step_scale))
-  if(any(c("s_i", "s_t") %in% legacy_stan_data_names)){
+
+  has_time_scale_overrides <- !is.null(time_scale_overrides) && nrow(time_scale_overrides) > 0
+  is_model8k <- grepl(pattern = "^model8k[0-9]+$", x = model)
+  is_model8m <- grepl(pattern = "^model8m[0-9]+$", x = model)
+
+  if((is_model8k || is_model8m) && !is.null(known_state)){
+    sd <- stan_data_add_model8km_common_fields(
+      stan_data = sd,
+      x = x,
+      time_line = tl,
+      known_state = known_state,
+      known_state_in_time_line = known_state_in_time_line,
+      time_scale = time_scale,
+      slow_scales = slow_scales,
+      use_date_diff_g_t = has_time_scale_overrides,
+      use_date_diff_g_i = has_time_scale_overrides
+    )
+
+    if(is_model8k){
+      sd <- stan_data_finalize_model8k(
+        stan_data = sd,
+        hyper_parameters = hyper_parameters,
+        time_line = tl,
+        y_name = y_name,
+        model = model
+      )
+    }
+
+    if(is_model8m){
+      sd <- stan_data_finalize_model8m(
+        stan_data = sd,
+        hyper_parameters = hyper_parameters,
+        time_line = tl,
+        y_name = y_name,
+        model = model
+      )
+    }
+  } else if(any(c("s_i", "s_t") %in% legacy_stan_data_names)){
     tls <- time_line_add_slow_scale(tl, slow_scales)
-  }
-  if("s_i" %in% legacy_stan_data_names){
-    sd$s_i <- get_time_points_from_time_line(collection_midpoint_dates(x), tls, "time_line_s")
-  }
-  if("s_t" %in% legacy_stan_data_names){
-    sd$s_t <- stan_data_s_t(tls)
-  }
-  if("g_t" %in% legacy_stan_data_names && !is.null(known_state)){
-    sd$g_t <- as.array(stan_data_g_t_date_diff(known_state = known_state, time_line = tl))
-  }
-  if("g_i" %in% legacy_stan_data_names && !is.null(known_state)){
-    sd$g_i <- suppressWarnings(stan_data_g_i_date_diff(x = x, known_state = known_state, type = "collection_midpoint"))
-  }
-  if("next_known_state_t_index" %in% legacy_stan_data_names && !is.null(known_state)){
-    sd$next_known_state_t_index <- as.integer(get_time_line_next_known_state_index(time_line = tl, known_state = known_state))
+    if("s_i" %in% legacy_stan_data_names){
+      sd$s_i <- get_time_points_from_time_line(collection_midpoint_dates(x), tls, "time_line_s")
+    }
+    if("s_t" %in% legacy_stan_data_names){
+      sd$s_t <- stan_data_s_t(tls)
+    }
+    if("g_t" %in% legacy_stan_data_names && !is.null(known_state)){
+      sd$g_t <- as.array(stan_data_g_t_date_diff(known_state = known_state, time_line = tl))
+    }
+    if("g_i" %in% legacy_stan_data_names && !is.null(known_state)){
+      sd$g_i <- suppressWarnings(stan_data_g_i_date_diff(x = x, known_state = known_state, type = "collection_midpoint"))
+    }
+    if("next_known_state_t_index" %in% legacy_stan_data_names && !is.null(known_state)){
+      sd$next_known_state_t_index <- as.integer(get_time_line_next_known_state_index(time_line = tl, known_state = known_state))
+    }
   }
 
   spd$stan_data_with_overrides <- sd
@@ -1397,7 +1442,9 @@ stan_data_add_model8km_common_fields <- function(stan_data,
                                                  known_state,
                                                  known_state_in_time_line,
                                                  time_scale,
-                                                 slow_scales = NULL){
+                                                 slow_scales = NULL,
+                                                 use_date_diff_g_t = FALSE,
+                                                 use_date_diff_g_i = FALSE){
   checkmate::assert_list(stan_data)
   assert_polls_data(x)
   assert_time_line(time_line)
@@ -1405,30 +1452,47 @@ stan_data_add_model8km_common_fields <- function(stan_data,
   assert_known_state(known_state_in_time_line, null.ok = FALSE)
   assert_time_scale(time_scale)
   assert_slow_scales(slow_scales, null.ok = TRUE)
+  checkmate::assert_flag(use_date_diff_g_t)
+  checkmate::assert_flag(use_date_diff_g_i)
 
   stan_data$next_known_state_poll_index <- get_polls_next_known_state_index(
     x = x,
     known_state = known_state_in_time_line,
     type = "collection_midpoint"
   )
-  stan_data$next_known_state_t_index <- get_time_line_next_known_state_index(
+  stan_data$next_known_state_t_index <- as.integer(get_time_line_next_known_state_index(
     time_line = time_line,
     known_state = known_state_in_time_line
-  )
-  stan_data$g_t <- stan_data_g_t(
-    known_state = known_state,
-    time_line = time_line,
-    time_scale = time_scale
-  )
-  stan_data$g_i <- suppressWarnings(
-    stan_data_g(
-      x = x,
+  ))
+  if(use_date_diff_g_t){
+    stan_data$g_t <- as.array(stan_data_g_t_date_diff(
+      known_state = known_state,
+      time_line = time_line
+    ))
+  } else {
+    stan_data$g_t <- stan_data_g_t(
       known_state = known_state,
       time_line = time_line,
-      time_scale = time_scale,
-      type = "collection_midpoint"
+      time_scale = time_scale
     )
-  )
+  }
+  if(use_date_diff_g_i){
+    stan_data$g_i <- suppressWarnings(stan_data_g_i_date_diff(
+      x = x,
+      known_state = known_state,
+      type = "collection_midpoint"
+    ))
+  } else {
+    stan_data$g_i <- suppressWarnings(
+      stan_data_g(
+        x = x,
+        known_state = known_state,
+        time_line = time_line,
+        time_scale = time_scale,
+        type = "collection_midpoint"
+      )
+    )
+  }
 
   stan_data$Pp <- as.integer(stan_data$P * (stan_data$P - 1) / 2)
 

@@ -8,11 +8,13 @@ attach_stan_data_with_overrides(
   spd,
   x,
   y_name,
+  model = class(spd)[1],
   time_scale,
   time_scale_overrides = NULL,
   known_state = NULL,
   model_time_range = NULL,
   latent_time_ranges = NULL,
+  hyper_parameters = NULL,
   slow_scales = NULL
 )
 }
@@ -23,6 +25,8 @@ attach_stan_data_with_overrides(
 
 \item{y_name}{a character vector indicating y variables in polls object.}
 
+\item{model}{the Stan model name.}
+
 \item{time_scale}{the base time scale.}
 
 \item{time_scale_overrides}{optional inclusive time scale override ranges.}
@@ -32,6 +36,8 @@ attach_stan_data_with_overrides(
 \item{model_time_range}{the time range to model.}
 
 \item{latent_time_ranges}{the time range of the latent state.}
+
+\item{hyper_parameters}{optional model hyper parameters.}
 
 \item{slow_scales}{optional slow-scale break dates.}
 }

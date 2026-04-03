@@ -42,7 +42,7 @@ make_simple_log_prob_regression_case <- function() {
   )
 }
 
-fit_from_stan_data <- function(model, cfg, case) {
+fit_from_stan_data <- function(model, cfg, case, stan_data_name = "stan_data") {
   get_pop_stan_model_file_path <- get_internal("get_pop_stan_model_file_path")
   sd <- stan_polls_data(
     x = case$polls_data,
@@ -55,7 +55,7 @@ fit_from_stan_data <- function(model, cfg, case) {
 
   fit <- rstan::stan(
     file = get_pop_stan_model_file_path(model),
-    data = sd$stan_data,
+    data = sd[[stan_data_name]],
     warmup = 0,
     iter = 3,
     chains = 1,
@@ -64,6 +64,17 @@ fit_from_stan_data <- function(model, cfg, case) {
   )
 
   list(stan_data = sd, stan_fit = fit)
+}
+
+make_stan_data_case <- function(model, cfg, case) {
+  stan_polls_data(
+    x = case$polls_data,
+    time_scale = case$time_scale,
+    y_name = case$parties,
+    model = model,
+    known_state = case$known_state,
+    hyper_parameters = cfg
+  )
 }
 
 test_that("model8k2 log_prob is stable for a simple stan_data test case", {
@@ -142,3 +153,151 @@ test_that("model8m2 log_prob is stable for a simple stan_data test case", {
   expect_equal(lp_zero, -1357.1835402343254, tolerance = 1e-8)
   expect_equal(lp_probe, -48611.707326402902, tolerance = 1e-8)
 })
+
+test_that("model8k2 log_prob matches between legacy and override-aware stan_data without overrides", {
+  skip_if_no_stan_tests()
+
+  case <- make_simple_log_prob_regression_case()
+  cfg <- list(
+    sigma_kappa_hyper = 0.03,
+    use_industry_bias = 1L,
+    use_house_bias = 0L,
+    use_design_effects = 0L,
+    use_multivariate_version = 2L,
+    use_softmax = 1L
+  )
+
+  sd <- suppressWarnings(
+    suppressMessages(
+      make_stan_data_case(
+        model = "model8k2",
+        cfg = cfg,
+        case = case
+      )
+    )
+  )
+  has_all_legacy_fields <- all(names(sd$stan_data) %in% names(sd$stan_data_with_overrides))
+  expect_true(has_all_legacy_fields)
+  if(!has_all_legacy_fields) return(invisible())
+
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          legacy <- fit_from_stan_data(
+            model = "model8k2",
+            cfg = cfg,
+            case = case,
+            stan_data_name = "stan_data"
+          )
+        )
+      )
+    )
+  )
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          override <- fit_from_stan_data(
+            model = "model8k2",
+            cfg = cfg,
+            case = case,
+            stan_data_name = "stan_data_with_overrides"
+          )
+        )
+      )
+    )
+  )
+
+  nu_legacy <- rstan::get_num_upars(legacy$stan_fit)
+  nu_override <- rstan::get_num_upars(override$stan_fit)
+  probe <- seq(from = -0.15, to = 0.15, length.out = nu_legacy)
+
+  expect_equal(nu_override, nu_legacy)
+  expect_equal(
+    rstan::log_prob(legacy$stan_fit, rep(0, nu_legacy)),
+    rstan::log_prob(override$stan_fit, rep(0, nu_override)),
+    tolerance = 1e-8
+  )
+  expect_equal(
+    rstan::log_prob(legacy$stan_fit, probe),
+    rstan::log_prob(override$stan_fit, probe),
+    tolerance = 1e-8
+  )
+})
+
+test_that("model8m2 log_prob matches between legacy and override-aware stan_data without overrides", {
+  skip_if_no_stan_tests()
+
+  case <- make_simple_log_prob_regression_case()
+  cfg <- list(
+    sigma_kappa_hyper_sd = 0.03,
+    use_industry_bias = 1L,
+    use_house_bias = 0L,
+    use_design_effects = 0L,
+    use_multivariate_version = 2L,
+    use_softmax = 1L,
+    election_period = list(c("2010-05-03", "2010-05-20")),
+    use_sigma_ep = 2L,
+    ep_inv_x = list(c(3.984064, 3.937008))
+  )
+
+  sd <- suppressWarnings(
+    suppressMessages(
+      make_stan_data_case(
+        model = "model8m2",
+        cfg = cfg,
+        case = case
+      )
+    )
+  )
+  has_all_legacy_fields <- all(names(sd$stan_data) %in% names(sd$stan_data_with_overrides))
+  expect_true(has_all_legacy_fields)
+  if(!has_all_legacy_fields) return(invisible())
+
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          legacy <- fit_from_stan_data(
+            model = "model8m2",
+            cfg = cfg,
+            case = case,
+            stan_data_name = "stan_data"
+          )
+        )
+      )
+    )
+  )
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          override <- fit_from_stan_data(
+            model = "model8m2",
+            cfg = cfg,
+            case = case,
+            stan_data_name = "stan_data_with_overrides"
+          )
+        )
+      )
+    )
+  )
+
+  nu_legacy <- rstan::get_num_upars(legacy$stan_fit)
+  nu_override <- rstan::get_num_upars(override$stan_fit)
+  probe <- seq(from = -0.15, to = 0.15, length.out = nu_legacy)
+
+  expect_equal(nu_override, nu_legacy)
+  expect_equal(
+    rstan::log_prob(legacy$stan_fit, rep(0, nu_legacy)),
+    rstan::log_prob(override$stan_fit, rep(0, nu_override)),
+    tolerance = 1e-8
+  )
+  expect_equal(
+    rstan::log_prob(legacy$stan_fit, probe),
+    rstan::log_prob(override$stan_fit, probe),
+    tolerance = 1e-8
+  )
+})
+
