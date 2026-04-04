@@ -82,6 +82,8 @@ data {
 
   // Time scale length (month = 30, week = 7, day = 1)
   real time_scale_length;
+  int<lower=0> delta_days_t[T];
+  real<lower=0> step_scale_t[T];
 
   // known states
   int<lower=0, upper=T> T_known; // no of known latent states
@@ -321,9 +323,9 @@ transformed parameters {
     eta[1,] = t1_prior_mu + t1_prior_sigma .* eta_z[1,];
     for(t in t_start_all:t_end_all){
       if(x_t_is_known[t]){ // then eta_z_t is also known (see derivation)
-        eta_z[t,] = to_row_vector(inverse(L_Sigma[s_t_Omega[t]]) * to_vector((eta[t,] - eta[t-1,])));
+        eta_z[t,] = to_row_vector((inverse(L_Sigma[s_t_Omega[t]]) / step_scale_t[t]) * to_vector((eta[t,] - eta[t-1,])));
       } else {
-        eta[t,] = eta[t-1,] + to_row_vector(L_Sigma[s_t_Omega[t]] * to_vector(eta_z[t,]));
+        eta[t,] = eta[t-1,] + step_scale_t[t] * to_row_vector(L_Sigma[s_t_Omega[t]] * to_vector(eta_z[t,]));
       }
     }
 
@@ -498,7 +500,7 @@ model {
       target += normal_lpdf(x[1,p] | t1_prior_mu[p], t1_prior_sigma[p]);
     }
     for(t in t_start_all:t_end_all){
-      target += multi_normal_cholesky_lpdf(x[t, ] | x[t-1, ], L_Sigma[s_t_Omega[t]]);
+      target += multi_normal_cholesky_lpdf(x[t, ] | x[t-1, ], step_scale_t[t] * L_Sigma[s_t_Omega[t]]);
     }
   }
 
@@ -676,4 +678,3 @@ generated quantities{
   }
 
 }
-
