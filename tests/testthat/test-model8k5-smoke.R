@@ -49,6 +49,17 @@ test_that("model8k5 poll_of_polls runs on a mixed latent grid", {
   expect_true(any(pop$time_line$time_line$date %in% seq(as.Date("2010-05-05"), as.Date("2010-05-10"), by = 1)))
   expect_equal(get_ndraws(pop), 10)
 
+  ls <- latent_state(pop)
+  ls_day <- get_latent_state_for_dates(pop, as.Date("2010-05-08"))
+  t_mixed_day <- unique(pop$time_line$daily$time_line_t[pop$time_line$daily$date == as.Date("2010-05-08")])
+
+  expect_identical(dim(ls$latent_state)[2], nrow(pop$time_line$time_line))
+  expect_identical(ls$time_line$time_line$date, pop$time_line$time_line$date)
+  expect_identical(dim(ls_day$latent_state)[2], 1L)
+  expect_identical(as.integer(dimnames(ls_day$latent_state)[[2]]), t_mixed_day)
+  expect_true(all(is.finite(ls$latent_state)))
+  expect_true(all(is.finite(ls_day$latent_state)))
+
   sigma_x_draws <- rstan::extract(pop$stan_fit, pars = "sigma_x")$sigma_x
   lp_draws <- rstan::extract(pop$stan_fit, pars = "lp__")$lp__
 
