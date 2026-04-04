@@ -46,7 +46,9 @@ test_that("model8m5 poll_of_polls runs on a mixed latent grid", {
   )
 
   expect_identical(pop$model, "model8m5")
+  expect_true("time_scale_overrides" %in% names(pop))
   expect_identical(pop$time_scale_overrides, case$time_scale_overrides)
+  expect_identical(pop$input_args$time_scale_overrides, case$time_scale_overrides)
   expect_identical(pop$stan_data$stan_data$T, pop$stan_data$stan_data_with_overrides$T)
   expect_true(any(abs(pop$stan_data$stan_data$step_scale_t[-1] - 1) > 1e-12))
   expect_true(any(pop$time_line$time_line$date %in% seq(as.Date("2010-05-05"), as.Date("2010-05-10"), by = 1)))
