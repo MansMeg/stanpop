@@ -109,9 +109,19 @@ stan_polls_data <- function(x,
     slow_scales = slow_scales
   )
 
+  if(use_override_aware_stan_data_by_default(model)){
+    spd$stan_data <- spd$stan_data_with_overrides
+    spd$time_line <- spd$time_line_with_overrides
+  }
+
   assert_stan_polls_data(x = spd)
   assert_stan_data_model(x = spd)
   spd
+}
+
+use_override_aware_stan_data_by_default <- function(model) {
+  checkmate::assert_string(model)
+  grepl(pattern = "^model8[km]5$", x = model)
 }
 
 
@@ -1240,7 +1250,16 @@ assert_stan_data_g_i_and_g_t <- function(x){
   # For dates just after the known state dates but at the same time point
   # g can be 0, even if this is not part of the g_t. Although, this
   # wil most likely not happen in any real data scenarios.
-  checkmate::assert_subset(x$stan_data$g_i, c(x$stan_data$g_t, 0))
+  has_mixed_step_scales <- FALSE
+  if(!is.null(x$stan_data$step_scale_t)){
+    step_scale_t <- x$stan_data$step_scale_t
+    if(length(step_scale_t) > 1){
+      has_mixed_step_scales <- any(abs(step_scale_t[-1] - 1) > 1e-12)
+    }
+  }
+  if(!has_mixed_step_scales){
+    checkmate::assert_subset(x$stan_data$g_i, c(x$stan_data$g_t, 0))
+  }
   checkmate::assert_integerish(x$stan_data$next_known_state_poll_index, lower = 0, upper = x$stan_data$T_known + 1, len = x$stan_data$N)
   checkmate::assert_integerish(x$stan_data$next_known_state_t_index, lower = 0, upper = x$stan_data$T_known + 1, len = x$stan_data$T)
 }
