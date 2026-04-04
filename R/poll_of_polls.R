@@ -57,6 +57,14 @@ poll_of_polls <- function(y,
     x = time_scale_overrides,
     dates = tibble::tibble(date = seq(from = mtr["from"], to = mtr["to"], by = 1))
   )
+  if(!is.null(time_scale_overrides) && nrow(time_scale_overrides) > 0 &&
+     !model_supports_time_scale_overrides(model)) {
+    stop(
+      "'time_scale_overrides' requires a model that uses 'step_scale_t'. ",
+      "Model '", model, "' does not support time scale overrides in fitting.",
+      call. = FALSE
+    )
+  }
   assert_latent_time_range_list(latent_time_ranges)
   ltr <- setup_latent_time_ranges(x = latent_time_ranges, y, mtr)
   assert_poll_data_and_latent_time_range_list_agree(polls_data, ltr)

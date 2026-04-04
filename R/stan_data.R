@@ -121,6 +121,11 @@ stan_polls_data <- function(x,
 
 use_override_aware_stan_data_by_default <- function(model) {
   checkmate::assert_string(model)
+  model_supports_time_scale_overrides(model)
+}
+
+model_supports_time_scale_overrides <- function(model) {
+  checkmate::assert_string(model)
   grepl(pattern = "^model8[km]5$", x = model)
 }
 
