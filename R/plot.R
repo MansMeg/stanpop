@@ -172,14 +172,12 @@ plot_poll_of_polls <- function(x, y = NULL, from = NULL, to = NULL, publish_date
 
   plt <- plot.polls_data(x = pd, y = y, publish_date = publish_date, collection_period = FALSE)
   if(collection_period & nrow(y(pd)) > 0){
-    sd <- stan_polls_data(x = pd,
-                          y_name = y,
-                          time_scale = x$time_scale,
-                          model = x$model,
-                          known_state = x$known_state,
-                          model_time_range = time_range(x$time_line),
-                          latent_time_ranges = x$latent_time_range)
-    plt <- plt + geom_stan_polls_data(sd, size = 0.3, alpha = 0.5)
+    tws <- polls_time_weights(pd)
+    tws <- summarize_polls_time_weights(tws, x$time_line)
+    poll_ids <- tibble::tibble(.poll_id = poll_ids(pd), i = seq_along(poll_ids(pd)))
+    tws <- dplyr::left_join(tws, poll_ids, by = ".poll_id")
+    ypd <- y(pd)[[y]]
+    plt <- plt + geom_polls_time_weights(tws, ypd[tws$i], size = 0.3, alpha = 0.5)
   }
   if(include_latent_state){
     plt <- plt + geom_latent_state(x = ls, ...)

@@ -52,6 +52,10 @@ test_that("model8m5 poll_of_polls runs on a mixed latent grid", {
   expect_true(any(pop$time_line$time_line$date %in% seq(as.Date("2010-05-05"), as.Date("2010-05-10"), by = 1)))
   expect_equal(get_ndraws(pop), 10)
 
+  expect_silent(plt <- suppressWarnings(plot_poll_of_polls(pop, y = "x3", collection_period = TRUE)))
+  expect_s3_class(plt, "ggplot")
+  expect_silent(suppressWarnings(ggplot2::ggplot_build(plt)))
+
   ls <- latent_state(pop)
   ls_day <- get_latent_state_for_dates(pop, as.Date("2010-05-08"))
   t_mixed_day <- unique(pop$time_line$daily$time_line_t[pop$time_line$daily$date == as.Date("2010-05-08")])
