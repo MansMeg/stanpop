@@ -572,7 +572,6 @@ test_that("model8m5 log_prob matches model8m2 when fed override-aware stan_data 
 
 test_that("model8k5 should differ from model8k2 on mixed override-aware stan_data", {
   skip_if_no_stan_tests()
-  skip("red test")
 
   case <- make_simple_mixed_log_prob_regression_case()
   cfg <- list(
@@ -628,7 +627,6 @@ test_that("model8k5 should differ from model8k2 on mixed override-aware stan_dat
 
 test_that("model8m5 should differ from model8m2 on mixed override-aware stan_data", {
   skip_if_no_stan_tests()
-  skip("red test")
 
   case <- make_simple_mixed_log_prob_regression_case()
   cfg <- list(
