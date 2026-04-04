@@ -301,3 +301,4 @@ test_that("model8m2 log_prob matches between legacy and override-aware stan_data
   )
 })
 
+# Sys.setenv(STANPOP_RUN_STAN_TESTS = "false")
