@@ -9,6 +9,8 @@ if(FALSE){ # For debugging
   library(testthat)
   library(stanpop)
 }
+run_stan_tests <- FALSE
+if(run_stan_tests) Sys.setenv(STANPOP_RUN_STAN_TESTS = "true")
 
 
 make_simple_log_prob_regression_case <- function() {
@@ -42,11 +44,22 @@ make_simple_log_prob_regression_case <- function() {
   )
 }
 
+make_simple_mixed_log_prob_regression_case <- function() {
+  case <- make_simple_log_prob_regression_case()
+  case$time_scale_overrides <- tibble::tibble(
+    from = as.Date("2010-05-05"),
+    to = as.Date("2010-05-10"),
+    time_scale = "day"
+  )
+  case
+}
+
 fit_from_stan_data <- function(model, cfg, case, stan_data_name = "stan_data") {
   get_pop_stan_model_file_path <- get_internal("get_pop_stan_model_file_path")
   sd <- stan_polls_data(
     x = case$polls_data,
     time_scale = case$time_scale,
+    time_scale_overrides = case$time_scale_overrides,
     y_name = case$parties,
     model = model,
     known_state = case$known_state,
@@ -70,6 +83,7 @@ make_stan_data_case <- function(model, cfg, case) {
   stan_polls_data(
     x = case$polls_data,
     time_scale = case$time_scale,
+    time_scale_overrides = case$time_scale_overrides,
     y_name = case$parties,
     model = model,
     known_state = case$known_state,
@@ -556,4 +570,120 @@ test_that("model8m5 log_prob matches model8m2 when fed override-aware stan_data 
   )
 })
 
-# Sys.setenv(STANPOP_RUN_STAN_TESTS = "false")
+test_that("model8k5 should differ from model8k2 on mixed override-aware stan_data", {
+  skip_if_no_stan_tests()
+  skip("red test")
+
+  case <- make_simple_mixed_log_prob_regression_case()
+  cfg <- list(
+    sigma_kappa_hyper = 0.03,
+    use_industry_bias = 1L,
+    use_house_bias = 0L,
+    use_design_effects = 0L,
+    use_multivariate_version = 2L,
+    use_softmax = 1L
+  )
+
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          model8k2 <- fit_from_stan_data(
+            model = "model8k2",
+            cfg = cfg,
+            case = case,
+            stan_data_name = "stan_data_with_overrides"
+          )
+        )
+      )
+    )
+  )
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          model8k5 <- fit_from_stan_data(
+            model = "model8k5",
+            cfg = cfg,
+            case = case,
+            stan_data_name = "stan_data_with_overrides"
+          )
+        )
+      )
+    )
+  )
+
+  nu_k2 <- rstan::get_num_upars(model8k2$stan_fit)
+  nu_k5 <- rstan::get_num_upars(model8k5$stan_fit)
+  probe <- seq(from = -0.15, to = 0.15, length.out = nu_k2)
+  lp_zero_k2 <- rstan::log_prob(model8k2$stan_fit, rep(0, nu_k2))
+  lp_zero_k5 <- rstan::log_prob(model8k5$stan_fit, rep(0, nu_k5))
+  lp_probe_k2 <- rstan::log_prob(model8k2$stan_fit, probe)
+  lp_probe_k5 <- rstan::log_prob(model8k5$stan_fit, probe)
+
+  expect_equal(nu_k5, nu_k2)
+  expect_false(isTRUE(all.equal(lp_zero_k2, lp_zero_k5, tolerance = 1e-8)) &&
+                 isTRUE(all.equal(lp_probe_k2, lp_probe_k5, tolerance = 1e-8)))
+})
+
+test_that("model8m5 should differ from model8m2 on mixed override-aware stan_data", {
+  skip_if_no_stan_tests()
+  skip("red test")
+
+  case <- make_simple_mixed_log_prob_regression_case()
+  cfg <- list(
+    sigma_kappa_hyper_sd = 0.03,
+    use_industry_bias = 1L,
+    use_house_bias = 0L,
+    use_design_effects = 0L,
+    use_multivariate_version = 2L,
+    use_softmax = 1L,
+    election_period = list(c("2010-05-03", "2010-05-20")),
+    use_sigma_ep = 2L,
+    ep_inv_x = list(c(3.984064, 3.937008))
+  )
+
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          model8m2 <- fit_from_stan_data(
+            model = "model8m2",
+            cfg = cfg,
+            case = case,
+            stan_data_name = "stan_data_with_overrides"
+          )
+        )
+      )
+    )
+  )
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          model8m5 <- fit_from_stan_data(
+            model = "model8m5",
+            cfg = cfg,
+            case = case,
+            stan_data_name = "stan_data_with_overrides"
+          )
+        )
+      )
+    )
+  )
+
+  nu_m2 <- rstan::get_num_upars(model8m2$stan_fit)
+  nu_m5 <- rstan::get_num_upars(model8m5$stan_fit)
+  probe <- seq(from = -0.15, to = 0.15, length.out = nu_m2)
+  lp_zero_m2 <- rstan::log_prob(model8m2$stan_fit, rep(0, nu_m2))
+  lp_zero_m5 <- rstan::log_prob(model8m5$stan_fit, rep(0, nu_m5))
+  lp_probe_m2 <- rstan::log_prob(model8m2$stan_fit, probe)
+  lp_probe_m5 <- rstan::log_prob(model8m5$stan_fit, probe)
+
+  expect_equal(nu_m5, nu_m2)
+  expect_false(isTRUE(all.equal(lp_zero_m2, lp_zero_m5, tolerance = 1e-8)) &&
+                 isTRUE(all.equal(lp_probe_m2, lp_probe_m5, tolerance = 1e-8)))
+})
+
+
+if(run_stan_tests) Sys.setenv(STANPOP_RUN_STAN_TESTS = "false")
