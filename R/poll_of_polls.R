@@ -44,7 +44,7 @@ poll_of_polls <- function(y,
     smfp <- get_pop_stan_model_file_path(model)
   }
   checkmate::assert_choice(model, choices = supported_pop_models())
-  checkmate::assert_choice(backend, choices = supported_pop_backends())
+  assert_pop_backend(backend)
   assert_polls_data(polls_data, min.rows = 1, min.cols = 1)
   assert_known_state(known_state)
   if(!is.null(known_state)){
@@ -120,19 +120,19 @@ poll_of_polls <- function(y,
     }
   }
 
-  # Setup rstan arguments
-  rstan_arguments <- list(...)
+  # Setup Stan backend arguments
+  backend_arguments <- list(...)
   stan_arguments <- list(...)
-  if(!is.null(rstan_arguments$data)) warning("The 'data' argument has been overwritten")
-  rstan_arguments$data <- sd$stan_data
-  if(is.null(rstan_arguments$file)) rstan_arguments$file <- smfp
-  if(is.null(rstan_arguments$model_name)) rstan_arguments$model_name <- model
+  if(!is.null(backend_arguments$data)) warning("The 'data' argument has been overwritten")
+  backend_arguments$data <- sd$stan_data
+  if(is.null(backend_arguments$file)) backend_arguments$file <- smfp
+  if(is.null(backend_arguments$model_name)) backend_arguments$model_name <- model
   # The parameters to store should be supplied as an argument to stan instead.
-  # if(is.null(rstan_arguments$pars)) rstan_arguments$pars <- stan_parameters_to_store(model)
+  # if(is.null(backend_arguments$pars)) backend_arguments$pars <- stan_parameters_to_store(model)
   # TODO: rm stan_parameters_to_store() and just use the pars argument supplied by the user
 
   # Run Stan
-  stan_fit <- do.call(rstan::stan, rstan_arguments)
+  stan_fit <- backend_sample(backend = backend, stan_arguments = backend_arguments)
 
   pop <-  list(y = y,
                model = model,
@@ -263,10 +263,6 @@ supported_pop_models <- function() {
   # e. Update compute_prediction_error()
   c(paste0("model8k", 1:9),
     paste0("model8m", 1:9))
-}
-
-supported_pop_backends <- function() {
-  c("rstan")
 }
 
 get_pop_stan_model_file_path <-function(model){
