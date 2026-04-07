@@ -15,6 +15,7 @@ poll_of_polls(
   latent_time_ranges = NULL,
   hyper_parameters = NULL,
   slow_scales = NULL,
+  backend = "rstan",
   ...,
   cache_dir = file.path(tempdir(), "pop_cache")
 )
@@ -41,6 +42,9 @@ The [from] and [to] bounds are inclusive and override ranges must not overlap.}
 \item{hyper_parameters}{hyperparameters to supply direct to the model}
 
 \item{slow_scales}{a vector of [Date]s that indicate breaks (right-inclusive) for a slower moving time scale.}
+
+\item{backend}{Stan backend to use. Supported values are [rstan] and
+[cmdstanr]. Currently only [rstan] is implemented.}
 
 \item{...}{further arguments to [rstan::stan()] function}
 

@@ -12,6 +12,8 @@
 #' @param latent_time_ranges time ranges of the latent state of individual [y]s
 #' @param hyper_parameters hyperparameters to supply direct to the model
 #' @param slow_scales a vector of [Date]s that indicate breaks (right-inclusive) for a slower moving time scale.
+#' @param backend Stan backend to use. Supported values are [rstan] and
+#'   [cmdstanr]. Currently only [rstan] is implemented.
 #' @param ... further arguments to [rstan::stan()] function
 #' @param cache_dir directory to cache model. Default is cache in tempdir(). [NULL], no cache.
 #'
@@ -31,6 +33,7 @@ poll_of_polls <- function(y,
                           latent_time_ranges = NULL,
                           hyper_parameters = NULL,
                           slow_scales = NULL,
+                          backend = "rstan",
                           ...,
                           cache_dir = file.path(tempdir(), "pop_cache")){
   checkmate::assert_subset(x = y, choices = names(y(polls_data)))
@@ -41,6 +44,7 @@ poll_of_polls <- function(y,
     smfp <- get_pop_stan_model_file_path(model)
   }
   checkmate::assert_choice(model, choices = supported_pop_models())
+  checkmate::assert_choice(backend, choices = supported_pop_backends())
   assert_polls_data(polls_data, min.rows = 1, min.cols = 1)
   assert_known_state(known_state)
   if(!is.null(known_state)){
@@ -92,6 +96,7 @@ poll_of_polls <- function(y,
   sha_fun_args <- list(y = y,
                        model = readLines(smfp),
                        polls_data = polls_data,
+                       backend = backend,
                        time_scale = time_scale,
                        time_scale_overrides = time_scale_overrides,
                        known_state = known_state,
@@ -131,6 +136,7 @@ poll_of_polls <- function(y,
 
   pop <-  list(y = y,
                model = model,
+               backend = backend,
                polls_data = polls_data,
                time_scale = time_scale,
                time_scale_overrides = time_scale_overrides,
@@ -141,6 +147,7 @@ poll_of_polls <- function(y,
                sha = sha,
                input_args = list(y = y,
                                  model = model,
+                                 backend = backend,
                                  time_scale = time_scale,
                                  time_scale_overrides = time_scale_overrides,
                                  model_time_range = model_time_range,
@@ -258,6 +265,10 @@ supported_pop_models <- function() {
     paste0("model8m", 1:9))
 }
 
+supported_pop_backends <- function() {
+  c("rstan")
+}
+
 get_pop_stan_model_file_path <-function(model){
   checkmate::assert_choice(model, supported_pop_models())
   fp <- file.path(system.file(package = "stanpop"), "stan_models", paste0(model, ".stan"))
@@ -272,6 +283,7 @@ print.poll_of_polls <- function(x, ...){
   tr <- time_range(x$time_line)
   cat("Model is fit during the period ", as.character(tr["from"]), "--", as.character(tr["to"]), "\n", sep = "")
   cat("Stan model: ", x$model, ".stan\n", sep = "")
+  cat("Backend: ", x$backend, "\n", sep = "")
   cat("Number of parameters:", get_num_pars(x), "\n")
   cat("Number of unconstrained parameters:", get_num_upars(x), "\n")
   cat("Parties:", paste0(x$y, collapse = ", "), "\n")
