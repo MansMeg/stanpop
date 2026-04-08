@@ -40,8 +40,16 @@ jobs:
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          extra-packages: any::rcmdcheck
+          extra-packages: any::rcmdcheck, any::cmdstanr, any::posterior
           needs: check
+
+      - name: Install CmdStan
+        run: |
+          cmdstan_dir <- cmdstanr::install_cmdstan(cores = 2, overwrite = FALSE)
+          cmdstanr::set_cmdstan_path(cmdstan_dir)
+          cat("CmdStan path:", cmdstanr::cmdstan_path(), "\n")
+          cat("CmdStan version:", cmdstanr::cmdstan_version(), "\n")
+        shell: Rscript {0}
 
       - uses: r-lib/actions/check-r-package@v2
         with:
