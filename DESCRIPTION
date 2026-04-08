@@ -8,6 +8,7 @@ Authors@R:
            email = "mons.magnusson@gmail.com")
 Description: Stan Models and code to run Bayesian poll of polls models.
 License: MIT + file LICENSE
+Additional_repositories: https://mc-stan.org/r-packages/
 Encoding: UTF-8
 LazyData: true
 RoxygenNote: 7.3.3
