@@ -16,6 +16,7 @@ poll_of_polls(
   hyper_parameters = NULL,
   slow_scales = NULL,
   backend = "rstan",
+  compile_args = NULL,
   ...,
   cache_dir = file.path(tempdir(), "pop_cache")
 )
@@ -44,9 +45,14 @@ The [from] and [to] bounds are inclusive and override ranges must not overlap.}
 \item{slow_scales}{a vector of [Date]s that indicate breaks (right-inclusive) for a slower moving time scale.}
 
 \item{backend}{Stan backend to use. Supported values are [rstan] and
-[cmdstanr]. Currently only [rstan] is implemented.}
+[cmdstanr].}
 
-\item{...}{further arguments to [rstan::stan()] function}
+\item{compile_args}{additional arguments passed to [cmdstanr::cmdstan_model()]
+when `backend = "cmdstanr"`. Ignored for `backend = "rstan"`.}
+
+\item{...}{further arguments passed directly to the backend sampler.
+These go to [rstan::stan()] when `backend = "rstan"` and to
+`CmdStanModel$sample()` when `backend = "cmdstanr"`.}
 
 \item{cache_dir}{directory to cache model. Default is cache in tempdir(). [NULL], no cache.}
 }
@@ -55,5 +61,7 @@ Fit a poll of polls object
 }
 \details{
 The [input_args] slot contain all input arguments except polls data and known state that are stored in the original object instead.
-The [stan_arguments] slot contains all arguments that are supplied to the [rstan::stan()] function, except for the data argument which is stored in the [stan_data] slot.
+The [stan_arguments] slot contains the backend sampling arguments supplied through `...`,
+except for the `data` argument which is stored in the [stan_data] slot.
+The [compile_arguments] slot contains the CmdStanR compilation arguments.
 }

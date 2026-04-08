@@ -4,7 +4,13 @@
 \alias{backend_sample}
 \title{Run a Stan fit using the selected backend}
 \usage{
-backend_sample(backend, stan_arguments)
+backend_sample(
+  backend,
+  sample_arguments,
+  stan_file = NULL,
+  model_name = NULL,
+  compile_arguments = NULL
+)
 }
 \description{
 Run a Stan fit using the selected backend
