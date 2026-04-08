@@ -15,7 +15,23 @@ latent_state.poll_of_polls <- function(x, time_line = NULL, ...){
   dn <- list(iterations = NULL,
              t = NULL,
              categories = x$y)
-  latent_state(x = x$stan_fit, time_line = x$time_line, dimnames = dn)
+  if(x$backend == "rstan"){
+    return(latent_state(x = x$stan_fit, time_line = x$time_line, dimnames = dn))
+  }
+  if(x$backend == "cmdstanr"){
+    xs <- extract(x, pars = "x_pred")$x_pred
+    ls <- list(latent_state = xs, time_line = x$time_line)
+    class(ls) <- c("latent_state", "list")
+
+    if(is.null(dn$t)) dn$t <- as.character(1:ncol(ls$latent_state))
+    if(length(dn$categories) + 1L == dim(xs)[3]) dn$categories <- c(dn$categories, "other")
+    attr(ls$latent_state, which = "dimnames") <- dn
+
+    assert_latent_state(ls)
+    return(ls)
+  }
+
+  stop("Unknown backend '", x$backend, "' in latent_state().", call. = FALSE)
 }
 
 #' @rdname latent_state
