@@ -41,7 +41,8 @@ jobs:
       - name: Add Stan R package repository
         run: |
           echo 'options(repos = c(stan = "https://mc-stan.org/r-packages/", getOption("repos")))' >> ~/.Rprofile
-          Rscript -e 'print(getOption("repos"))'
+          echo "RENV_CONFIG_REPOS_OVERRIDE=STAN=https://mc-stan.org/r-packages/;CRAN=${RSPM:-https://cloud.r-project.org}" >> "$GITHUB_ENV"
+          Rscript -e 'print(getOption("repos")); cat(Sys.getenv("RENV_CONFIG_REPOS_OVERRIDE"), "\n")'
         shell: bash
 
       - uses: r-lib/actions/setup-r-dependencies@v2

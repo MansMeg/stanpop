@@ -640,7 +640,7 @@ extract_poll_of_polls_input_arguments <- function(x){
   args <- list()
 
   # Extract relevant information from the pop object
-  args <- pop$input_args
+  args <- x$input_args
   args$polls_data <- x$polls_data
   args$known_state <- x$known_state
 
