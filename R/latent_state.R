@@ -44,10 +44,9 @@ latent_state.stanfit <- function(x, time_line, dimnames, ...){
   checkmate::assert_names(names(dimnames), identical.to = c("iterations", "t", "categories"))
   checkmate::assert_character(dimnames$categories)
 
-  if (grepl(x@model_name, pattern = "^model8[ijklm][0-9]+$")){
-    xs <- rstan::extract(x, pars = "x_pred")[[1]]
-  } else {
-    stop("'", x@model_name, "' not implemented in latent_state().")
+  xs <- try(rstan::extract(x, pars = "x_pred")[[1]], silent = TRUE)
+  if(inherits(xs, "try-error")){
+    stop("Stan fit does not contain 'x_pred' and is not implemented in latent_state().", call. = FALSE)
   }
   ls <- list(latent_state = xs, time_line = time_line)
   class(ls) <- c("latent_state", "list")

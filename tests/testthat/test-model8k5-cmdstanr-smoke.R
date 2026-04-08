@@ -139,6 +139,7 @@ test_that("model8k5 gives the same parameter space and log_prob with rstan and c
     parameter_names(pop_rstan, rm_idx = TRUE),
     parameter_names(pop_cmdstanr, rm_idx = TRUE)
   )
+  expect_identical(get_num_pars(pop_rstan), get_num_pars(pop_cmdstanr))
 
   nu_rstan <- get_num_upars(pop_rstan)
   nu_cmdstanr <- get_num_upars(pop_cmdstanr)
@@ -160,7 +161,16 @@ test_that("model8k5 gives the same parameter space and log_prob with rstan and c
   sigma_x_cmdstanr <- extract(pop_cmdstanr, pars = "sigma_x")$sigma_x
   x_pred_rstan <- extract(pop_rstan, pars = "x_pred")$x_pred
   x_pred_cmdstanr <- extract(pop_cmdstanr, pars = "x_pred")$x_pred
+  ls_rstan <- latent_state(pop_rstan)
+  ls_cmdstanr <- latent_state(pop_cmdstanr)
+  md_rstan <- get_model_diagnostics(pop_rstan)
+  md_cmdstanr <- get_model_diagnostics(pop_cmdstanr)
 
   expect_identical(dim(sigma_x_rstan), dim(sigma_x_cmdstanr))
   expect_identical(dim(x_pred_rstan), dim(x_pred_cmdstanr))
+  expect_identical(dim(ls_rstan$latent_state), dim(ls_cmdstanr$latent_state))
+  expect_identical(dimnames(ls_rstan$latent_state), dimnames(ls_cmdstanr$latent_state))
+  expect_identical(names(md_rstan), names(md_cmdstanr))
+  expect_true(all(is.finite(unlist(md_rstan))))
+  expect_true(all(is.finite(unlist(md_cmdstanr))))
 })

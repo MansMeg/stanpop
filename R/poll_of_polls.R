@@ -541,25 +541,40 @@ get_model_model_arguments <- function(x, all = TRUE){
 get_model_diagnostics <- function(x){
   checkmate::assert_class(x, "poll_of_polls")
   res <- list()
-  res$no_divergent_transistions <- sum(rstan::get_divergent_iterations(x$stan_fit))
-  res$no_max_treedepth <- sum(rstan::get_max_treedepth_iterations(x$stan_fit))
-  res$no_low_bfmi_chains <- length(rstan::get_low_bfmi_chains(x$stan_fit))
+  if(x$backend == "rstan"){
+    res$no_divergent_transistions <- sum(rstan::get_divergent_iterations(x$stan_fit))
+    res$no_max_treedepth <- sum(rstan::get_max_treedepth_iterations(x$stan_fit))
+    res$no_low_bfmi_chains <- length(rstan::get_low_bfmi_chains(x$stan_fit))
+    res$mean_no_leapfrog_steps <- mean(rstan::get_num_leapfrog_per_iteration(x$stan_fit))
+    tm <- rstan::get_elapsed_time(x$stan_fit)
+    res$mean_chain_warmup_time <- mean(tm[,"warmup"])
+    res$mean_chain_sampling_time <- mean(tm[,"sample"])
+  } else if(x$backend == "cmdstanr"){
+    ds <- x$stan_fit$diagnostic_summary(quiet = TRUE)
+    res$no_divergent_transistions <- sum(ds$num_divergent)
+    res$no_max_treedepth <- sum(ds$num_max_treedepth)
+    res$no_low_bfmi_chains <- sum(ds$ebfmi < 0.3, na.rm = TRUE)
+
+    sp <- get_sampler_params(x, inc_warmup = FALSE)
+    res$mean_no_leapfrog_steps <- mean(unlist(lapply(sp, function(chain) chain[, "n_leapfrog__"])))
+
+    tm <- x$stan_fit$time()
+    res$mean_chain_warmup_time <- mean(tm$chains$warmup)
+    res$mean_chain_sampling_time <- mean(tm$chains$sampling)
+  } else {
+    stop("Unknown backend '", x$backend, "' in get_model_diagnostics().", call. = FALSE)
+  }
   if(!is.null(x$diagnostics)){
     res$no_Rhat_above_1_1 <- sum(x$diagnostics$Rhat[!is.na(x$diagnostics$Rhat)] > 1.1)
     res$no_Rhat_is_NA <- sum(is.na(x$diagnostics$Rhat))
   }
 
-  res$mean_no_leapfrog_steps <- mean(rstan::get_num_leapfrog_per_iteration(x$stan_fit))
   ai <- get_adaptation_info(x)
   res$mean_chain_step_size <- mean(unlist(lapply(ai, function(x) x$step_size)))
   res$mean_chain_inv_mass_matrix_min <-
     mean(unlist(lapply(ai, function(x) min(x$diag_inv_mass_matrix))))
   res$mean_chain_inv_mass_matrix_max <-
     mean(unlist(lapply(ai, function(x) max(x$diag_inv_mass_matrix))))
-
-  tm <- rstan::get_elapsed_time(x$stan_fit)
-  res$mean_chain_warmup_time <- mean(tm[,"warmup"])
-  res$mean_chain_sampling_time <- mean(tm[,"sample"])
   res
 }
 
