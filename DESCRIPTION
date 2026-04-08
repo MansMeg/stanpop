@@ -27,6 +27,7 @@ Suggests:
   BH,
   abind,
   bayesplot,
+  cmdstanr,
   matrixStats,
   git2r,
   jsonlite,  
@@ -38,5 +39,3 @@ Suggests:
   stringr,
   testthat (>= 2.1.0),  
   xtable
-Enhances:
-  cmdstanr
