@@ -12,31 +12,333 @@ assert_pop_backend <- function(backend){
   checkmate::assert_choice(backend, choices = supported_pop_backends())
 }
 
+backend_default <- function(x, default) {
+  if(is.null(x)) default else x
+}
+
+assert_cmdstanr_available <- function() {
+  if(!requireNamespace("cmdstanr", quietly = TRUE)) {
+    stop(
+      "Package 'cmdstanr' must be installed to use backend = 'cmdstanr'.",
+      call. = FALSE
+    )
+  }
+}
+
 #' Run a Stan fit using the selected backend
 #'
 #' @keywords internal
-backend_sample <- function(backend, stan_arguments){
-  checkmate::assert_list(stan_arguments)
+backend_sample <- function(backend,
+                           sample_arguments,
+                           stan_file = NULL,
+                           model_name = NULL,
+                           compile_arguments = NULL){
+  checkmate::assert_list(sample_arguments)
+  checkmate::assert_list(compile_arguments, null.ok = TRUE)
   assert_pop_backend(backend)
   if(backend == "rstan"){
-    return(backend_sample_rstan(stan_arguments))
+    return(backend_sample_rstan(
+      sample_arguments = sample_arguments,
+      stan_file = stan_file,
+      model_name = model_name
+    ))
   }
   if(backend == "cmdstanr"){
-    return(backend_sample_cmdstanr(stan_arguments))
+    return(backend_sample_cmdstanr(
+      sample_arguments = sample_arguments,
+      stan_file = stan_file,
+      compile_arguments = compile_arguments
+    ))
   }
   stop("Unknown backend '", backend, "'.", call. = FALSE)
 }
 
 #' @keywords internal
-backend_sample_rstan <- function(stan_arguments){
-  do.call(rstan::stan, stan_arguments)
+backend_sample_rstan <- function(sample_arguments,
+                                 stan_file = NULL,
+                                 model_name = NULL){
+  rstan_arguments <- sample_arguments
+  if(is.null(rstan_arguments$file)) rstan_arguments$file <- stan_file
+  if(is.null(rstan_arguments$model_name)) rstan_arguments$model_name <- model_name
+  do.call(rstan::stan, rstan_arguments)
 }
 
 #' @keywords internal
-backend_sample_cmdstanr <- function(stan_arguments){
-  stop(
-    "Backend 'cmdstanr' is not yet implemented in 'poll_of_polls()'. ",
-    "Use backend = 'rstan' for now.",
-    call. = FALSE
+backend_sample_cmdstanr <- function(sample_arguments,
+                                    stan_file,
+                                    compile_arguments = NULL){
+  assert_cmdstanr_available()
+  checkmate::assert_file_exists(stan_file)
+  compile_arguments <- backend_default(compile_arguments, list())
+  checkmate::assert_list(compile_arguments)
+  checkmate::assert_list(sample_arguments)
+
+  reserved_compile_args <- c("stan_file", "exe_file", "compile")
+  if(any(names(compile_arguments) %in% reserved_compile_args)){
+    warning(
+      "Ignoring reserved cmdstanr compile_args: ",
+      paste0(intersect(names(compile_arguments), reserved_compile_args), collapse = ", "),
+      call. = FALSE
+    )
+    compile_arguments[intersect(names(compile_arguments), reserved_compile_args)] <- NULL
+  }
+
+  if(is.null(sample_arguments$adapt_engaged) &&
+     identical(sample_arguments$iter_warmup, 0L) &&
+     !isTRUE(sample_arguments$fixed_param)) {
+    sample_arguments$adapt_engaged <- FALSE
+  }
+
+  compile_arguments <- utils::modifyList(
+    list(
+      quiet = TRUE,
+      compile_model_methods = TRUE,
+      force_recompile = TRUE
+    ),
+    compile_arguments
   )
+
+  model <- do.call(
+    cmdstanr::cmdstan_model,
+    c(
+      list(
+        stan_file = stan_file,
+        compile = TRUE
+      ),
+      compile_arguments
+    )
+  )
+  do.call(model$sample, sample_arguments)
+}
+
+#' Compute diagnostics for a backend fit object
+#'
+#' @keywords internal
+backend_compute_diagnostics <- function(backend, fit) {
+  assert_pop_backend(backend)
+  if(backend == "rstan"){
+    fit_summary <- rstan::summary(fit)
+    return(list(
+      n_eff = fit_summary$summary[, "n_eff"],
+      Rhat = fit_summary$summary[, "Rhat"]
+    ))
+  }
+  if(backend == "cmdstanr"){
+    fit_summary <- fit$summary()
+    n_eff <- fit_summary$ess_bulk
+    names(n_eff) <- fit_summary$variable
+    rhat <- fit_summary$rhat
+    names(rhat) <- fit_summary$variable
+    return(list(n_eff = n_eff, Rhat = rhat))
+  }
+  stop("Unknown backend '", backend, "'.", call. = FALSE)
+}
+
+#' Backend adaptation info
+#'
+#' @keywords internal
+backend_get_adaptation_info <- function(backend, fit, ...) {
+  assert_pop_backend(backend)
+  if(backend == "rstan"){
+    ai <- rstan::get_adaptation_info(fit, ...)
+    return(lapply(ai, parse_adaption_information))
+  }
+  if(backend == "cmdstanr"){
+    inv_metric <- fit$inv_metric()
+    sampler_diagnostics <- as.array(
+      fit$sampler_diagnostics(inc_warmup = FALSE, format = "draws_array")
+    )
+    variable_names <- dimnames(sampler_diagnostics)[[3]]
+    step_idx <- which(variable_names == "stepsize__")
+    if(length(step_idx) == 1L){
+      step_size <- apply(
+        sampler_diagnostics[, , step_idx, drop = FALSE],
+        2,
+        function(x) as.numeric(x[1])
+      )
+    } else {
+      step_size <- rep(NA_real_, length(inv_metric))
+    }
+    return(lapply(seq_along(inv_metric), function(i){
+      diag_inv_mass_matrix <- as.numeric(inv_metric[[i]])
+      if(is.matrix(inv_metric[[i]])){
+        diag_inv_mass_matrix <- diag(inv_metric[[i]])
+      }
+      list(
+        adaption_terminated = NA,
+        step_size = step_size[i],
+        diag_inv_mass_matrix = diag_inv_mass_matrix
+      )
+    }))
+  }
+  stop("Unknown backend '", backend, "'.", call. = FALSE)
+}
+
+#' Backend number of unconstrained parameters
+#'
+#' @keywords internal
+backend_get_num_upars <- function(backend, fit, ...) {
+  assert_pop_backend(backend)
+  if(backend == "rstan"){
+    return(rstan::get_num_upars(fit, ...))
+  }
+  if(backend == "cmdstanr"){
+    ai <- backend_get_adaptation_info(backend, fit)
+    return(length(ai[[1]]$diag_inv_mass_matrix))
+  }
+  stop("Unknown backend '", backend, "'.", call. = FALSE)
+}
+
+#' Backend log probability evaluation
+#'
+#' @keywords internal
+backend_log_prob <- function(backend, fit, ...) {
+  assert_pop_backend(backend)
+  dots <- list(...)
+  if(backend == "rstan"){
+    return(do.call(rstan::log_prob, c(list(fit), dots)))
+  }
+  if(backend == "cmdstanr"){
+    fit$init_model_methods()
+    if(length(dots) == 0L){
+      stop("cmdstanr log_prob requires unconstrained variables.", call. = FALSE)
+    }
+    if(length(dots) > 0L && is.null(names(dots)[1])){
+      dots$unconstrained_variables <- dots[[1]]
+      dots[[1]] <- NULL
+    }
+    return(do.call(fit$log_prob, dots))
+  }
+  stop("Unknown backend '", backend, "'.", call. = FALSE)
+}
+
+#' Backend sampler diagnostics
+#'
+#' @keywords internal
+backend_get_sampler_params <- function(backend, fit, inc_warmup = FALSE, ...) {
+  assert_pop_backend(backend)
+  if(backend == "rstan"){
+    return(rstan::get_sampler_params(fit, inc_warmup = inc_warmup, ...))
+  }
+  if(backend == "cmdstanr"){
+    sd <- as.array(fit$sampler_diagnostics(inc_warmup = inc_warmup, format = "draws_array"))
+    variable_names <- dimnames(sd)[[3]]
+    return(lapply(seq_len(dim(sd)[2]), function(chain_id){
+      mat <- matrix(sd[, chain_id, ], nrow = dim(sd)[1], ncol = dim(sd)[3])
+      colnames(mat) <- variable_names
+      mat
+    }))
+  }
+  stop("Unknown backend '", backend, "'.", call. = FALSE)
+}
+
+#' Backend parameter names
+#'
+#' @keywords internal
+backend_parameter_names <- function(backend, fit) {
+  assert_pop_backend(backend)
+  if(backend == "rstan"){
+    return(names(fit))
+  }
+  if(backend == "cmdstanr"){
+    cmdstan_method_variables <- c(
+      "accept_stat__", "stepsize__", "treedepth__",
+      "n_leapfrog__", "divergent__", "energy__"
+    )
+    draws <- try(fit$draws(inc_warmup = FALSE, format = "draws_array"), silent = TRUE)
+    if(!inherits(draws, "try-error")) {
+      draw_variables <- dimnames(as.array(draws))[[3]]
+      if(!is.null(draw_variables) && length(draw_variables) > 0) {
+        model_variables <- draw_variables[!draw_variables %in% cmdstan_method_variables]
+        if("lp__" %in% model_variables) {
+          model_variables <- c(model_variables[model_variables != "lp__"], "lp__")
+        }
+        return(model_variables)
+      }
+    }
+
+    metadata <- try(fit$metadata(), silent = TRUE)
+    if(!inherits(metadata, "try-error") &&
+       !is.null(metadata$model_params) &&
+       length(metadata$model_params) > 0) {
+      model_variables <- metadata$model_params[!metadata$model_params %in% cmdstan_method_variables]
+      if("lp__" %in% model_variables) {
+        model_variables <- c(model_variables[model_variables != "lp__"], "lp__")
+      }
+      return(model_variables)
+    }
+
+    variables <- fit$summary()$variable
+    model_variables <- variables[!variables %in% cmdstan_method_variables]
+    if("lp__" %in% model_variables) {
+      model_variables <- c(model_variables[model_variables != "lp__"], "lp__")
+    }
+    return(model_variables)
+  }
+  stop("Unknown backend '", backend, "'.", call. = FALSE)
+}
+
+#' Backend number of posterior draws
+#'
+#' @keywords internal
+backend_get_ndraws <- function(backend, fit) {
+  assert_pop_backend(backend)
+  if(backend == "rstan"){
+    return(sum(unlist(lapply(fit@stan_args, function(x) {x$iter - x$warmup}))))
+  }
+  if(backend == "cmdstanr"){
+    dr <- as.array(fit$draws(inc_warmup = FALSE, format = "draws_array"))
+    return(dim(dr)[1] * dim(dr)[2])
+  }
+  stop("Unknown backend '", backend, "'.", call. = FALSE)
+}
+
+#' Backend draw extraction
+#'
+#' @keywords internal
+backend_extract <- function(backend, fit, pars = NULL, ...) {
+  assert_pop_backend(backend)
+  if(backend == "rstan"){
+    return(rstan::extract(fit, pars = pars, ...))
+  }
+  if(backend == "cmdstanr"){
+    variables <- pars
+    if(is.null(variables)){
+      variables <- unique(sub("\\[.*$", "", fit$summary()$variable))
+    }
+    res <- list()
+    for(i in seq_along(variables)){
+      res[[i]] <- backend_extract_variable_cmdstanr(fit, variables[i])
+    }
+    names(res) <- variables
+    return(res)
+  }
+  stop("Unknown backend '", backend, "'.", call. = FALSE)
+}
+
+#' @keywords internal
+backend_extract_variable_cmdstanr <- function(fit, variable) {
+  draws <- as.array(fit$draws(variables = variable, inc_warmup = FALSE, format = "draws_array"))
+  variable_names <- dimnames(draws)[[3]]
+  merged <- matrix(draws, nrow = dim(draws)[1] * dim(draws)[2], ncol = dim(draws)[3])
+
+  if(length(variable_names) == 1L && identical(variable_names, variable)){
+    return(merged[, 1])
+  }
+
+  idx_strings <- sub(paste0("^", variable, "\\["), "", variable_names)
+  idx_strings <- sub("\\]$", "", idx_strings)
+  idx_list <- strsplit(idx_strings, ",", fixed = TRUE)
+  max_dims <- vapply(seq_len(max(lengths(idx_list))), function(i){
+    max(vapply(idx_list, function(idx) as.integer(idx[i]), integer(1)))
+  }, integer(1))
+  out <- array(NA_real_, dim = c(nrow(merged), max_dims))
+
+  for(col in seq_along(variable_names)){
+    idx <- as.integer(idx_list[[col]])
+    target <- cbind(seq_len(nrow(merged)), matrix(rep(idx, each = nrow(merged)), ncol = length(idx)))
+    out[target] <- merged[, col]
+  }
+
+  out
 }
