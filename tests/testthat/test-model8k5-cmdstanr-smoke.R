@@ -23,6 +23,25 @@ normalized_print_lines <- function(x){
   lines[keep]
 }
 
+print_diagnostics_lines <- function(x){
+  lines <- capture.output(print(x))
+  keep_patterns <- c(
+    "^== Model diagnostics == ?$",
+    "^no_divergent_transistions:",
+    "^no_max_treedepth:",
+    "^no_low_bfmi_chains:",
+    "^mean_chain_step_size:",
+    "^mean_chain_inv_mass_matrix_min:",
+    "^mean_chain_inv_mass_matrix_max:"
+  )
+  keep <- vapply(
+    lines,
+    FUN.VALUE = logical(1),
+    FUN = function(line) any(vapply(keep_patterns, grepl, logical(1), x = line))
+  )
+  lines[keep]
+}
+
 test_that("model8k5 poll_of_polls runs with cmdstanr backend on a mixed latent grid", {
   skip_if_no_stan_tests()
   skip_if_no_cmdstanr()
@@ -256,4 +275,169 @@ test_that("model8k5 print output matches across backends after normalization", {
   )
 
   expect_identical(normalized_print_lines(pop_rstan), normalized_print_lines(pop_cmdstanr))
+})
+
+test_that("model8k5 pop objects can be saved, reloaded, and still extract samples on both backends", {
+  skip_if_no_stan_tests()
+  skip_if_no_cmdstanr()
+
+  case <- make_model8_mixed_smoke_case(npolls = 12)
+  cfg <- list(
+    sigma_kappa_hyper = 0.03,
+    use_industry_bias = 1L,
+    use_house_bias = 0L,
+    use_design_effects = 0L,
+    use_multivariate_version = 2L,
+    use_softmax = 1L
+  )
+
+  fit_args <- list(
+    y = case$parties,
+    model = "model8k5",
+    polls_data = case$polls_data,
+    time_scale = case$time_scale,
+    time_scale_overrides = case$time_scale_overrides,
+    known_state = case$known_state,
+    hyper_parameters = cfg,
+    chains = 1,
+    refresh = 0,
+    seed = 4711,
+    cache_dir = NULL
+  )
+
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          pop_rstan <- do.call(
+            poll_of_polls,
+            c(fit_args, list(
+              backend = "rstan",
+              iter = 10,
+              warmup = 5
+            ))
+          )
+        )
+      )
+    )
+  )
+
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          pop_cmdstanr <- do.call(
+            poll_of_polls,
+            c(fit_args, list(
+              backend = "cmdstanr",
+              iter_sampling = 5,
+              iter_warmup = 5
+            ))
+          )
+        )
+      )
+    )
+  )
+
+  tmp_rstan <- tempfile(fileext = ".rds")
+  tmp_cmdstanr <- tempfile(fileext = ".rds")
+  on.exit(unlink(c(tmp_rstan, tmp_cmdstanr)), add = TRUE)
+
+  saveRDS(pop_rstan, tmp_rstan)
+  saveRDS(pop_cmdstanr, tmp_cmdstanr)
+
+  pop_rstan_reload <- readRDS(tmp_rstan)
+  pop_cmdstanr_reload <- readRDS(tmp_cmdstanr)
+
+  x_pred_rstan <- extract(pop_rstan_reload, pars = "x_pred")$x_pred
+  x_pred_cmdstanr <- extract(pop_cmdstanr_reload, pars = "x_pred")$x_pred
+  ls_rstan <- latent_state(pop_rstan_reload)
+  ls_cmdstanr <- latent_state(pop_cmdstanr_reload)
+  md_rstan <- get_model_diagnostics(pop_rstan_reload)
+  md_cmdstanr <- get_model_diagnostics(pop_cmdstanr_reload)
+
+  expect_identical(pop_rstan_reload$backend, "rstan")
+  expect_identical(pop_cmdstanr_reload$backend, "cmdstanr")
+  expect_true(all(is.finite(x_pred_rstan)))
+  expect_true(all(is.finite(x_pred_cmdstanr)))
+  expect_identical(dim(x_pred_rstan), dim(x_pred_cmdstanr))
+  expect_identical(dim(ls_rstan$latent_state), dim(ls_cmdstanr$latent_state))
+  expect_identical(names(md_rstan), names(md_cmdstanr))
+  expect_true(all(is.finite(unlist(md_rstan))))
+  expect_true(all(is.finite(unlist(md_cmdstanr))))
+})
+
+test_that("model8k5 print output includes diagnostics information on both backends", {
+  skip_if_no_stan_tests()
+  skip_if_no_cmdstanr()
+
+  case <- make_model8_mixed_smoke_case(npolls = 12)
+  cfg <- list(
+    sigma_kappa_hyper = 0.03,
+    use_industry_bias = 1L,
+    use_house_bias = 0L,
+    use_design_effects = 0L,
+    use_multivariate_version = 2L,
+    use_softmax = 1L
+  )
+
+  fit_args <- list(
+    y = case$parties,
+    model = "model8k5",
+    polls_data = case$polls_data,
+    time_scale = case$time_scale,
+    time_scale_overrides = case$time_scale_overrides,
+    known_state = case$known_state,
+    hyper_parameters = cfg,
+    chains = 1,
+    refresh = 0,
+    seed = 4711,
+    cache_dir = NULL
+  )
+
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          pop_rstan <- do.call(
+            poll_of_polls,
+            c(fit_args, list(
+              backend = "rstan",
+              iter = 10,
+              warmup = 5
+            ))
+          )
+        )
+      )
+    )
+  )
+
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          pop_cmdstanr <- do.call(
+            poll_of_polls,
+            c(fit_args, list(
+              backend = "cmdstanr",
+              iter_sampling = 5,
+              iter_warmup = 5
+            ))
+          )
+        )
+      )
+    )
+  )
+
+  diag_lines_rstan <- print_diagnostics_lines(pop_rstan)
+  diag_lines_cmdstanr <- print_diagnostics_lines(pop_cmdstanr)
+
+  expect_true(length(diag_lines_rstan) >= 5)
+  expect_true(length(diag_lines_cmdstanr) >= 5)
+  expect_true(any(grepl("^== Model diagnostics == ?$", diag_lines_rstan)))
+  expect_true(any(grepl("^== Model diagnostics == ?$", diag_lines_cmdstanr)))
+  expect_true(any(grepl("^mean_chain_step_size:", diag_lines_rstan)))
+  expect_true(any(grepl("^mean_chain_step_size:", diag_lines_cmdstanr)))
+  expect_true(any(grepl("^no_divergent_transistions:", diag_lines_rstan)))
+  expect_true(any(grepl("^no_divergent_transistions:", diag_lines_cmdstanr)))
 })
