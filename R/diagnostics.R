@@ -91,8 +91,7 @@ diagnose_extract_min_eigen_value_Omega <- function(x){
 #'
 #' @export
 get_adaptation_info <- function(x, as.list = FALSE, ...){
-  ai <- rstan::get_adaptation_info(x$stan_fit, ...)
-  ai <- lapply(ai, parse_adaption_information)
+  ai <- backend_get_adaptation_info(x$backend, x$stan_fit, ...)
 }
 
 parse_adaption_information <- function(x){

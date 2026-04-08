@@ -59,3 +59,23 @@ test_that("translate_rstan_to_cmdstanr_sample maps core arguments", {
   expect_identical(translated$sample_args$metric, "diag_e")
   expect_identical(translated$sample_args$adapt_engaged, FALSE)
 })
+
+test_that("translate_rstan_to_cmdstanr_sample disables adaptation when warmup is zero", {
+  stan_file <- tempfile(fileext = ".stan")
+  writeLines("parameters { real y; } model { y ~ normal(0, 1); }", stan_file)
+
+  translated <- translate_rstan_to_cmdstanr_sample(
+    list(
+      file = stan_file,
+      data = list(),
+      chains = 1L,
+      iter = 3L,
+      warmup = 0L,
+      refresh = 0L
+    )
+  )
+
+  expect_identical(translated$sample_args$iter_warmup, 0L)
+  expect_identical(translated$sample_args$iter_sampling, 3L)
+  expect_identical(translated$sample_args$adapt_engaged, FALSE)
+})

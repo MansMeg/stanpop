@@ -10,7 +10,7 @@ log_prob <- function(object, ...){
 #' @rdname log_prob
 #' @export
 log_prob.poll_of_polls <- function(object, ...){
-  rstan::log_prob(object$stan_fit, ...)
+  backend_log_prob(object$backend, object$stan_fit, ...)
 }
 #' @rdname log_prob
 #' @export
@@ -26,7 +26,7 @@ get_num_upars <- function(object, ...){
 #' @rdname log_prob
 #' @export
 get_num_upars.poll_of_polls <- function(object, ...){
-  nu <- try(rstan::get_num_upars(object$stan_fit, ...), silent = TRUE)
+  nu <- try(backend_get_num_upars(object$backend, object$stan_fit, ...), silent = TRUE)
   if(inherits(nu, "try-error")){
     nu <- length(get_adaptation_info(object)[[1]]$diag_inv_mass_matrix)
   }
@@ -60,7 +60,7 @@ get_sampler_params <- function(object, ...){
 #' @rdname get_sampler_params
 #' @export
 get_sampler_params.poll_of_polls <- function(object, ...){
-  rstan::get_sampler_params(object$stan_fit, ...)
+  backend_get_sampler_params(object$backend, object$stan_fit, ...)
 }
 
 

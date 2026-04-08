@@ -13,7 +13,7 @@
 #' @param hyper_parameters hyperparameters to supply direct to the model
 #' @param slow_scales a vector of [Date]s that indicate breaks (right-inclusive) for a slower moving time scale.
 #' @param backend Stan backend to use. Supported values are [rstan] and
-#'   [cmdstanr]. Currently only [rstan] is implemented.
+#'   [cmdstanr].
 #' @param ... further arguments to [rstan::stan()] function
 #' @param cache_dir directory to cache model. Default is cache in tempdir(). [NULL], no cache.
 #'
@@ -161,7 +161,7 @@ poll_of_polls <- function(y,
                cache_dir = cache_dir,
                time_line = sd$time_line,
                stan_fit = stan_fit,
-               diagnostics = compute_diagnostics(stan_fit),
+               diagnostics = compute_diagnostics(stan_fit, backend = backend),
                model_arguments = hyper_parameters,
                stan_data = sd)
   class(pop) <- c(paste0("pop_", model), "poll_of_polls")
@@ -426,7 +426,7 @@ assert_poll_data_and_latent_time_range_list_agree <- function(x, ltr){
 #' @param rm_idx remove parameter indecies (e.g. [1], [1,1], [1,1,1]) from the parameter names. Default is FALSE.
 #' @export
 parameter_names <- function(x, rm_idx = FALSE){
-  res <- try(names(x$stan_fit), silent = TRUE)
+  res <- try(backend_parameter_names(x$backend, x$stan_fit), silent = TRUE)
   if(rm_idx) res <- parameters_names_remove_indecies(res)
 
   if(inherits(res, "try-error")){
@@ -537,7 +537,7 @@ get_model_diagnostics <- function(x){
 #' @export
 get_ndraws <- function(x){
   checkmate::assert_class(x, "poll_of_polls")
-  sum(unlist(lapply(x$stan_fit@stan_args, function(x) {x$iter - x$warmup})))
+  backend_get_ndraws(x$backend, x$stan_fit)
 }
 
 #' @rdname get_ndraws
@@ -572,10 +572,8 @@ get_git_sha <- function(){
 }
 
 
-compute_diagnostics <- function(x){
-  fit_summary <- rstan::summary(x)
-  list(n_eff = fit_summary$summary[,"n_eff"],
-       Rhat = fit_summary$summary[,"Rhat"])
+compute_diagnostics <- function(x, backend = "rstan"){
+  backend_compute_diagnostics(backend = backend, fit = x)
 }
 
 

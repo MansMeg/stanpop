@@ -53,7 +53,7 @@ extract <- function(object, ...){
 #' @rdname extract
 #' @export
 extract.poll_of_polls <- function(object, ...){
-  rstan::extract(object$stan_fit, ...)
+  backend_extract(object$backend, object$stan_fit, ...)
 }
 
 #' Extract the data when Stan was run
@@ -98,4 +98,3 @@ existing_parties <- function(y, ltr, mtr){
   }
   y[in_mtr]
 }
-
