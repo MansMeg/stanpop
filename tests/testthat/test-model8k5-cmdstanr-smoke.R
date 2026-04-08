@@ -32,8 +32,8 @@ test_that("model8k5 poll_of_polls runs with cmdstanr backend on a mixed latent g
             known_state = case$known_state,
             hyper_parameters = cfg,
             backend = "cmdstanr",
-            iter = 20,
-            warmup = 10,
+            iter_sampling = 10,
+            iter_warmup = 10,
             chains = 1,
             refresh = 0,
             seed = 4711,
@@ -86,8 +86,6 @@ test_that("model8k5 gives the same parameter space and log_prob with rstan and c
     time_scale_overrides = case$time_scale_overrides,
     known_state = case$known_state,
     hyper_parameters = cfg,
-    iter = 3,
-    warmup = 0,
     chains = 1,
     refresh = 0,
     seed = 4711,
@@ -100,7 +98,11 @@ test_that("model8k5 gives the same parameter space and log_prob with rstan and c
         suppressMessages(
           pop_rstan <- do.call(
             poll_of_polls,
-            c(fit_args, list(backend = "rstan"))
+            c(fit_args, list(
+              backend = "rstan",
+              iter = 10,
+              warmup = 5
+            ))
           )
         )
       )
@@ -113,7 +115,11 @@ test_that("model8k5 gives the same parameter space and log_prob with rstan and c
         suppressMessages(
           pop_cmdstanr <- do.call(
             poll_of_polls,
-            c(fit_args, list(backend = "cmdstanr"))
+            c(fit_args, list(
+              backend = "cmdstanr",
+              iter_sampling = 5,
+              iter_warmup = 5
+            ))
           )
         )
       )

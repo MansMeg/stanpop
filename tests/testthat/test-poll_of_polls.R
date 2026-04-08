@@ -113,6 +113,31 @@ test_that("test model pop", {
 test_that("poll_of_polls API", {
   expect_true("time_scale_overrides" %in% names(formals(poll_of_polls)))
   expect_true("backend" %in% names(formals(poll_of_polls)))
+  expect_true("compile_args" %in% names(formals(poll_of_polls)))
+})
+
+test_that("poll_of_polls rejects rstan-only arguments for cmdstanr", {
+  case <- make_model8_mixed_smoke_case(npolls = 5)
+
+  expect_error(
+    suppressWarnings(
+      poll_of_polls(
+        y = case$parties,
+        model = "model8k5",
+        polls_data = case$polls_data,
+        time_scale = case$time_scale,
+        time_scale_overrides = case$time_scale_overrides,
+        known_state = case$known_state,
+        backend = "cmdstanr",
+        iter = 1,
+        warmup = 0,
+        chains = 1,
+        refresh = 0,
+        cache_dir = NULL
+      )
+    ),
+    regexp = "Unsupported RStan-style arguments"
+  )
 })
 
 test_that("poll_of_polls rejects time_scale_overrides for models without step_scale_t", {
@@ -135,4 +160,3 @@ test_that("poll_of_polls rejects time_scale_overrides for models without step_sc
     regexp = "requires a model that uses 'step_scale_t'"
   )
 })
-
