@@ -14,12 +14,18 @@
 #' @param slow_scales a vector of [Date]s that indicate breaks (right-inclusive) for a slower moving time scale.
 #' @param backend Stan backend to use. Supported values are [rstan] and
 #'   [cmdstanr].
-#' @param ... further arguments to [rstan::stan()] function
+#' @param compile_args additional arguments passed to [cmdstanr::cmdstan_model()]
+#'   when `backend = "cmdstanr"`. Ignored for `backend = "rstan"`.
+#' @param ... further arguments passed directly to the backend sampler.
+#'   These go to [rstan::stan()] when `backend = "rstan"` and to
+#'   `CmdStanModel$sample()` when `backend = "cmdstanr"`.
 #' @param cache_dir directory to cache model. Default is cache in tempdir(). [NULL], no cache.
 #'
 #' @details
 #' The [input_args] slot contain all input arguments except polls data and known state that are stored in the original object instead.
-#' The [stan_arguments] slot contains all arguments that are supplied to the [rstan::stan()] function, except for the data argument which is stored in the [stan_data] slot.
+#' The [stan_arguments] slot contains the backend sampling arguments supplied through `...`,
+#' except for the `data` argument which is stored in the [stan_data] slot.
+#' The [compile_arguments] slot contains the CmdStanR compilation arguments.
 #'
 #'
 #' @export
@@ -34,6 +40,7 @@ poll_of_polls <- function(y,
                           hyper_parameters = NULL,
                           slow_scales = NULL,
                           backend = "rstan",
+                          compile_args = NULL,
                           ...,
                           cache_dir = file.path(tempdir(), "pop_cache")){
   checkmate::assert_subset(x = y, choices = names(y(polls_data)))
@@ -45,6 +52,7 @@ poll_of_polls <- function(y,
   }
   checkmate::assert_choice(model, choices = supported_pop_models())
   assert_pop_backend(backend)
+  checkmate::assert_list(compile_args, null.ok = TRUE)
   assert_polls_data(polls_data, min.rows = 1, min.cols = 1)
   assert_known_state(known_state)
   if(!is.null(known_state)){
@@ -97,6 +105,7 @@ poll_of_polls <- function(y,
                        model = readLines(smfp),
                        polls_data = polls_data,
                        backend = backend,
+                       compile_args = compile_args,
                        time_scale = time_scale,
                        time_scale_overrides = time_scale_overrides,
                        known_state = known_state,
@@ -125,18 +134,40 @@ poll_of_polls <- function(y,
   stan_arguments <- list(...)
   if(!is.null(backend_arguments$data)) warning("The 'data' argument has been overwritten")
   backend_arguments$data <- sd$stan_data
-  if(is.null(backend_arguments$file)) backend_arguments$file <- smfp
-  if(is.null(backend_arguments$model_name)) backend_arguments$model_name <- model
+  if(backend == "cmdstanr"){
+    cmdstanr_rstan_only_args <- c("file", "model_name", "control", "iter", "warmup",
+                                  "cores", "algorithm", "init_r")
+    found_rstan_only_args <- intersect(names(backend_arguments), cmdstanr_rstan_only_args)
+    if(length(found_rstan_only_args) > 0){
+      stop(
+        "With backend = 'cmdstanr', supply CmdStanR sample arguments directly in '...'. ",
+        "Unsupported RStan-style arguments: ",
+        paste0(found_rstan_only_args, collapse = ", "),
+        ". Use e.g. 'iter_warmup', 'iter_sampling', 'parallel_chains', and 'compile_args'.",
+        call. = FALSE
+      )
+    }
+  }
+  if(backend == "rstan" && !is.null(compile_args) && length(compile_args) > 0){
+    warning("'compile_args' is ignored when backend = 'rstan'.", call. = FALSE)
+  }
   # The parameters to store should be supplied as an argument to stan instead.
   # if(is.null(backend_arguments$pars)) backend_arguments$pars <- stan_parameters_to_store(model)
   # TODO: rm stan_parameters_to_store() and just use the pars argument supplied by the user
 
   # Run Stan
-  stan_fit <- backend_sample(backend = backend, stan_arguments = backend_arguments)
+  stan_fit <- backend_sample(
+    backend = backend,
+    sample_arguments = backend_arguments,
+    stan_file = smfp,
+    model_name = model,
+    compile_arguments = compile_args
+  )
 
   pop <-  list(y = y,
                model = model,
                backend = backend,
+               compile_arguments = compile_args,
                polls_data = polls_data,
                time_scale = time_scale,
                time_scale_overrides = time_scale_overrides,
@@ -148,6 +179,7 @@ poll_of_polls <- function(y,
                input_args = list(y = y,
                                  model = model,
                                  backend = backend,
+                                 compile_args = compile_args,
                                  time_scale = time_scale,
                                  time_scale_overrides = time_scale_overrides,
                                  model_time_range = model_time_range,
