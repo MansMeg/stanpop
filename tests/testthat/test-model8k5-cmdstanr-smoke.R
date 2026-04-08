@@ -5,6 +5,24 @@ if(FALSE){ # For debugging
   library(stanpop)
 }
 
+normalized_print_lines <- function(x){
+  lines <- capture.output(print(x))
+  keep_prefixes <- c(
+    "Model is fit during the period ",
+    "Stan model: ",
+    "Number of parameters:",
+    "Number of unconstrained parameters:",
+    "Parties:",
+    "Time scale:"
+  )
+  keep <- vapply(
+    lines,
+    FUN.VALUE = logical(1),
+    FUN = function(line) any(startsWith(line, keep_prefixes))
+  )
+  lines[keep]
+}
+
 test_that("model8k5 poll_of_polls runs with cmdstanr backend on a mixed latent grid", {
   skip_if_no_stan_tests()
   skip_if_no_cmdstanr()
@@ -173,4 +191,69 @@ test_that("model8k5 gives the same parameter space and log_prob with rstan and c
   expect_identical(names(md_rstan), names(md_cmdstanr))
   expect_true(all(is.finite(unlist(md_rstan))))
   expect_true(all(is.finite(unlist(md_cmdstanr))))
+})
+
+test_that("model8k5 print output matches across backends after normalization", {
+  skip_if_no_stan_tests()
+  skip_if_no_cmdstanr()
+
+  case <- make_model8_mixed_smoke_case(npolls = 12)
+  cfg <- list(
+    sigma_kappa_hyper = 0.03,
+    use_industry_bias = 1L,
+    use_house_bias = 0L,
+    use_design_effects = 0L,
+    use_multivariate_version = 2L,
+    use_softmax = 1L
+  )
+
+  fit_args <- list(
+    y = case$parties,
+    model = "model8k5",
+    polls_data = case$polls_data,
+    time_scale = case$time_scale,
+    time_scale_overrides = case$time_scale_overrides,
+    known_state = case$known_state,
+    hyper_parameters = cfg,
+    chains = 1,
+    refresh = 0,
+    seed = 4711,
+    cache_dir = NULL
+  )
+
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          pop_rstan <- do.call(
+            poll_of_polls,
+            c(fit_args, list(
+              backend = "rstan",
+              iter = 10,
+              warmup = 5
+            ))
+          )
+        )
+      )
+    )
+  )
+
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          pop_cmdstanr <- do.call(
+            poll_of_polls,
+            c(fit_args, list(
+              backend = "cmdstanr",
+              iter_sampling = 5,
+              iter_warmup = 5
+            ))
+          )
+        )
+      )
+    )
+  )
+
+  expect_identical(normalized_print_lines(pop_rstan), normalized_print_lines(pop_cmdstanr))
 })
