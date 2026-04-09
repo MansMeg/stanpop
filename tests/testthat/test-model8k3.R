@@ -154,6 +154,7 @@ test_that("Test model 8k2 and 8k3 are identical", {
                use_softmax = 1L)
 
   skip_if_no_stan_tests()
+  skip_if_no_rstan_tests()
   expect_silent(pop8k2_out <-
                   capture.output(
                     suppressWarnings(
@@ -253,6 +254,7 @@ test_that("Test model 8k2 pars variable", {
                use_softmax = 1L)
 
   skip_if_no_stan_tests()
+  skip_if_no_rstan_tests()
   expect_silent(pop8k2_out <-
                   capture.output(
                     suppressWarnings(

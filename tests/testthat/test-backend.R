@@ -2,6 +2,7 @@ context("backend")
 
 test_that("backend_sample with rstan returns a stanfit", {
   skip_if_no_stan_tests()
+  skip_if_no_rstan_tests()
   fit <- backend_sample(
     backend = "rstan",
     sample_arguments = list(

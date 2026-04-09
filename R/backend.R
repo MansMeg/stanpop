@@ -89,15 +89,6 @@ backend_sample_cmdstanr <- function(sample_arguments,
     sample_arguments$adapt_engaged <- FALSE
   }
 
-  compile_arguments <- utils::modifyList(
-    list(
-      quiet = TRUE,
-      compile_model_methods = TRUE,
-      force_recompile = TRUE
-    ),
-    compile_arguments
-  )
-
   model <- do.call(
     cmdstanr::cmdstan_model,
     c(

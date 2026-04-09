@@ -7,6 +7,7 @@ if(FALSE){ # For debugging
 
 test_that("model8k5 poll_of_polls runs on a mixed latent grid", {
   skip_if_no_stan_tests()
+  skip_if_no_rstan_tests()
 
   case <- make_model8_mixed_smoke_case()
   cfg <- list(

@@ -185,6 +185,7 @@ test_that("Test sum to zero constraint for kappa", {
 
   # Takes 80 seconds
   skip_if_no_stan_tests()
+  skip_if_no_rstan_tests()
   expect_silent(pop8k1_out <-
                   capture.output(
                     suppressWarnings(
@@ -279,6 +280,7 @@ test_that("Test simple prediction with known obs_x", {
   # plot(spd2, "x4")
 
   skip_if_no_stan_tests()
+  skip_if_no_rstan_tests()
   expect_silent(pop8k1_out <-
                   capture.output(
                     suppressWarnings(
@@ -370,6 +372,7 @@ test_that("Test multiplicative industry bias for kappa", {
   spd$y[is_s3,"x4"] <-  spd$y[is_s3,"x4"] * exp(sd$stan_data$g_i[is_s3] * kappa_x4_s3)
 
   skip_if_no_stan_tests()
+  skip_if_no_rstan_tests()
   # Takes 120 seconds
   expect_silent(pop8k1_out <-
                   capture.output(

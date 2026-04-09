@@ -212,6 +212,7 @@ test_that("Test that adding election_period give different log_prob", {
                ep_inv_x = ep_inv_x)
 
   skip_if_no_stan_tests()
+  skip_if_no_rstan_tests()
   expect_silent(pop8l1_out <-
                   capture.output(
                     suppressWarnings(
@@ -334,6 +335,7 @@ test_that("Test model m3 and m4", {
                ep_inv_x = ep_inv_x)
 
   skip_if_no_stan_tests()
+  skip_if_no_rstan_tests()
   expect_silent(pop8l1_out <-
                   capture.output(
                     suppressWarnings(
