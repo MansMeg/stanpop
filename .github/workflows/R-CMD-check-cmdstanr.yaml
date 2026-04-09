@@ -4,7 +4,7 @@ on:
   pull_request:
     branches: [main, master, development]
 
-name: cmdstanr-tests.yaml
+name: R-CMD-check-cmdstanr.yaml
 
 permissions: read-all
 
