@@ -49,3 +49,15 @@ skip_if_no_rstan_tests <- function(env_var = "STANPOP_RUN_RSTAN_TESTS") {
     ))
   }
 }
+
+skip_if_no_8k_rstan_tests <- function(
+  env_var = "STANPOP_RUN_8K_RSTAN_TESTS"
+) {
+  if (!identical(Sys.getenv(env_var, unset = "false"), "true")) {
+    testthat::skip(paste0(
+      "Model 8k RStan integration tests are disabled (set ",
+      env_var,
+      "=true)."
+    ))
+  }
+}

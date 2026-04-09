@@ -28,6 +28,7 @@ jobs:
       STANPOP_RUN_STAN_TESTS: "true"
       STANPOP_RUN_CMDSTANR_TESTS: "false"
       STANPOP_RUN_RSTAN_TESTS: "true"
+      STANPOP_RUN_8K_RSTAN_TESTS: "false"
 
     steps:
       - uses: actions/checkout@v4
