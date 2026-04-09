@@ -44,9 +44,8 @@ jobs:
       - name: Run model8k test file
         run: |
           pkgload::load_all(".", quiet = TRUE)
-          testthat::test_dir(
-            "tests/testthat",
-            filter = "^test-model8k[.]R$",
+          testthat::test_file(
+            "tests/testthat/test-model8k.R",
             reporter = testthat::SummaryReporter$new()
           )
         shell: Rscript {0}
