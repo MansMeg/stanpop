@@ -5,6 +5,8 @@ on:
         description: Number of fresh-process runs per mode
         required: false
         default: "10"
+  pull_request:
+    branches: [development]
 
 name: cmdstanr-model-methods-diagnostic.yaml
 
