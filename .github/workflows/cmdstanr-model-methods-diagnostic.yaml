@@ -63,6 +63,9 @@ jobs:
           set -u
           mode="${{ matrix.mode }}"
           reps="${{ inputs.repetitions }}"
+          if [ -z "$reps" ]; then
+            reps="10"
+          fi
           mkdir -p diagnostics
           summary_file="diagnostics/${mode}_summary.tsv"
           printf "run\texit_code\tresult\n" > "$summary_file"
