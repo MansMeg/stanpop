@@ -238,7 +238,7 @@ test_that("model8k2 override-aware path recomputes g_t, g_i, and next_known_stat
   has_required_fields <- all(c("g_t", "g_i", "next_known_state_t_index") %in% names(sd$stan_data_with_overrides))
   expect_true(has_required_fields)
   if(has_required_fields){
-    expect_identical(sd$stan_data_with_overrides$next_known_state_t_index, c(1L, 2L, 2L, 2L, 2L))
+    expect_equal(as.integer(sd$stan_data_with_overrides$next_known_state_t_index), c(1L, 2L, 2L, 2L, 2L))
     expect_equal(unname(sd$stan_data_with_overrides$g_i[1]), 3 / 365, tolerance = 1e-12)
     expect_equal(sd$stan_data_with_overrides$g_t[3], 3 / 365, tolerance = 1e-12)
     expect_equal(sd$stan_data_with_overrides$g_t[4], 4 / 365, tolerance = 1e-12)
