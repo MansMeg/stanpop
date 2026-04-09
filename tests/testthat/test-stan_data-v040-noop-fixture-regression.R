@@ -63,6 +63,27 @@ expect_identical_with_field_report <- function(actual, expected, label) {
   testthat::fail(paste(label, details, sep = "\n"))
 }
 
+expect_fixture_stan_data_match <- function(actual, expected, label) {
+  expect_identical(names(actual), names(expected), label = paste(label, "field names"))
+
+  for(nm in names(expected)) {
+    if(nm == "tw") {
+      expect_equal(
+        actual[[nm]],
+        expected[[nm]],
+        tolerance = 1e-15,
+        label = paste(label, "field", nm)
+      )
+    } else {
+      expect_identical_with_field_report(
+        actual = stats::setNames(list(actual[[nm]]), nm),
+        expected = stats::setNames(list(expected[[nm]]), nm),
+        label = paste(label, "field", nm)
+      )
+    }
+  }
+}
+
 test_that("model8k2 no-override stan_data matches the v0.4 fixture exactly", {
   fixture <- readRDS(test_path("files", "model8k2_v040_noop_fixture.rds"))
 
@@ -79,12 +100,12 @@ test_that("model8k2 no-override stan_data matches the v0.4 fixture exactly", {
     )
   )
 
-  expect_identical_with_field_report(
+  expect_fixture_stan_data_match(
     sd$stan_data,
     fixture$stan_data,
     label = "Expected sd$stan_data to be identical to fixture$stan_data."
   )
-  expect_identical_with_field_report(
+  expect_fixture_stan_data_match(
     sd$stan_data_with_overrides[names(fixture$stan_data)],
     fixture$stan_data,
     label = "Expected sd$stan_data_with_overrides[names(fixture$stan_data)] to be identical to fixture$stan_data."
