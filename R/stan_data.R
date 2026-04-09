@@ -423,7 +423,7 @@ attach_stan_data_with_overrides <- function(spd,
       sd$g_i <- suppressWarnings(stan_data_g_i_date_diff(x = x, known_state = known_state, type = "collection_midpoint"))
     }
     if("next_known_state_t_index" %in% legacy_stan_data_names && !is.null(known_state)){
-      sd$next_known_state_t_index <- as.integer(get_time_line_next_known_state_index(time_line = tl, known_state = known_state))
+      sd$next_known_state_t_index <- get_time_line_next_known_state_index(time_line = tl, known_state = known_state)
     }
   }
 
@@ -1484,10 +1484,10 @@ stan_data_add_model8km_common_fields <- function(stan_data,
     known_state = known_state_in_time_line,
     type = "collection_midpoint"
   )
-  stan_data$next_known_state_t_index <- as.integer(get_time_line_next_known_state_index(
+  stan_data$next_known_state_t_index <- get_time_line_next_known_state_index(
     time_line = time_line,
     known_state = known_state_in_time_line
-  ))
+  )
   if(use_date_diff_g_t){
     stan_data$g_t <- as.array(stan_data_g_t_date_diff(
       known_state = known_state,

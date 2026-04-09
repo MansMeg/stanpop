@@ -53,7 +53,7 @@ assert_noop_override_stan_data_equivalence <- function(sd) {
       "s_i",
       "s_t"
     )) {
-      expect_equal(
+      expect_identical(
         sd$stan_data_with_overrides[[nm]],
         sd$stan_data[[nm]],
         label = paste("field", nm)
@@ -88,7 +88,7 @@ test_that("model8k2 override-aware stan_data matches legacy stan_data when overr
 
   assert_noop_override_stan_data_equivalence(sd)
   if(all(names(sd$stan_data) %in% names(sd$stan_data_with_overrides))){
-    expect_equal(sd$stan_data_with_overrides$obs_of_x_t, sd$stan_data$obs_of_x_t)
+    expect_identical(sd$stan_data_with_overrides$obs_of_x_t, sd$stan_data$obs_of_x_t)
   }
 })
 
@@ -121,8 +121,8 @@ test_that("model8m2 override-aware stan_data matches legacy stan_data when overr
 
   assert_noop_override_stan_data_equivalence(sd)
   if(all(names(sd$stan_data) %in% names(sd$stan_data_with_overrides))){
-    expect_equal(sd$stan_data_with_overrides$obs_of_x_t, sd$stan_data$obs_of_x_t)
-    expect_equal(sd$stan_data_with_overrides$election_period, sd$stan_data$election_period)
-    expect_equal(sd$stan_data_with_overrides$EP, sd$stan_data$EP)
+    expect_identical(sd$stan_data_with_overrides$obs_of_x_t, sd$stan_data$obs_of_x_t)
+    expect_identical(sd$stan_data_with_overrides$election_period, sd$stan_data$election_period)
+    expect_identical(sd$stan_data_with_overrides$EP, sd$stan_data$EP)
   }
 })
