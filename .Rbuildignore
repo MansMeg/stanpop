@@ -3,3 +3,5 @@ stanpop.Rproj$
 ^data-raw$
 ^.*\.Rproj$
 ^\.github$
+^inst/stan_models/.*\.rds$
+^tests/testthat/stan_code/.*\.rds$
