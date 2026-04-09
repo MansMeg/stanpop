@@ -625,26 +625,89 @@ compute_diagnostics <- function(x, backend = "rstan"){
 
 
 
-#' Extract all pop arguments for poll_of_polls() from a pop object
+#' Extract refit-ready constructor arguments from a poll_of_polls object
 #'
 #' @description
-#' This function takes a pop object and extracts the relevant arguments for the poll_of_polls() function.
-#' It ensures that the pop object is valid and then retrieves the necessary information to be used as input for poll_of_polls().
+#' `extract_poll_of_polls_refit_arguments()` returns the named constructor
+#' arguments for [poll_of_polls()] that are stored in a [poll_of_polls] object.
+#' Unlike `x$input_args`, the returned list excludes backend sampler arguments
+#' from `...`, which are returned separately by
+#' [extract_poll_of_polls_sample_arguments()].
 #'
-#' @param x A pop object
+#' `extract_poll_of_polls_input_arguments()` is retained as a backward-compatible
+#' alias and returns the same refit-ready constructor arguments.
+#'
+#' @param x A pop object.
+#'
+#' @return
+#' `extract_poll_of_polls_refit_arguments()` and
+#' `extract_poll_of_polls_input_arguments()` return a list with the named
+#' [poll_of_polls()] constructor arguments, excluding sampler arguments from
+#' `...`.
+#'
+#' `extract_poll_of_polls_sample_arguments()` returns the sampler arguments that
+#' were supplied through `...` when the model was fit.
 #'
 #' @export
-extract_poll_of_polls_input_arguments <- function(x){
+extract_poll_of_polls_refit_arguments <- function(x){
   assert_pop(x)
-  # Extract the arguments for poll_of_polls() from the pop object
-  args <- list()
 
-  # Extract relevant information from the pop object
-  args <- x$input_args
-  args$polls_data <- x$polls_data
-  args$known_state <- x$known_state
+  input_args <- x$input_args
+  if(is.null(input_args)) input_args <- list()
 
-  class(args) <- c("poll_of_polls_input_arguments", "list")
+  args <- list(
+    y = pop_input_argument_or_default(input_args, "y", x$y),
+    model = pop_input_argument_or_default(input_args, "model", x$model),
+    polls_data = x$polls_data,
+    time_scale = pop_input_argument_or_default(input_args, "time_scale", x$time_scale),
+    time_scale_overrides = pop_input_argument_or_default(input_args, "time_scale_overrides", x$time_scale_overrides),
+    known_state = x$known_state,
+    model_time_range = pop_input_argument_or_default(input_args, "model_time_range", x$model_time_range),
+    latent_time_ranges = pop_input_argument_or_default(input_args, "latent_time_ranges", x$latent_time_range),
+    hyper_parameters = pop_input_argument_or_default(input_args, "hyper_parameters", x$model_arguments),
+    slow_scales = pop_input_argument_or_default(input_args, "slow_scales", NULL),
+    backend = pop_input_argument_or_default(input_args, "backend", x$backend),
+    compile_args = pop_input_argument_or_default(input_args, "compile_args", x$compile_arguments),
+    cache_dir = pop_input_argument_or_default(input_args, "cache_dir", x$cache_dir)
+  )
 
-  return(args)
+  args <- args[setdiff(names(formals(poll_of_polls)), "...")]
+  class(args) <- c("poll_of_polls_refit_arguments", "poll_of_polls_input_arguments", "list")
+  args
+}
+
+# Internal helper for reconstructing constructor arguments from a stored
+# poll_of_polls object. We prefer values recorded in x$input_args when present,
+# and fall back to the supplied default for older objects or derived fields that
+# were not stored explicitly.
+pop_input_argument_or_default <- function(input_args, name, default = NULL){
+  checkmate::assert_list(input_args)
+  checkmate::assert_string(name)
+  if(name %in% names(input_args)) {
+    return(input_args[[name]])
+  }
+  default
+}
+
+#' @rdname extract_poll_of_polls_refit_arguments
+#' @export
+extract_poll_of_polls_input_arguments <- function(x){
+  extract_poll_of_polls_refit_arguments(x)
+}
+
+#' @rdname extract_poll_of_polls_refit_arguments
+#' @export
+extract_poll_of_polls_sample_arguments <- function(x){
+  assert_pop(x)
+
+  sample_args <- NULL
+  if("stan_arguments" %in% names(x)) sample_args <- x$stan_arguments
+  if(is.null(sample_args) && !is.null(x$input_args) && "stan_arguments" %in% names(x$input_args)) {
+    sample_args <- x$input_args$stan_arguments
+  }
+  if(is.null(sample_args)) sample_args <- list()
+
+  checkmate::assert_list(sample_args)
+  class(sample_args) <- c("poll_of_polls_sample_arguments", "list")
+  sample_args
 }
