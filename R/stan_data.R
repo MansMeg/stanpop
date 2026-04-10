@@ -11,6 +11,7 @@
 #' @param slow_scales a vector of [Date]s that indicate breaks (right-inclusive) for a slower moving time scale.
 #'        Example: If only 2010-01-15 is used, all dates up to and including 2010-01-15, will have s=1,
 #'                 Dates after 2010-01-15 will have s=2.
+#' @param cond_state a list representation of a conditional state of the process, containing the hyperparameters and the active houses. This is used to fit a conditional Ada model.
 #' @export
 stan_polls_data <- function(x,
                             y_name,
@@ -20,7 +21,8 @@ stan_polls_data <- function(x,
                             model_time_range = NULL,
                             latent_time_ranges = NULL,
                             hyper_parameters = NULL,
-                            slow_scales = NULL){
+                            slow_scales = NULL,
+                            cond_state = NULL){
   checkmate::assert_class(x, "polls_data")
   checkmate::assert_subset(y_name, choices = names(y(x)))
   checkmate::assert_choice(time_scale, supported_time_scales())
@@ -71,7 +73,7 @@ stan_polls_data <- function(x,
   } else if(grepl(model, pattern = "^model8j[0-9]+$")) {
     return(stan_polls_data_model8i(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model))
   } else if(grepl(model, pattern = "^model8k[0-9]+$")) {
-    return(stan_polls_data_model8k(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model))
+    return(stan_polls_data_model8k(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model, cond_state))
   } else if(grepl(model, pattern = "^model8l[0-9]+$")) {
     return(stan_polls_data_model8l(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model))
   } else if(grepl(model, pattern = "^model8m[0-9]+$")) {
@@ -1208,7 +1210,7 @@ assert_stan_data_model.model8i <- function(x){
 
 
 
-stan_polls_data_model8k <- function(x, y_name, time_scale = "week", known_state = NULL, model_time_range = NULL, latent_time_ranges = NULL, hyper_parameters = NULL, slow_scales = NULL, model){
+stan_polls_data_model8k <- function(x, y_name, time_scale = "week", known_state = NULL, model_time_range = NULL, latent_time_ranges = NULL, hyper_parameters = NULL, slow_scales = NULL, model, cond_state = NULL){
   assert_polls_data(x)
   assert_y_name(y_name, x)
   assert_time_scale(time_scale)
@@ -1240,6 +1242,15 @@ stan_polls_data_model8k <- function(x, y_name, time_scale = "week", known_state 
   spd$stan_data$S <- stan_data_S(tls)
   spd$stan_data$s_i <- get_time_points_from_time_line(collection_midpoint_dates(x), tls, "time_line_s")
   spd$stan_data$s_t <- stan_data_s_t(tls)
+
+  # Appending conditional state if available and applicable for the model
+  if (!is.null(cond_state) && model %in% c("model8k6")){
+    assert_cond_state(cond_state, model)
+    cond_hyperparams <- get_cond_hyperparams(cond_state, x, model)
+    hyper_parameters <- c(hyper_parameters, cond_hyperparams)
+    # Verifying that no hyperparameter is duplicated during concatenation
+    checkmate::assert_true(sum(duplicated(names(hyper_parameters))) == 0, .var.name = "Model hyperparameters contains duplicates")
+  }
 
   # Compute observations of x
   hyper_parameters <- parse_obs_x(hyper_parameters, tl, y_name)

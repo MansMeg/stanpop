@@ -9,6 +9,7 @@
 #' @param latent_time_ranges time ranges of the latent state of individual [y]s
 #' @param hyper_parameters hyperparameters to supply direct to the model
 #' @param slow_scales a vector of [Date]s that indicate breaks (right-inclusive) for a slower moving time scale.
+#' @param cond_state a list representation of a conditional state of the process, containing the hyperparameters and the active houses. This is used to fit a conditional Ada model.
 #' @param ... further arguments to [rstan::stan()] function
 #' @param cache_dir directory to cache model. Default is cache in tempdir(). [NULL], no cache.
 #'
@@ -27,6 +28,7 @@ poll_of_polls <- function(y,
                           latent_time_ranges = NULL,
                           hyper_parameters = NULL,
                           slow_scales = NULL,
+                          cond_state = NULL,
                           ...,
                           cache_dir = file.path(tempdir(), "pop_cache")){
   checkmate::assert_subset(x = y, choices = names(y(polls_data)))
@@ -62,7 +64,8 @@ poll_of_polls <- function(y,
                         model_time_range = mtr,
                         latent_time_ranges = ltr,
                         hyper_parameters = hyper_parameters,
-                        slow_scales = slow_scales)
+                        slow_scales = slow_scales,
+                        cond_state = cond_state)
 
 
   if(!is.null(cache_dir)) {
