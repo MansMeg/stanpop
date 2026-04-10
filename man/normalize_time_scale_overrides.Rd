@@ -2,7 +2,7 @@
 % Please edit documentation in R/time_line.R
 \name{normalize_time_scale_overrides}
 \alias{normalize_time_scale_overrides}
-\title{Normalize Time Scale Overrides}
+\title{Expand Time Scale Overrides to a Daily Schedule}
 \usage{
 normalize_time_scale_overrides(
   time_scale,

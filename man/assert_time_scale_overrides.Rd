@@ -2,7 +2,7 @@
 % Please edit documentation in R/time_line.R
 \name{assert_time_scale_overrides}
 \alias{assert_time_scale_overrides}
-\title{Validate Time Scale Overrides}
+\title{Validate Time Scale Override}
 \usage{
 assert_time_scale_overrides(x, dates, null.ok = TRUE)
 }
@@ -18,7 +18,7 @@ may be covered by the inclusive override ranges.}
 Invisibly returns [TRUE] if the object is valid.
 }
 \description{
-Validate a [time_scale_overrides] object against a data frame of available dates.
+Validate a [time_scale_overrides] object against a [data.frame] of available dates.
 Override ranges are inclusive, must be fully contained in [dates$date], and
 must not overlap.
 }

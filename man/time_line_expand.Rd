@@ -2,7 +2,7 @@
 % Please edit documentation in R/time_line.R
 \name{time_line_expand}
 \alias{time_line_expand}
-\title{Expand a time_line object to a new time range
+\title{Expand a [time_line] object to a new time range
 but keep the same time point index.}
 \usage{
 time_line_expand(tl, time_range)
@@ -13,6 +13,7 @@ time_line_expand(tl, time_range)
 \item{time_range}{a new time range to expand to}
 }
 \description{
-Expand a time_line object to a new time range
-but keep the same time point index.
+Rebuild a [time_line] on a larger [time_range] while shifting the new
+daily and latent indices so that dates already present in [tl] keep the
+same [t] and [time_line_t] values as before.
 }

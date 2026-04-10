@@ -17,5 +17,7 @@ get_total_time_points_from_time_line(tl)
 \item{return_variable}{the daily variable (time point type) to return}
 }
 \description{
-Get time points from a time line object
+Look up one index value from the [daily] table of a [time_line] object
+for each date in [dates]. This is typically used to convert calendar
+dates to latent time-point indices such as [time_line_t].
 }

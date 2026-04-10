@@ -22,5 +22,7 @@ ISO conventions - 1 means Monday (default),
 option to control this parameter globally.}
 }
 \description{
-Convert from days to time scale
+Convert each date in [x] to the start date of its corresponding
+[time_scale] bucket/latent slot. For example, dates can be mapped to the same
+week start or month start when constructing a latent time line.
 }
