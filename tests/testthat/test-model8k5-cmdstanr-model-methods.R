@@ -8,9 +8,9 @@ if(FALSE){ # For debugging
 test_that("model8k5 gives the same parameter space and log_prob with rstan and cmdstanr", {
   skip_if_no_stan_tests()
   skip_if_no_cmdstanr_tests()
-  skip_if_no_cmdstanr()
+#  skip_if_no_cmdstanr()
   assert_rstan_available()
-  skip("Temporarily skipped due to intermittent cmdstanr model-method segfault in CI.")
+#  skip("Temporarily skipped due to intermittent cmdstanr model-method segfault in CI.")
 
   case <- make_model8_mixed_smoke_case(npolls = 12)
   cfg <- list(
