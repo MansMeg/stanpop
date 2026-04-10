@@ -242,3 +242,34 @@ test_that("backend_get_sampler_state with cmdstanr returns reusable sampler stat
   expect_type(state[[1]]$inv_metric, "double")
   expect_length(state[[1]]$inv_metric, 2)
 })
+
+test_that("backend_get_last_draws_for_init with cmdstanr returns init-ready last draws", {
+  skip_if_no_stan_tests()
+  skip_if_no_cmdstanr_tests()
+  skip_if_no_cmdstanr()
+
+  backend_get_last_draws_for_init <- get_internal("backend_get_last_draws_for_init")
+  backend_sample <- get_internal("backend_sample")
+  fit <- backend_sample(
+    backend = "cmdstanr",
+    sample_arguments = list(
+      data = list(),
+      chains = 1,
+      parallel_chains = 1,
+      iter_warmup = 5,
+      iter_sampling = 5,
+      seed = 4711,
+      refresh = 0,
+      show_messages = FALSE,
+      show_exceptions = FALSE
+    ),
+    stan_file = sampler_state_test_stan_file()
+  )
+
+  res <- backend_get_last_draws_for_init("cmdstanr", fit)
+  draws <- as.array(fit$draws(variables = "y", inc_warmup = FALSE, format = "draws_array"))
+
+  expect_length(res, 1)
+  expect_named(res[[1]], "y")
+  expect_equal(as.numeric(res[[1]]$y), as.numeric(draws[dim(draws)[1], 1, ]), tolerance = 0)
+})
