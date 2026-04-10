@@ -1,5 +1,29 @@
 context("backend")
 
+test_that("backend_relist_flat_draw_to_init reconstructs init objects from flat draws", {
+  backend_relist_flat_draw_to_init <- get_internal("backend_relist_flat_draw_to_init")
+
+  draw <- stats::setNames(
+    c(0.1, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0),
+    c("alpha", "beta[1]", "beta[2]", "gamma[1,1]", "gamma[2,1]", "gamma[1,2]", "gamma[2,2]")
+  )
+  skeleton <- list(
+    alpha = 0,
+    beta = numeric(2),
+    gamma = matrix(0, nrow = 2, ncol = 2)
+  )
+
+  res <- backend_relist_flat_draw_to_init(draw, skeleton)
+
+  expect_identical(res$alpha, 0.1)
+  expect_equal(res$beta, c(1.0, 2.0), tolerance = 0)
+  expect_equal(
+    res$gamma,
+    matrix(c(3.0, 4.0, 5.0, 6.0), nrow = 2, ncol = 2),
+    tolerance = 0
+  )
+})
+
 test_that("backend_sample with rstan returns a stanfit", {
   skip_if_no_stan_tests()
   skip_if_no_rstan_tests()
