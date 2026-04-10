@@ -249,7 +249,6 @@ backend_get_last_draws_for_init_rstan <- function(fit, ...) {
 
 #' @keywords internal
 backend_get_last_draws_for_init_cmdstanr <- function(fit, ...) {
-  skeleton <- fit$init()
   draws <- as.array(fit$draws(inc_warmup = FALSE, format = "draws_array"))
   if(dim(draws)[1] < 1L){
     stop("CmdStanR fit does not contain post-warmup draws.", call. = FALSE)
@@ -257,11 +256,55 @@ backend_get_last_draws_for_init_cmdstanr <- function(fit, ...) {
 
   last_iter <- dim(draws)[1]
   variable_names <- dimnames(draws)[[3]]
+  skeleton <- backend_build_init_skeleton_from_variable_names(variable_names)
   lapply(seq_len(dim(draws)[2]), function(chain_id){
     chain_draw <- as.numeric(draws[last_iter, chain_id, ])
     names(chain_draw) <- variable_names
-    backend_relist_flat_draw_to_init(chain_draw, skeleton[[chain_id]])
+    backend_relist_flat_draw_to_init(chain_draw, skeleton)
   })
+}
+
+#' Build a CmdStanR init skeleton from draw names
+#'
+#' @description
+#' Reconstruct a parameter-shaped init skeleton from the flat variable names in
+#' a CmdStanR draws array. CmdStanR does not always retain user init files, so
+#' this helper infers the parameter roots and array dimensions directly from
+#' names like `alpha`, `beta[1]`, or `gamma[2,1]`. Sampler method variables
+#' such as `lp__` and `stepsize__` are removed before building the skeleton.
+#'
+#' @param variable_names A character vector of variable names from a CmdStanR
+#'   draws object. This may include Stan sampler method variables, which are
+#'   ignored when constructing the parameter skeleton.
+#'
+#' @keywords internal
+backend_build_init_skeleton_from_variable_names <- function(variable_names) {
+  checkmate::assert_character(variable_names, any.missing = FALSE, null.ok = FALSE)
+
+  cmdstan_method_variables <- c(
+    "lp__", "accept_stat__", "stepsize__", "treedepth__",
+    "n_leapfrog__", "divergent__", "energy__"
+  )
+  variable_names <- variable_names[!variable_names %in% cmdstan_method_variables]
+  parameter_roots <- unique(sub("\\[.*$", "", variable_names))
+
+  out <- lapply(parameter_roots, function(root) {
+    indexed_names <- variable_names[grepl(paste0("^", root, "\\["), variable_names)]
+    if(length(indexed_names) == 0L) {
+      return(NA_real_)
+    }
+
+    idx_strings <- sub(paste0("^", root, "\\["), "", indexed_names)
+    idx_strings <- sub("\\]$", "", idx_strings)
+    idx_list <- strsplit(idx_strings, ",", fixed = TRUE)
+    max_dims <- vapply(seq_len(max(lengths(idx_list))), function(i) {
+      max(vapply(idx_list, function(idx) as.integer(idx[[i]]), integer(1)))
+    }, integer(1))
+    array(NA_real_, dim = max_dims)
+  })
+
+  names(out) <- parameter_roots
+  out
 }
 
 #' Build an RStan init skeleton
