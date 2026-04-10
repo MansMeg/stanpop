@@ -48,7 +48,7 @@ test_that("backend_get_sampler_state preserves dense inverse metrics for cmdstan
   expect_equal(ai[[1]]$diag_inv_mass_matrix, diag(dense_metric), tolerance = 0)
 })
 
-test_that("backend_get_last_draws_for_init with rstan returns the final post-warmup draw and reuse as init in rstan", {
+test_that("backend_get_last_draws_for_init with rstan returns the final post-warmup draw", {
   skip_if_no_stan_tests()
   skip_if_no_rstan_tests()
 
@@ -82,14 +82,36 @@ test_that("backend_get_last_draws_for_init with rstan returns the final post-war
   expect_true(res[[1]]$sigma > 0)
   expect_equal(res[[1]]$sigma, unname(expected_last[["sigma"]]), tolerance = 0)
   expect_equal(
-    res[[1]]$y,
+    as.numeric(res[[1]]$y),
     unname(expected_last[grepl("^y\\[", names(expected_last))]),
     tolerance = 0
   )
   expect_false(
     identical(
       unname(expected_first[c("sigma", "y[1]", "y[2]")]),
-      c(res[[1]]$sigma, unname(res[[1]]$y))
+      c(res[[1]]$sigma, as.numeric(res[[1]]$y))
+    )
+  )
+})
+
+test_that("backend_get_last_draws_for_init output can be passed back to rstan as init", {
+  skip_if_no_stan_tests()
+  skip_if_no_rstan_tests()
+
+  backend_sample <- get_internal("backend_sample")
+  backend_get_last_draws_for_init <- get_internal("backend_get_last_draws_for_init")
+  fit <- suppressWarnings(
+    backend_sample(
+      backend = "rstan",
+      sample_arguments = list(
+        file = sampler_state_constrained_test_stan_file(),
+        data = list(),
+        iter = 10,
+        warmup = 5,
+        chains = 1,
+        seed = 4711,
+        refresh = 0
+      )
     )
   )
 
@@ -110,6 +132,7 @@ test_that("backend_get_last_draws_for_init with rstan returns the final post-war
     )
   )
 
+  expect_s4_class(refit, "stanfit")
   expect_equal(rstan::get_inits(refit), init_values, tolerance = 0)
 })
 
