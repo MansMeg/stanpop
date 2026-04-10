@@ -125,7 +125,15 @@ backend_compute_diagnostics <- function(backend, fit) {
   stop("Unknown backend '", backend, "'.", call. = FALSE)
 }
 
-#' Backend adaptation info
+#' Backend sampler state for warm starts
+#'
+#' @description
+#' Extract backend-specific sampler state that Stan uses on the unconstrained
+#' parameter space, notably the per-chain step size and inverse metric. This is
+#' complementary to [backend_get_last_draws_for_init()], which returns
+#' constrained parameter values for Stan's `init` argument. Warm-started refits
+#' therefore combine constrained draws for initialization with unconstrained
+#' sampler state for HMC tuning.
 #'
 #' @keywords internal
 backend_get_sampler_state <- function(backend, fit, ...) {
@@ -196,6 +204,48 @@ backend_metric_type_from_inv_metric <- function(inv_metric) {
   "diag_e"
 }
 
+#' Backend last draws formatted for init
+#'
+#' @description
+#' Extract the final post-warmup draw from each chain and return it in the
+#' shape expected by Stan's `init` argument. The intention is to support
+#' warm-started refits: after changing the data or sampler settings, we can
+#' reuse the last constrained-parameter draw from an existing fit as the
+#' starting point for a new fit. This helper intentionally works on the
+#' constrained parameter space because Stan's `init` interface expects
+#' constrained values. In contrast, inverse metrics and step sizes are supplied
+#' on the unconstrained space via [backend_get_sampler_state()]. The
+#' backend-specific helpers hide the differences between RStan and CmdStanR
+#' while returning a common per-chain init representation.
+#'
+#' @keywords internal
+backend_get_last_draws_for_init <- function(backend, fit, ...) {
+  assert_pop_backend(backend)
+  if(backend == "rstan"){
+    return(backend_get_last_draws_for_init_rstan(fit, ...))
+  }
+  if(backend == "cmdstanr"){
+    return(backend_get_last_draws_for_init_cmdstanr(fit, ...))
+  }
+  stop("Unknown backend '", backend, "'.", call. = FALSE)
+}
+
+#' @keywords internal
+backend_get_last_draws_for_init_rstan <- function(fit, ...) {
+  skeleton <- backend_get_rstan_init_skeleton(fit)
+  draws <- rstan::extract(fit, permuted = FALSE, inc_warmup = FALSE)
+  if(dim(draws)[1] < 1L){
+    stop("RStan fit does not contain post-warmup draws.", call. = FALSE)
+  }
+
+  last_iter <- dim(draws)[1]
+  variable_names <- dimnames(draws)[[3]]
+  lapply(seq_len(dim(draws)[2]), function(chain_id){
+    chain_draw <- as.numeric(draws[last_iter, chain_id, ])
+    names(chain_draw) <- variable_names
+    backend_relist_flat_draw_to_init(chain_draw, skeleton[[chain_id]])
+  })
+}
 #' Backend adaptation info
 #'
 #' @keywords internal
