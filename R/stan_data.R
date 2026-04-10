@@ -277,12 +277,22 @@ stan_data_known_state <- function(y_name, stan_data_time_line, known_state){
 }
 
 
-#' Build a Parallel Stan Data Path with Time Scale Overrides
+#' Attach Override-Aware Stan Data to a [stan_polls_data] Object
 #'
 #' @description
-#' Build a parallel future [stan_data] path using [time_line_with_overrides()].
-#' The current [stan_data] and [time_line] fields are left unchanged; the future
-#' path is attached in [stan_data_with_overrides] and [time_line_with_overrides].
+#' Build an additional Stan data path on a time line created by
+#' [time_line_with_overrides()]. The existing [stan_data] and [time_line]
+#' fields are kept unchanged so legacy models continue to use the original
+#' constant-scale inputs.
+#'
+#' @details
+#' This helper rebuilds the time-line-dependent pieces of the Stan input for the
+#' override-aware latent grid. In particular, it filters [known_state] to the
+#' new grid, re-aggregates poll time weights, remaps latent start and end
+#' indices, and adds mixed-step fields such as `delta_days_t` and
+#' `step_scale_t`. The resulting objects are attached as
+#' [stan_data_with_overrides] and [time_line_with_overrides] so callers can
+#' compare the legacy and override-aware paths before switching models over.
 #'
 #' @param spd a [stan_polls_data] object.
 #' @param x a [polls_data] object.
@@ -326,28 +336,37 @@ attach_stan_data_with_overrides <- function(spd,
 
   legacy_stan_data_names <- names(spd$stan_data)
   poll_ids <- tibble::tibble(.poll_id = poll_ids(x), i = 1:length(poll_ids(x)))
+
   tl <- time_line_with_overrides(
     model_time_range = model_time_range,
     time_scale = time_scale,
     time_scale_overrides = time_scale_overrides
   )
   assert_poll_data_in_time_line(x, tl)
+
+  # Drop known_state rows outside the override-aware model range before
+  # converting their dates to latent time-point indices.
   known_state_in_time_line <- known_state
   if(!is.null(known_state)){
     known_state_in_time_line <- known_state[dates_in_time_line(known_state$date, tl), , drop = FALSE]
   }
 
+  # Poll time weights depend on the latent grid, so they need to be
+  # re-aggregated on the override-aware time line before their Stan indices are
+  # attached.
   tws <- polls_time_weights(x)
   tws <- summarize_polls_time_weights(ptw = tws, tl)
   tws <- dplyr::left_join(tws, tl$time_line[, c("date", "t")], by = "date")
   tws <- dplyr::left_join(tws, poll_ids, by = ".poll_id")
 
+  # Computing sigma_y
   ymat <- as.matrix(y(x)[, y_name, drop = FALSE])
   sigma_y <- ymat * (1 - ymat)
   for(i in 1:nrow(sigma_y)){
     sigma_y[i, ] <- sqrt(sigma_y[i, ] / n(x)[i])
   }
 
+  # Create Stan Data object
   sdks <- stan_data_known_state(y_name, stan_data_time_line = tl, known_state_in_time_line)
   sd <- list(T = get_total_time_points_from_time_line(tl),
              N = length(x),
@@ -365,6 +384,9 @@ attach_stan_data_with_overrides <- function(spd,
              x_unknown_t = sdks$x_unknown_t)
   sd <- stan_data_add_missing(sd)
 
+  # Recompute the latent start/end indices for each modeled period on the new
+  # grid, and record the actual calendar-day gap between consecutive latent
+  # dates for mixed day/week/month steps.
   from_dates <- do.call(c, lapply(latent_time_ranges[y_name], function(x) x["from"]))
   to_dates <- do.call(c, lapply(latent_time_ranges[y_name], function(x) x["to"]))
   sd$t_start <- as.array(get_time_points_from_time_line(dates = from_dates, tl = tl) + 1L)
@@ -372,11 +394,16 @@ attach_stan_data_with_overrides <- function(spd,
   sd$delta_days_t <- as.array(ifelse(is.na(tl$time_line$delta_days), 0L, tl$time_line$delta_days))
   sd$step_scale_t <- as.array(ifelse(is.na(tl$time_line$step_scale), 0.0, tl$time_line$step_scale))
 
+  # Set flags for whether mixed time-scale overrides are active and whether this
+  # model should follow the model8k/model8m override-aware data path.
   has_time_scale_overrides <- !is.null(time_scale_overrides) && nrow(time_scale_overrides) > 0
   is_model8k <- grepl(pattern = "^model8k[0-9]+$", x = model)
   is_model8m <- grepl(pattern = "^model8m[0-9]+$", x = model)
 
   if((is_model8k || is_model8m) && !is.null(known_state)){
+    # Newer 8k/8m helpers can rebuild their shared fields directly from the
+    # override-aware time line, optionally switching g_t and g_i to
+    # calendar-day differences when mixed step sizes are active.
     sd <- stan_data_add_model8km_common_fields(
       stan_data = sd,
       x = x,
@@ -409,6 +436,9 @@ attach_stan_data_with_overrides <- function(spd,
       )
     }
   } else if(any(c("s_i", "s_t") %in% legacy_stan_data_names)){
+    # For older models, keep the legacy stan_data structure and only recompute
+    # the timeline-derived fields that can be mapped directly to the
+    # override-aware grid.
     tls <- time_line_add_slow_scale(tl, slow_scales)
     if("s_i" %in% legacy_stan_data_names){
       sd$s_i <- get_time_points_from_time_line(collection_midpoint_dates(x), tls, "time_line_s")
