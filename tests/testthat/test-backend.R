@@ -273,3 +273,52 @@ test_that("backend_get_last_draws_for_init with cmdstanr returns init-ready last
   expect_named(res[[1]], "y")
   expect_equal(as.numeric(res[[1]]$y), as.numeric(draws[dim(draws)[1], 1, ]), tolerance = 0)
 })
+
+test_that("backend_get_last_draws_for_init output can be passed back to cmdstanr as init", {
+  skip_if_no_stan_tests()
+  skip_if_no_cmdstanr_tests()
+  skip_if_no_cmdstanr()
+
+  backend_get_last_draws_for_init <- get_internal("backend_get_last_draws_for_init")
+  fit <- backend_sample(
+    backend = "cmdstanr",
+    sample_arguments = list(
+      data = list(),
+      chains = 1,
+      parallel_chains = 1,
+      iter_warmup = 5,
+      iter_sampling = 5,
+      seed = 4711,
+      refresh = 0,
+      show_messages = FALSE,
+      show_exceptions = FALSE
+    ),
+    stan_file = sampler_state_constrained_test_stan_file()
+  )
+
+  init_values <- backend_get_last_draws_for_init("cmdstanr", fit)
+  refit <- backend_sample(
+    backend = "cmdstanr",
+    sample_arguments = list(
+      data = list(),
+      chains = 1,
+      parallel_chains = 1,
+      iter_warmup = 1,
+      iter_sampling = 3,
+      seed = 4712,
+      refresh = 0,
+      show_messages = FALSE,
+      show_exceptions = FALSE,
+      init = init_values
+    ),
+    stan_file = sampler_state_constrained_test_stan_file()
+  )
+
+  init_from_fit <- refit$init()
+  expect_length(init_from_fit, 1)
+  expect_equal(
+    lapply(init_from_fit, unlist, use.names = TRUE),
+    lapply(init_values, unlist, use.names = TRUE),
+    tolerance = 0
+  )
+})
