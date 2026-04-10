@@ -6,7 +6,7 @@ test_that("backend_sample with rstan returns a stanfit", {
   fit <- backend_sample(
     backend = "rstan",
     sample_arguments = list(
-      model_code = "parameters { real y; } model { y ~ normal(0, 1); }",
+      file = sampler_state_test_stan_file(),
       data = list(),
       iter = 1,
       warmup = 0,
