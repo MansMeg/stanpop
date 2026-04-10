@@ -128,41 +128,90 @@ backend_compute_diagnostics <- function(backend, fit) {
 #' Backend adaptation info
 #'
 #' @keywords internal
-backend_get_adaptation_info <- function(backend, fit, ...) {
+backend_get_sampler_state <- function(backend, fit, ...) {
   assert_pop_backend(backend)
   if(backend == "rstan"){
-    ai <- rstan::get_adaptation_info(fit, ...)
-    return(lapply(ai, parse_adaption_information))
+    return(backend_get_sampler_state_rstan(fit, ...))
   }
   if(backend == "cmdstanr"){
-    inv_metric <- fit$inv_metric()
-    sampler_diagnostics <- as.array(
-      fit$sampler_diagnostics(inc_warmup = FALSE, format = "draws_array")
-    )
-    variable_names <- dimnames(sampler_diagnostics)[[3]]
-    step_idx <- which(variable_names == "stepsize__")
-    if(length(step_idx) == 1L){
-      step_size <- apply(
-        sampler_diagnostics[, , step_idx, drop = FALSE],
-        2,
-        function(x) as.numeric(x[1])
+    return(backend_get_sampler_state_cmdstanr(fit, ...))
+  }
+  stop("Unknown backend '", backend, "'.", call. = FALSE)
+}
+
+#' @keywords internal
+backend_get_sampler_state_rstan <- function(fit, ...) {
+  ai <- rstan::get_adaptation_info(fit, ...)
+  lapply(ai, function(chain_info){
+    parsed <- parse_adaption_information(chain_info)
+      list(
+        adaption_terminated = parsed$adaption_terminated,
+        step_size = parsed$step_size,
+        inv_metric = parsed$inv_metric,
+        metric_type = parsed$metric_type
       )
-    } else {
-      step_size <- rep(NA_real_, length(inv_metric))
-    }
-    return(lapply(seq_along(inv_metric), function(i){
-      diag_inv_mass_matrix <- as.numeric(inv_metric[[i]])
-      if(is.matrix(inv_metric[[i]])){
-        diag_inv_mass_matrix <- diag(inv_metric[[i]])
-      }
+    })
+}
+
+#' @keywords internal
+backend_get_sampler_state_cmdstanr <- function(fit, ...) {
+  inv_metric <- fit$inv_metric(matrix = FALSE)
+  step_size <- backend_get_cmdstanr_step_size(fit)
+  if(length(step_size) != length(inv_metric)){
+    step_size <- rep(NA_real_, length(inv_metric))
+  }
+
+  lapply(seq_along(inv_metric), function(i){
       list(
         adaption_terminated = NA,
         step_size = step_size[i],
-        diag_inv_mass_matrix = diag_inv_mass_matrix
+        inv_metric = inv_metric[[i]],
+        metric_type = backend_metric_type_from_inv_metric(inv_metric[[i]])
       )
-    }))
+    })
+}
+
+#' @keywords internal
+backend_get_cmdstanr_step_size <- function(fit) {
+  sampler_diagnostics <- as.array(
+    fit$sampler_diagnostics(inc_warmup = FALSE, format = "draws_array")
+  )
+  variable_names <- dimnames(sampler_diagnostics)[[3]]
+  step_idx <- which(variable_names == "stepsize__")
+  if(length(step_idx) != 1L){
+    return(rep(NA_real_, dim(sampler_diagnostics)[2]))
   }
-  stop("Unknown backend '", backend, "'.", call. = FALSE)
+  apply(
+    sampler_diagnostics[, , step_idx, drop = FALSE],
+    2,
+    function(x) as.numeric(x[1])
+  )
+}
+
+#' @keywords internal
+backend_metric_type_from_inv_metric <- function(inv_metric) {
+  if(is.matrix(inv_metric)) {
+    return("dense_e")
+  }
+  "diag_e"
+}
+
+#' Backend adaptation info
+#'
+#' @keywords internal
+backend_get_adaptation_info <- function(backend, fit, ...) {
+  state <- backend_get_sampler_state(backend, fit, ...)
+  lapply(state, function(chain_state){
+    diag_inv_mass_matrix <- as.numeric(chain_state$inv_metric)
+    if(is.matrix(chain_state$inv_metric)){
+      diag_inv_mass_matrix <- diag(chain_state$inv_metric)
+    }
+    list(
+      adaption_terminated = chain_state$adaption_terminated,
+      step_size = chain_state$step_size,
+      diag_inv_mass_matrix = diag_inv_mass_matrix
+    )
+  })
 }
 
 #' Backend number of unconstrained parameters
@@ -174,8 +223,11 @@ backend_get_num_upars <- function(backend, fit, ...) {
     return(rstan::get_num_upars(fit, ...))
   }
   if(backend == "cmdstanr"){
-    ai <- backend_get_adaptation_info(backend, fit)
-    return(length(ai[[1]]$diag_inv_mass_matrix))
+    sampler_state <- backend_get_sampler_state(backend, fit)
+    if(is.matrix(sampler_state[[1]]$inv_metric)){
+      return(nrow(sampler_state[[1]]$inv_metric))
+    }
+    return(length(sampler_state[[1]]$inv_metric))
   }
   stop("Unknown backend '", backend, "'.", call. = FALSE)
 }
