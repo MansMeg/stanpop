@@ -59,6 +59,7 @@ poll_of_polls <- function(y,
   )
   if(!is.null(time_scale_overrides) && nrow(time_scale_overrides) > 0 &&
      !model_supports_time_scale_overrides(model)) {
+    # Only models with step_scale_t in Stan can safely fit on a mixed latent grid.
     stop(
       "'time_scale_overrides' requires a model that uses 'step_scale_t'. ",
       "Model '", model, "' does not support time scale overrides in fitting.",

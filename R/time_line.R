@@ -5,15 +5,15 @@
 #' the [time_scale] of interest.
 #'
 #' @details
-#' The timeline is created based on full months and week.
+#' The timeline is created based on full months, week or days.
 #' If a [start_date] is supplied, length(x) no of days/weeks/months
 #' units are added, including the day/week/month of [start_date].
 #' Hence, the number of total days of the [time_line] will change,
 #' based on the weekday of [start_date].
 #'
-#' If [time_range] is supplied, the [time_line] will include all
-#' days/weeks/months that is included, fully or partial, by the
-#' [time_range].
+#' If [time_range] is supplied, the [time_line] will include every
+#' day/week/month that overlaps the closed interval defined by
+#' [time_range], including partial periods at both boundaries.
 #'
 #' @param x a vector of the same length as the [time_line],
 #' a [polls_data] object, or a [time_range] object.
@@ -23,9 +23,9 @@
 #' @param week_start What is week starting day (1 = Monday, Default or 7 = Sunday).
 #'
 #' @return a [time_line] object. A list with two data
-#' frames, one for a [daily] time_line and one with the
+#' frames, one for a [daily] [time_line] and one with the
 #' [time_line] for the chosen [time_scale].
-#' Both data.frames consist of a date variable and
+#' Both [data.frames] consist of a [date] variable and
 #' a [t] index column.
 #'
 #' @export
@@ -43,6 +43,8 @@ time_line.polls_data <- function(x, time_scale, ..., week_start = getOption("lub
 time_line.time_range <- function(x, time_scale, ..., week_start = getOption("lubridate.week.start", 1)){
   checkmate::assert_choice(time_scale, supported_time_scales())
 
+  # Count how many latent time-scale 'buckets' the closed time_range overlaps.
+  # For week/month we first replace the endpoints by the start date of their bucket.
   if(time_scale == "day"){
     n_time_units <- as.integer(x[2] - x[1]) + 1
   } else if (time_scale == "week") {
@@ -55,6 +57,10 @@ time_line.time_range <- function(x, time_scale, ..., week_start = getOption("lub
   } else {
     stop("Not implemented")
   }
+
+  # Build the timeline from the number of overlapping time-scale buckets, then
+  # trim any overshoot on the right so the final object ends at the supplied
+  # closed time_range.
   tl <- time_line(x = 1:n_time_units, time_scale, start_date = x[1], ..., week_start = week_start)
   tl$daily <- tl$daily[tl$daily$date <= x[2],]
   tl$time_line <- tl$time_line[tl$time_line$date <= x[2],]
@@ -71,6 +77,10 @@ time_line.numeric <- function(x, time_scale, start_date, ..., week_start = getOp
   start_date <- as.Date(start_date)
   checkmate::assert_date(start_date)
 
+  # Build the daily table with one row per calendar date, then map each date
+  # to the start date of its day/week/month bucket.
+  # For week/month we create enough calendar days to cover the requested number
+  # of latent buckets, starting from the bucket that contains start_date.
   if(time_scale == "day"){
     dtl <- tibble::tibble(date = (start_date + 0:(length(x) - 1)))
     dtl$t <- 1:nrow(dtl)
@@ -93,6 +103,8 @@ time_line.numeric <- function(x, time_scale, start_date, ..., week_start = getOp
     stop("Not implemented")
   }
 
+  # Build the latent time-point table from the unique bucket dates, then join
+  # the latent index back onto each daily row and assemble the final time_line object.
   tsd <- unique(dtl$time_line_date)
   tsd <- tsd[order(tsd)]
   tl <- tibble::tibble(date = tsd,
@@ -133,6 +145,11 @@ assert_time_line <- function(x){
 
 #' Convert from days to time scale
 #'
+#' @description
+#' Convert each date in [x] to the start date of its corresponding
+#' [time_scale] bucket/latent slot. For example, dates can be mapped to the same
+#' week start or month start when constructing a latent time line.
+#'
 #' @param x a vector of dates to convert to a specific
 #'          [time_scale]
 #' @param time_scale to use.
@@ -169,6 +186,11 @@ time_scale_as_days <- function(time_scale){
 }
 
 #' Get time points from a time line object
+#'
+#' @description
+#' Look up one index value from the [daily] table of a [time_line] object
+#' for each date in [dates]. This is typically used to convert calendar
+#' dates to latent time-point indices such as [time_line_t].
 #'
 #' @param dates a vector with dates to convert to time points
 #' @param tl a [time_line] object
@@ -251,7 +273,7 @@ assert_poll_data_in_time_line <- function(pd, tl){
 }
 
 #' Assert that the poll_data object dates are available
-#' within the time_line using time_scale
+#' within the [time_line] using time_scale
 #'
 #' @description
 #' The assertion creates a [time_line] using the [time_scale]
@@ -280,7 +302,7 @@ assert_poll_data_in_time_line_using_time_range <- function(pd, ts, tr){
 
 #' Get time line from polls or time range
 #'
-#' @param x a polls data object
+#' @param x a [polls_data] object
 #' @param time_range a time range object
 #' @param time_scale a time_scale
 get_time_line <- function(x, time_range, time_scale){
@@ -300,10 +322,10 @@ assert_time_scale <- function(x){
   checkmate::assert_choice(x, choices = supported_time_scales())
 }
 
-#' Validate Time Scale Overrides
+#' Validate Time Scale Override
 #'
 #' @description
-#' Validate a [time_scale_overrides] object against a data frame of available dates.
+#' Validate a [time_scale_overrides] object against a [data.frame] of available dates.
 #' Override ranges are inclusive, must be fully contained in [dates$date], and
 #' must not overlap.
 #'
@@ -360,8 +382,12 @@ assert_time_scale_overrides <- function(x, dates, null.ok = TRUE){
     }
   }
 
+  # Sort the override intervals, then check whether any interval starts
+  # before the previous one has ended.
   x_sorted <- x[order(x$from, x$to), , drop = FALSE]
   if(nrow(x_sorted) > 1){
+    # After sorting, it is enough to compare adjacent inclusive ranges to
+    # detect overlaps in the override schedule.
     overlapping <- x_sorted$from[-1] <= x_sorted$to[-nrow(x_sorted)]
     if(any(overlapping)){
       overlap_idx <- which(overlapping)[1]
@@ -376,7 +402,8 @@ assert_time_scale_overrides <- function(x, dates, null.ok = TRUE){
   invisible(TRUE)
 }
 
-#' Normalize Time Scale Overrides
+
+#' Expand Time Scale Overrides to a Daily Schedule
 #'
 #' @description
 #' Create a daily schedule of effective time scales over a model time range.
@@ -402,12 +429,15 @@ normalize_time_scale_overrides <- function(time_scale, time_scale_overrides = NU
   dates <- tibble::tibble(date = seq(from = model_time_range["from"], to = model_time_range["to"], by = 1))
   assert_time_scale_overrides(time_scale_overrides, dates = dates)
 
+  # Setup the schedule
   schedule <- tibble::tibble(
     date = dates$date,
     time_scale = rep(time_scale, nrow(dates))
   )
 
   if(!is.null(time_scale_overrides) && nrow(time_scale_overrides) > 0){
+    # Start from the base time scale for every date, then overwrite the dates
+    # covered by inclusive override ranges.
     time_scale_overrides <- time_scale_overrides[order(time_scale_overrides$from, time_scale_overrides$to), , drop = FALSE]
     for(i in seq_len(nrow(time_scale_overrides))){
       idx <- schedule$date >= time_scale_overrides$from[i] & schedule$date <= time_scale_overrides$to[i]
@@ -415,6 +445,8 @@ normalize_time_scale_overrides <- function(time_scale, time_scale_overrides = NU
     }
   }
 
+  # Store the duration of each effective scale (days/week/month) in days so
+  # downstream code can compare mixed step sizes against the base latent scale.
   schedule$time_scale_days <- unname(vapply(
     schedule$time_scale,
     FUN = function(x) as.integer(time_scale_as_days(x)),
@@ -462,9 +494,14 @@ time_line_with_overrides <- function(model_time_range,
     time_scale_dates(as.Date(date), scale, week_start = week_start)
   }
 
+  # Build the latent grid by walking through the daily schedule and adding a new
+  # latent date whenever the anchor date for the current bucket is later than the
+  # previous latent date.
   latent_dates <- get_anchor_date(schedule$date[1], schedule$time_scale[1])
   current_latent_date <- latent_dates[1]
   if(nrow(schedule) > 1){
+    # Scan the daily schedule from left to right and add a new latent date only
+    # when the current date belongs to a later anchor date than the previous one.
     for(i in 2:nrow(schedule)){
       anchor_date <- get_anchor_date(schedule$date[i], schedule$time_scale[i])
       if(anchor_date > current_latent_date){
@@ -474,6 +511,8 @@ time_line_with_overrides <- function(model_time_range,
     }
   }
 
+  # Create the daily table and map each calendar date to the latent time point
+  # given by the most recent latent anchor date at or before that day.
   daily <- schedule
   daily$t <- seq_len(nrow(daily))
   latent_date_num <- as.numeric(latent_dates)
@@ -482,10 +521,14 @@ time_line_with_overrides <- function(model_time_range,
   daily$time_line_date <- latent_dates[time_line_t]
   daily <- daily[, c("date", "t", "time_scale", "time_scale_days", "time_line_date", "time_line_t")]
 
+  # Add delta_days and step_scale
   base_time_scale_days <- as.integer(time_scale_as_days(time_scale))
   delta_days <- c(NA_integer_, as.integer(diff(latent_dates)))
+  # Rescale transitions relative to the base time scale: e.g. for a weekly
+  # base scale, a 1-day step gets sqrt(1/7) while a 7-day step gets 1.
   step_scale <- c(NA_real_, sqrt(delta_days[-1] / base_time_scale_days))
 
+  # Finalize the time_line object
   tl <- list(
     daily = daily,
     time_line = tibble::tibble(
@@ -502,8 +545,13 @@ time_line_with_overrides <- function(model_time_range,
   tl
 }
 
-#' Expand a time_line object to a new time range
+#' Expand a [time_line] object to a new time range
 #' but keep the same time point index.
+#'
+#' @description
+#' Rebuild a [time_line] on a larger [time_range] while shifting the new
+#' daily and latent indices so that dates already present in [tl] keep the
+#' same [t] and [time_line_t] values as before.
 #'
 #' @param tl a time_line to expand
 #' @param time_range a new time range to expand to
