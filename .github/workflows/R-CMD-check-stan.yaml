@@ -50,12 +50,8 @@ jobs:
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          extra-packages: any::rcmdcheck, any::posterior, any::remotes
+          extra-packages: any::rcmdcheck, any::posterior
           needs: check
-
-      - name: Install cmdstanr from GitHub
-        run: remotes::install_github("stan-dev/cmdstanr")
-        shell: Rscript {0}
 
       - name: Install CmdStan
         run: |
