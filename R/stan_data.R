@@ -287,9 +287,9 @@ stan_data_known_state <- function(y_name, stan_data_time_line, known_state){
 #'
 #' @details
 #' This helper rebuilds the time-line-dependent pieces of the Stan input for the
-#' override-aware latent grid. In particular, it filters [known_state] to the
-#' new grid, re-aggregates poll time weights, remaps latent start and end
-#' indices, and adds mixed-step fields such as `delta_days_t` and
+#' override-aware latent grid. In particular, it filters [known_state] to dates
+#' present in the override-aware time line, re-aggregates poll time weights,
+#' remaps latent start and end indices, and adds mixed-step fields such as `delta_days_t` and
 #' `step_scale_t`. The resulting objects are attached as
 #' [stan_data_with_overrides] and [time_line_with_overrides] so callers can
 #' compare the legacy and override-aware paths before switching models over.
@@ -403,7 +403,7 @@ attach_stan_data_with_overrides <- function(spd,
   if((is_model8k || is_model8m) && !is.null(known_state)){
     # Newer 8k/8m helpers can rebuild their shared fields directly from the
     # override-aware time line, optionally switching g_t and g_i to
-    # calendar-day differences when mixed step sizes are active.
+    # calendar-day differences when time-scale overrides are present.
     sd <- stan_data_add_model8km_common_fields(
       stan_data = sd,
       x = x,

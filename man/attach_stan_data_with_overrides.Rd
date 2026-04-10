@@ -2,7 +2,7 @@
 % Please edit documentation in R/stan_data.R
 \name{attach_stan_data_with_overrides}
 \alias{attach_stan_data_with_overrides}
-\title{Build a Parallel Stan Data Path with Time Scale Overrides}
+\title{Attach Override-Aware Stan Data to a [stan_polls_data] Object}
 \usage{
 attach_stan_data_with_overrides(
   spd,
@@ -46,8 +46,18 @@ The input [stan_polls_data] object with [stan_data_with_overrides]
   and [time_line_with_overrides] added.
 }
 \description{
-Build a parallel future [stan_data] path using [time_line_with_overrides()].
-The current [stan_data] and [time_line] fields are left unchanged; the future
-path is attached in [stan_data_with_overrides] and [time_line_with_overrides].
+Build an additional Stan data path on a time line created by
+[time_line_with_overrides()]. The existing [stan_data] and [time_line]
+fields are kept unchanged so legacy models continue to use the original
+constant-scale inputs.
+}
+\details{
+This helper rebuilds the time-line-dependent pieces of the Stan input for the
+override-aware latent grid. In particular, it filters [known_state] to dates
+present in the override-aware time line, re-aggregates poll time weights,
+remaps latent start and end indices, and adds mixed-step fields such as `delta_days_t` and
+`step_scale_t`. The resulting objects are attached as
+[stan_data_with_overrides] and [time_line_with_overrides] so callers can
+compare the legacy and override-aware paths before switching models over.
 }
 \keyword{internal}
