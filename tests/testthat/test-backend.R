@@ -24,6 +24,24 @@ test_that("backend_relist_flat_draw_to_init reconstructs init objects from flat 
   )
 })
 
+test_that("backend_build_init_skeleton_from_variable_names reconstructs parameter shapes", {
+  backend_build_init_skeleton_from_variable_names <- get_internal("backend_build_init_skeleton_from_variable_names")
+
+  skeleton <- backend_build_init_skeleton_from_variable_names(
+    c(
+      "alpha",
+      "beta[1]", "beta[2]",
+      "gamma[1,1]", "gamma[2,1]", "gamma[1,2]", "gamma[2,2]",
+      "lp__", "stepsize__"
+    )
+  )
+
+  expect_named(skeleton, c("alpha", "beta", "gamma"))
+  expect_identical(skeleton$alpha, NA_real_)
+  expect_equal(dim(skeleton$beta), 2L, tolerance = 0)
+  expect_equal(dim(skeleton$gamma), c(2L, 2L), tolerance = 0)
+})
+
 test_that("backend_sample with rstan returns a stanfit", {
   skip_if_no_stan_tests()
   skip_if_no_rstan_tests()
