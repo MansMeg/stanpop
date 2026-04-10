@@ -2,11 +2,16 @@
 % Please edit documentation in R/backend.R
 \name{backend_get_sampler_state}
 \alias{backend_get_sampler_state}
-\title{Backend adaptation info}
+\title{Backend sampler state for warm starts}
 \usage{
 backend_get_sampler_state(backend, fit, ...)
 }
 \description{
-Backend adaptation info
+Extract backend-specific sampler state that Stan uses on the unconstrained
+parameter space, notably the per-chain step size and inverse metric. This is
+complementary to [backend_get_last_draws_for_init()], which returns
+constrained parameter values for Stan's `init` argument. Warm-started refits
+therefore combine constrained draws for initialization with unconstrained
+sampler state for HMC tuning.
 }
 \keyword{internal}

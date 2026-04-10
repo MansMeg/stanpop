@@ -264,6 +264,8 @@ backend_get_last_draws_for_init_cmdstanr <- function(fit, ...) {
   })
 }
 
+#' Build an RStan init skeleton
+#'
 #' @description
 #' Build a parameter-shaped skeleton for relisting RStan draws back into the
 #' constrained structure expected by Stan's `init` argument. When RStan stores
@@ -271,6 +273,9 @@ backend_get_last_draws_for_init_cmdstanr <- function(fit, ...) {
 #' right structure and can be reused directly. Otherwise we reconstruct the
 #' skeleton from `fit@par_dims` so the last post-warmup draw can still be
 #' relisted into a per-chain init object.
+#'
+#' @param fit An `rstan::stanfit` object whose parameter dimensions are used to
+#'   recover the structure expected by Stan's `init` argument.
 #'
 #' @keywords internal
 backend_get_rstan_init_skeleton <- function(fit) {
@@ -289,6 +294,8 @@ backend_get_rstan_init_skeleton <- function(fit) {
   })
 }
 
+#' Relist a flat Stan draw into an init object
+#'
 #' @description
 #' Convert a named flat draw vector, such as the per-chain output returned by
 #' Stan with variable names like `alpha`, `beta[1]`, or `gamma[2,1]`, back into
