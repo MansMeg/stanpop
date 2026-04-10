@@ -246,6 +246,105 @@ backend_get_last_draws_for_init_rstan <- function(fit, ...) {
     backend_relist_flat_draw_to_init(chain_draw, skeleton[[chain_id]])
   })
 }
+
+#' @keywords internal
+backend_get_last_draws_for_init_cmdstanr <- function(fit, ...) {
+  skeleton <- fit$init()
+  draws <- as.array(fit$draws(inc_warmup = FALSE, format = "draws_array"))
+  if(dim(draws)[1] < 1L){
+    stop("CmdStanR fit does not contain post-warmup draws.", call. = FALSE)
+  }
+
+  last_iter <- dim(draws)[1]
+  variable_names <- dimnames(draws)[[3]]
+  lapply(seq_len(dim(draws)[2]), function(chain_id){
+    chain_draw <- as.numeric(draws[last_iter, chain_id, ])
+    names(chain_draw) <- variable_names
+    backend_relist_flat_draw_to_init(chain_draw, skeleton[[chain_id]])
+  })
+}
+
+#' @description
+#' Build a parameter-shaped skeleton for relisting RStan draws back into the
+#' constrained structure expected by Stan's `init` argument. When RStan stores
+#' original initial values in `fit@inits`, those objects already provide the
+#' right structure and can be reused directly. Otherwise we reconstruct the
+#' skeleton from `fit@par_dims` so the last post-warmup draw can still be
+#' relisted into a per-chain init object.
+#'
+#' @keywords internal
+backend_get_rstan_init_skeleton <- function(fit) {
+  if(length(fit@inits) > 0L){
+    return(fit@inits)
+  }
+
+  n_chains <- length(fit@sim$samples)
+  lapply(seq_len(n_chains), function(chain_id){
+    lapply(fit@par_dims, function(parameter_dims){
+      if(length(parameter_dims) == 0L){
+        return(NA_real_)
+      }
+      array(NA_real_, dim = parameter_dims)
+    })
+  })
+}
+
+#' @description
+#' Convert a named flat draw vector, such as the per-chain output returned by
+#' Stan with variable names like `alpha`, `beta[1]`, or `gamma[2,1]`, back into
+#' the nested parameter structure expected by Stan's `init` argument. The
+#' `skeleton` supplies the target parameter names and dimensions, and this
+#' helper fills that structure with the corresponding values from `draw` while
+#' preserving scalar, vector, and array shapes. It is used by the backend-
+#' specific last-draw extractors when turning saved Stan draws into reusable
+#' per-chain init objects.
+#'
+#' @param draw A named numeric vector containing one chain's saved draw on the
+#'   constrained parameter scale. Names are expected to follow Stan's usual
+#'   parameter naming convention, for example `alpha`, `beta[1]`, or
+#'   `gamma[2,1]`.
+#' @param skeleton A named list giving the target parameter structure for the
+#'   returned init object. Each element provides the parameter name and shape to
+#'   fill, typically from a previous init object or from parameter dimensions
+#'   reconstructed from the fitted model.
+#'
+#' @keywords internal
+backend_relist_flat_draw_to_init <- function(draw, skeleton) {
+  checkmate::assert_numeric(draw, any.missing = FALSE, null.ok = FALSE)
+  checkmate::assert_list(skeleton, names = "named")
+
+  out <- skeleton
+  parameter_roots <- names(skeleton)
+  for(i in seq_along(parameter_roots)){
+    root <- parameter_roots[[i]]
+    template <- skeleton[[root]]
+    idx <- grepl(paste0("^", root, "(\\[|$)"), names(draw))
+    values <- unname(draw[idx])
+
+    if(length(template) == 0L){
+      out[[root]] <- template
+      next
+    }
+    if(length(values) != length(template)){
+      stop(
+        "Cannot reconstruct init for parameter '", root,
+        "' from the saved draws. Expected ", length(template),
+        " value(s) but found ", length(values), ".",
+        call. = FALSE
+      )
+    }
+
+    if(is.null(dim(template)) && length(template) == 1L){
+      out[[root]] <- as.numeric(values[[1]])
+    } else {
+      out[[root]] <- template
+      out[[root]][] <- as.numeric(values)
+    }
+  }
+
+  out
+}
+
 #' Backend adaptation info
 #'
 #' @keywords internal
