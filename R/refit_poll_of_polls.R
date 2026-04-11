@@ -315,7 +315,13 @@ refit_materialize_warm_start_arguments <- function(x,
   if("init" %in% names(warm_start)) {
     sample_args <- refit_set_named_argument(sample_args, "init", warm_start$init)
   } else {
-    sample_args <- refit_set_named_argument(sample_args, "init", get_last_draws())
+    last_draws <- get_last_draws()
+    assert_refit_last_draws_complete_for_init(
+      backend = x$backend,
+      fit = x$stan_fit,
+      init = last_draws
+    )
+    sample_args <- refit_set_named_argument(sample_args, "init", last_draws)
   }
 
   # Handle inv metric
@@ -623,6 +629,41 @@ refit_sampler_state_field <- function(state, field, simplify = FALSE) {
     return(values)
   }
   unlist(values, use.names = FALSE)
+}
+
+#' @keywords internal
+assert_refit_last_draws_complete_for_init <- function(backend, fit, init) {
+  assert_pop_backend(backend)
+  checkmate::assert_list(init)
+
+  expected <- backend_get_init_skeleton(backend, fit)
+  if(length(init) != length(expected)) {
+    stop(
+      "Automatic init reuse requires one complete last draw per chain. ",
+      "Expected ", length(expected), " chain(s) but found ", length(init), ".",
+      call. = FALSE
+    )
+  }
+
+  missing_roots <- unlist(lapply(seq_along(expected), function(chain_id) {
+    missing <- setdiff(names(expected[[chain_id]]), names(init[[chain_id]]))
+    if(length(missing) == 0L) {
+      return(character(0))
+    }
+    paste0("chain ", chain_id, ": ", missing)
+  }), use.names = FALSE)
+
+  if(length(missing_roots) > 0L) {
+    stop(
+      "Automatic init reuse requires a complete last draw in 'x'. ",
+      "Missing parameter roots: ",
+      paste0(missing_roots, collapse = ", "),
+      ". Disable init reuse with warm_start = list(init = NULL) or refit the original model with all parameters needed for initialization saved.",
+      call. = FALSE
+    )
+  }
+
+  invisible(TRUE)
 }
 
 #' @keywords internal
