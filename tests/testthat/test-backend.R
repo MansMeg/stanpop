@@ -217,12 +217,14 @@ test_that("backend_get_last_draws_for_init output can be passed back to rstan as
   expect_equal(rstan::get_inits(refit), init_values, tolerance = 0)
 })
 
-test_that("backend_get_last_draws_for_init output can be passed from rstan to cmdstanr as init", {
+test_that("rstan last draw and sampler state can fully warm-start cmdstanr on a constrained model", {
   skip_if_no_stan_tests()
   skip_if_no_cmdstanr_tests()
 
   backend_sample <- get_internal("backend_sample")
   backend_get_last_draws_for_init <- get_internal("backend_get_last_draws_for_init")
+  backend_get_sampler_state <- get_internal("backend_get_sampler_state")
+  backend_get_rstan_init_skeleton <- get_internal("backend_get_rstan_init_skeleton")
   fit <- suppressWarnings(
     backend_sample(
       backend = "rstan",
