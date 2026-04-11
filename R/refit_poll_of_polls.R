@@ -680,11 +680,11 @@ assert_warm_start_is_compatible <- function(x, constructor_args, sample_args) {
     return(invisible(TRUE))
   }
 
-  # Resolve the refit chain count, then coerce warm-start inputs into comparable per-chain forms.
-  requested_chains <- refit_requested_chains(x, sample_args)
-  normalized_init <- refit_normalize_init_for_validation(sample_args$init, requested_chains)
-  normalized_inv_metric <- refit_normalize_inv_metric_for_validation(sample_args$inv_metric, requested_chains)
-  refit_normalize_step_size_for_validation(sample_args$step_size, requested_chains)
+  # Resolve the chain count used by the refit, then coerce warm-start inputs into comparable per-chain forms.
+  no_of_chains_in_refit <- refit_resolve_chain_count(x, sample_args)
+  normalized_init <- refit_normalize_init_for_validation(sample_args$init, no_of_chains_in_refit)
+  normalized_inv_metric <- refit_normalize_inv_metric_for_validation(sample_args$inv_metric, no_of_chains_in_refit)
+  refit_normalize_step_size_for_validation(sample_args$step_size, no_of_chains_in_refit)
 
   # Start from the parameter dimensions in x, then replace them if changed polls_data requires a rebuilt refit shape.
   changed_polls_data <- !identical(constructor_args$polls_data, x$polls_data)
@@ -730,6 +730,52 @@ assert_warm_start_is_compatible <- function(x, constructor_args, sample_args) {
   }
 
   invisible(TRUE)
+}
+
+#' Resolve the refit chain count for warm-start validation
+#'
+#' @description
+#' Resolve how many chains the refit will use when validating warm-start
+#' inputs. The helper prefers an explicit `chains` sampler argument, otherwise
+#' it infers the chain count from chain-specific warm-start values such as
+#' `init`, `inv_metric`, or `step_size`, and finally falls back to the number
+#' of chains stored in `x`.
+#'
+#' @param x Existing [poll_of_polls] object being refit.
+#' @param sample_args Named sampler argument list for the refit.
+#'
+#' @return Integer scalar giving the refit chain count.
+#'
+#' @keywords internal
+refit_resolve_chain_count <- function(x, sample_args) {
+  checkmate::assert_list(sample_args, names = "named")
+
+  # An explicit sampler chains argument overrides any chain count implied by warm-start values.
+  if(!is.null(sample_args$chains)) {
+    checkmate::assert_integerish(sample_args$chains, len = 1L, lower = 1L, any.missing = FALSE)
+    return(as.integer(sample_args$chains)[[1]])
+  }
+
+  # If chains was not supplied explicitly, infer it from any chain-specific warm-start inputs and require them to agree.
+  inferred_lengths <- c(
+    refit_chain_specific_argument_length(sample_args$init, "init"),
+    refit_chain_specific_argument_length(sample_args$inv_metric, "inv_metric"),
+    refit_chain_specific_argument_length(sample_args$step_size, "step_size")
+  )
+  inferred_lengths <- inferred_lengths[!is.na(inferred_lengths)]
+  if(length(inferred_lengths) > 0L) {
+    unique_lengths <- unique(inferred_lengths)
+    if(length(unique_lengths) != 1L) {
+      stop(
+        "Warm-start arguments imply incompatible chain counts. ",
+        "Supply consistent chain-specific warm-start values or set 'chains' explicitly.",
+        call. = FALSE
+      )
+    }
+    return(unique_lengths[[1]])
+  }
+
+  length(backend_get_sampler_state(x$backend, x$stan_fit))
 }
 #' @keywords internal
 assert_refit_last_draws_complete_for_init <- function(backend, fit, init) {
