@@ -624,3 +624,15 @@ refit_sampler_state_field <- function(state, field, simplify = FALSE) {
   }
   unlist(values, use.names = FALSE)
 }
+
+#' @keywords internal
+refit_metric_type_from_inv_metric <- function(inv_metric) {
+  if(is.list(inv_metric)) {
+    metric_types <- unique(vapply(inv_metric, backend_metric_type_from_inv_metric, character(1)))
+    if(length(metric_types) != 1L) {
+      stop("All inverse metrics must use the same metric type.", call. = FALSE)
+    }
+    return(metric_types[[1]])
+  }
+  backend_metric_type_from_inv_metric(inv_metric)
+}
