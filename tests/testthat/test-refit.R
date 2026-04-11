@@ -1,5 +1,8 @@
 context("refit")
 
+# Assert there is a test to start from rstan and then add one data point and retrain
+# with the same starting values.
+
 make_mock_pop_for_refit_helpers <- function(backend = c("cmdstanr", "rstan")){
   backend <- match.arg(backend)
   pd <- polls_data(
