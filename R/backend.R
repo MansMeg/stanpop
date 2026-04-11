@@ -386,12 +386,16 @@ backend_extract_parameter_roots_from_stan_code <- function(stan_code) {
   lines <- strsplit(stan_code, "\n", fixed = TRUE)[[1]]
   # Strip line comments and surrounding whitespace before locating the parameters block.
   normalized_lines <- trimws(sub("//.*$", "", lines))
+
+  # Find the opening line of the parameters block.
   start_idx <- which(grepl("^parameters\\s*\\{$", normalized_lines))
   if(length(start_idx) == 0L) {
     return(character())
   }
 
   normalized_lines <- normalized_lines[(start_idx[[1]] + 1L):length(normalized_lines)]
+
+  # Stop at the first matching block terminator after `parameters {`.
   end_idx <- which(normalized_lines == "}")
   if(length(end_idx) == 0L) {
     return(character())
@@ -402,6 +406,8 @@ backend_extract_parameter_roots_from_stan_code <- function(stan_code) {
 
   declarations <- character()
   current <- character()
+
+  # Accumulate declarations until `;` so multi-line parameter declarations are handled.
   for(line in lines) {
     current <- c(current, line)
     if(grepl(";\\s*$", line)) {
@@ -410,6 +416,7 @@ backend_extract_parameter_roots_from_stan_code <- function(stan_code) {
     }
   }
 
+  # Extract the final declared identifier from each parameter declaration.
   roots <- vapply(declarations, function(declaration) {
     match <- regmatches(
       declaration,
