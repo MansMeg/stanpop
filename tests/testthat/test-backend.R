@@ -241,30 +241,46 @@ test_that("rstan last draw and sampler state can fully warm-start cmdstanr on a 
   )
 
   init_values <- backend_get_last_draws_for_init("rstan", fit)
+  state <- backend_get_sampler_state("rstan", fit)
+  skeleton <- backend_get_rstan_init_skeleton(fit)
+
+  expect_length(init_values, 1)
+  expect_setequal(names(init_values[[1]]), names(skeleton[[1]]))
+  expect_false(any(vapply(init_values[[1]], function(x) anyNA(x), logical(1))))
+  expect_identical(state[[1]]$metric_type, "diag_e")
+
   refit <- backend_sample(
     backend = "cmdstanr",
     sample_arguments = list(
       data = list(),
       chains = 1,
       parallel_chains = 1,
-      iter_warmup = 1,
+      iter_warmup = 0,
       iter_sampling = 3,
+      adapt_engaged = FALSE,
       seed = 4712,
       refresh = 0,
       show_messages = FALSE,
       show_exceptions = FALSE,
-      init = init_values
+      init = init_values,
+      inv_metric = state[[1]]$inv_metric,
+      metric = state[[1]]$metric_type,
+      step_size = state[[1]]$step_size
     ),
     stan_file = sampler_state_constrained_test_stan_file()
   )
 
   init_from_fit <- refit$init()
+  refit_state <- backend_get_sampler_state("cmdstanr", refit)
   expect_length(init_from_fit, 1)
   expect_equal(
     lapply(init_from_fit, unlist, use.names = TRUE),
     lapply(init_values, unlist, use.names = TRUE),
     tolerance = 1e-12
   )
+  expect_identical(refit_state[[1]]$metric_type, state[[1]]$metric_type)
+  expect_equal(refit_state[[1]]$inv_metric, state[[1]]$inv_metric, tolerance = 1e-12)
+  expect_equal(refit_state[[1]]$step_size, state[[1]]$step_size, tolerance = 1e-12)
 })
 
 test_that("backend_get_sampler_state with rstan returns reusable sampler state", {

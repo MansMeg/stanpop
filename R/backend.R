@@ -193,7 +193,7 @@ backend_get_cmdstanr_step_size <- function(fit) {
     sampler_diagnostics[, , step_idx, drop = FALSE],
     2,
     function(x) as.numeric(x[1])
-  )
+  ) |> unname()
 }
 
 #' @keywords internal
