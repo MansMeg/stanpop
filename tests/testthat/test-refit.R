@@ -169,6 +169,46 @@ test_that("refit_poll_of_polls has a narrow refit-oriented signature", {
   expect_false("model" %in% names(formals(refit_poll_of_polls)))
 })
 
+test_that("rerun_poll_of_polls delegates to refit_poll_of_polls with warm start disabled", {
+  pop <- make_mock_pop_for_refit_helpers("cmdstanr")
+
+  testthat::local_mocked_bindings(
+    refit_poll_of_polls = function(x, ..., warm_start = list()) {
+      list(
+        x = x,
+        dots = list(...),
+        warm_start = warm_start
+      )
+    },
+    .package = "stanpop"
+  )
+
+  res <- rerun_poll_of_polls(
+    pop,
+    polls_data = pop$polls_data,
+    iter_sampling = 42,
+    seed = 99
+  )
+
+  expect_identical(res$x, pop)
+  expect_identical(res$dots$polls_data, pop$polls_data)
+  expect_identical(res$dots$iter_sampling, 42)
+  expect_identical(res$dots$seed, 99)
+  expect_identical(
+    res$warm_start,
+    list(init = NULL, inv_metric = NULL, step_size = NULL)
+  )
+})
+
+test_that("rerun_poll_of_polls rejects explicit warm_start", {
+  pop <- make_mock_pop_for_refit_helpers("cmdstanr")
+
+  expect_error(
+    rerun_poll_of_polls(pop, warm_start = list(init = NULL)),
+    "does not accept 'warm_start'"
+  )
+})
+
 test_that("refit_poll_of_polls defaults to cmdstanr and inherits omitted arguments", {
   pop <- make_mock_pop_for_refit_helpers("rstan")
 
