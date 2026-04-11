@@ -1,8 +1,5 @@
 context("refit")
 
-# Assert there is a test to start from rstan and then add one data point and retrain
-# with the same starting values.
-
 make_mock_pop_for_refit_helpers <- function(backend = c("cmdstanr", "rstan")){
   backend <- match.arg(backend)
   pd <- polls_data(
@@ -334,4 +331,88 @@ test_that("refit_poll_of_polls validates warm_start names", {
     refit_poll_of_polls(pop, warm_start = list(unknown = 1)),
     "Unknown 'warm_start' element"
   )
+})
+
+test_that("refit_poll_of_polls with cmdstanr reuses constrained init values and inverse metric from rstan", {
+  skip_if_no_stan_tests()
+  skip_if_no_rstan_tests()
+  skip_if_no_cmdstanr_tests()
+  skip_if_no_cmdstanr()
+  assert_rstan_available()
+
+  case <- make_model8_mixed_smoke_case(npolls = 12)
+  cfg <- list(
+    sigma_kappa_hyper = 0.03,
+    use_industry_bias = 1L,
+    use_house_bias = 0L,
+    use_design_effects = 0L,
+    use_multivariate_version = 2L,
+    use_softmax = 1L
+  )
+
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          pop <- poll_of_polls(
+            y = case$parties,
+            model = "model8k5",
+            polls_data = case$polls_data,
+            time_scale = case$time_scale,
+            time_scale_overrides = case$time_scale_overrides,
+            known_state = case$known_state,
+            hyper_parameters = cfg,
+            backend = "rstan",
+            iter = 15,
+            warmup = 10,
+            chains = 1,
+            refresh = 0,
+            seed = 4711,
+            cache_dir = NULL
+          )
+        )
+      )
+    )
+  )
+
+  original_state <- backend_get_sampler_state("rstan", pop$stan_fit)
+  original_init <- backend_get_last_draws_for_init("rstan", pop$stan_fit)
+
+  expect_true("sigma_x" %in% names(original_init[[1]]))
+  expect_true(all(original_init[[1]]$sigma_x > 0))
+
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          refit <- refit_poll_of_polls(
+            pop,
+            iter_warmup = 0,
+            iter_sampling = 3,
+            adapt_engaged = FALSE,
+            refresh = 0,
+            seed = 4712,
+            cache_dir = NULL
+          )
+        )
+      )
+    )
+  )
+
+  refit_state <- backend_get_sampler_state("cmdstanr", refit$stan_fit)
+
+  expect_identical(refit$backend, "cmdstanr")
+  expect_identical(refit$stan_arguments$metric, original_state[[1]]$metric_type)
+  expect_equal(refit$stan_arguments$inv_metric[[1]], original_state[[1]]$inv_metric, tolerance = 1e-12)
+  expect_equal(as.numeric(refit$stan_arguments$step_size), original_state[[1]]$step_size, tolerance = 1e-12)
+  expect_equal(
+    lapply(refit$stan_arguments$init, unlist, use.names = TRUE),
+    lapply(original_init, unlist, use.names = TRUE),
+    tolerance = 1e-12
+  )
+  expect_true(all(refit$stan_arguments$init[[1]]$sigma_x > 0))
+
+  expect_identical(refit_state[[1]]$metric_type, original_state[[1]]$metric_type)
+  expect_equal(refit_state[[1]]$inv_metric, original_state[[1]]$inv_metric, tolerance = 1e-12)
+  expect_equal(refit_state[[1]]$step_size, original_state[[1]]$step_size, tolerance = 1e-12)
 })
