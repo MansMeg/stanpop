@@ -360,8 +360,10 @@ backend_get_rstan_init_skeleton <- function(fit) {
 #'
 #' @keywords internal
 backend_relist_flat_draw_to_init <- function(draw, skeleton) {
+  checkmate::assert_numeric(draw, null.ok = FALSE)
   checkmate::assert_list(skeleton, names = "named")
 
+  # Parameter roots are the base Stan names before indexing, e.g. beta for beta[1] and beta[2].
   parameter_roots <- names(skeleton)
   # Ignore saved extras such as lp__ and keep only entries that belong to init parameters.
   relevant_idx <- vapply(
@@ -374,9 +376,10 @@ backend_relist_flat_draw_to_init <- function(draw, skeleton) {
     logical(1)
   )
   draw <- draw[relevant_idx]
-  checkmate::assert_numeric(draw, any.missing = FALSE, null.ok = FALSE)
+  checkmate::assert_numeric(draw, null.ok = FALSE)
 
   out <- skeleton
+  omitted_roots <- character()
   for(i in seq_along(parameter_roots)){
     root <- parameter_roots[[i]]
     template <- skeleton[[root]]
@@ -386,6 +389,21 @@ backend_relist_flat_draw_to_init <- function(draw, skeleton) {
     if(length(template) == 0L){
       out[[root]] <- template
       next
+    }
+    # Some RStan fits do not retain reusable values for every parameter root,
+    # e.g. beta for beta[1] and beta[2]; omit those roots and let Stan fall
+    # back to its default init behavior.
+    if(length(values) == 0L || all(is.na(values))) {
+      out[[root]] <- NULL
+      omitted_roots <- c(omitted_roots, root)
+      next
+    }
+    if(anyNA(values)) {
+      stop(
+        "Cannot reconstruct init for parameter '", root,
+        "' because the saved draws contain missing values.",
+        call. = FALSE
+      )
     }
     if(length(values) != length(template)){
       stop(
@@ -402,6 +420,15 @@ backend_relist_flat_draw_to_init <- function(draw, skeleton) {
       out[[root]] <- template
       out[[root]][] <- as.numeric(values)
     }
+  }
+
+  if(length(omitted_roots) > 0L) {
+    warning(
+      "Missing saved draw values were found for parameter root(s): ",
+      paste0(omitted_roots, collapse = ", "),
+      ". These roots are omitted from the returned init, so Stan will use its default initialization for them.",
+      call. = FALSE
+    )
   }
 
   out

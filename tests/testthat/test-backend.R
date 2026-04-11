@@ -42,6 +42,27 @@ test_that("backend_relist_flat_draw_to_init ignores non-parameter extras in the 
   expect_equal(res$beta, c(1.0, 2.0), tolerance = 0)
 })
 
+test_that("backend_relist_flat_draw_to_init omits parameter roots with only missing values", {
+  backend_relist_flat_draw_to_init <- get_internal("backend_relist_flat_draw_to_init")
+
+  draw <- stats::setNames(
+    c(0.1, NA_real_, NA_real_),
+    c("alpha", "beta[1]", "beta[2]")
+  )
+  skeleton <- list(
+    alpha = 0,
+    beta = numeric(2)
+  )
+
+  expect_warning(
+    res <- backend_relist_flat_draw_to_init(draw, skeleton),
+    "parameter root\\(s\\): beta"
+  )
+
+  expect_identical(res$alpha, 0.1)
+  expect_false("beta" %in% names(res))
+})
+
 test_that("backend_build_init_skeleton_from_variable_names reconstructs parameter shapes", {
   backend_build_init_skeleton_from_variable_names <- get_internal("backend_build_init_skeleton_from_variable_names")
 

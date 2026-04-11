@@ -340,6 +340,9 @@ test_that("refit_poll_of_polls with cmdstanr reuses constrained init values and 
   skip_if_no_cmdstanr()
   assert_rstan_available()
 
+  backend_get_sampler_state <- get_internal("backend_get_sampler_state")
+  backend_get_last_draws_for_init <- get_internal("backend_get_last_draws_for_init")
+
   case <- make_model8_mixed_smoke_case(npolls = 12)
   cfg <- list(
     sigma_kappa_hyper = 0.03,
