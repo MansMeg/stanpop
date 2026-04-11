@@ -24,6 +24,24 @@ test_that("backend_relist_flat_draw_to_init reconstructs init objects from flat 
   )
 })
 
+test_that("backend_relist_flat_draw_to_init ignores non-parameter extras in the draw", {
+  backend_relist_flat_draw_to_init <- get_internal("backend_relist_flat_draw_to_init")
+
+  draw <- stats::setNames(
+    c(0.1, 1.0, 2.0, NA_real_),
+    c("alpha", "beta[1]", "beta[2]", "lp__")
+  )
+  skeleton <- list(
+    alpha = 0,
+    beta = numeric(2)
+  )
+
+  res <- backend_relist_flat_draw_to_init(draw, skeleton)
+
+  expect_identical(res$alpha, 0.1)
+  expect_equal(res$beta, c(1.0, 2.0), tolerance = 0)
+})
+
 test_that("backend_build_init_skeleton_from_variable_names reconstructs parameter shapes", {
   backend_build_init_skeleton_from_variable_names <- get_internal("backend_build_init_skeleton_from_variable_names")
 

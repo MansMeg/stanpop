@@ -360,11 +360,23 @@ backend_get_rstan_init_skeleton <- function(fit) {
 #'
 #' @keywords internal
 backend_relist_flat_draw_to_init <- function(draw, skeleton) {
-  checkmate::assert_numeric(draw, any.missing = FALSE, null.ok = FALSE)
   checkmate::assert_list(skeleton, names = "named")
 
-  out <- skeleton
   parameter_roots <- names(skeleton)
+  # Ignore saved extras such as lp__ and keep only entries that belong to init parameters.
+  relevant_idx <- vapply(
+    names(draw),
+    function(name) any(vapply(
+      parameter_roots,
+      function(root) grepl(paste0("^", root, "(\\[|$)"), name),
+      logical(1)
+    )),
+    logical(1)
+  )
+  draw <- draw[relevant_idx]
+  checkmate::assert_numeric(draw, any.missing = FALSE, null.ok = FALSE)
+
+  out <- skeleton
   for(i in seq_along(parameter_roots)){
     root <- parameter_roots[[i]]
     template <- skeleton[[root]]
