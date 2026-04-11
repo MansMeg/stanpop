@@ -355,13 +355,17 @@ backend_build_init_skeleton_from_variable_names <- function(variable_names) {
 #'
 #' @keywords internal
 backend_get_rstan_init_skeleton <- function(fit) {
+  parameter_roots <- fit@model_pars
   if(length(fit@inits) > 0L){
-    return(fit@inits)
+    return(lapply(fit@inits, function(chain_init) {
+      chain_init[intersect(names(chain_init), parameter_roots)]
+    }))
   }
 
   n_chains <- length(fit@sim$samples)
+  par_dims <- fit@par_dims[intersect(names(fit@par_dims), parameter_roots)]
   lapply(seq_len(n_chains), function(chain_id){
-    lapply(fit@par_dims, function(parameter_dims){
+    lapply(par_dims, function(parameter_dims){
       if(length(parameter_dims) == 0L){
         return(NA_real_)
       }
