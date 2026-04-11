@@ -24,6 +24,77 @@ test_that("backend_relist_flat_draw_to_init reconstructs init objects from flat 
   )
 })
 
+test_that("backend_extract_parameter_roots_from_stan_code keeps only parameters-block roots", {
+  backend_extract_parameter_roots_from_stan_code <- get_internal("backend_extract_parameter_roots_from_stan_code")
+
+  stan_code <- paste(
+    "  parameters   { // leading and internal whitespace should be ignored",
+    "  real alpha;",
+    "  vector[2] beta;",
+    "  array[3] real gamma;",
+    "}",
+    "generated quantities {",
+    "  real min_x_pred;",
+    "}",
+    sep = "\n"
+  )
+
+  roots <- backend_extract_parameter_roots_from_stan_code(stan_code)
+
+  expect_setequal(roots, c("alpha", "beta", "gamma"))
+  expect_false("min_x_pred" %in% roots)
+})
+
+test_that("backend_extract_parameter_roots_from_stan_code parses the test Stan examples", {
+  backend_extract_parameter_roots_from_stan_code <- get_internal("backend_extract_parameter_roots_from_stan_code")
+
+  expect_setequal(
+    backend_extract_parameter_roots_from_stan_code(
+      paste(readLines(sampler_state_test_stan_file(), warn = FALSE), collapse = "\n")
+    ),
+    "y"
+  )
+  expect_setequal(
+    backend_extract_parameter_roots_from_stan_code(
+      paste(readLines(sampler_state_constrained_test_stan_file(), warn = FALSE), collapse = "\n")
+    ),
+    c("sigma", "y")
+  )
+  expect_setequal(
+    backend_extract_parameter_roots_from_stan_code(
+      paste(
+        readLines(testthat::test_path("stan_code", "cov_reg_to_chol.stan"), warn = FALSE),
+        collapse = "\n"
+      )
+    ),
+    c("beta", "sigma", "mu")
+  )
+})
+
+test_that("backend_extract_parameter_roots_from_stan_code parses the packaged Stan models", {
+  backend_extract_parameter_roots_from_stan_code <- get_internal("backend_extract_parameter_roots_from_stan_code")
+
+  stan_files <- list.files(
+    testthat::test_path("..", "..", "inst", "stan_models"),
+    pattern = "\\.stan$",
+    full.names = TRUE
+  )
+
+  expect_true(length(stan_files) > 0L)
+
+  for(stan_file in stan_files) {
+    stan_code <- paste(readLines(stan_file, warn = FALSE), collapse = "\n")
+    roots <- backend_extract_parameter_roots_from_stan_code(stan_code)
+
+    expect_true(length(roots) > 0L, info = basename(stan_file))
+    expect_identical(anyDuplicated(roots), 0L, info = basename(stan_file))
+    expect_true(all(nzchar(roots)), info = basename(stan_file))
+    expect_true(all(c("x_unknown", "sigma_x") %in% roots), info = basename(stan_file))
+    expect_false("min_x_pred" %in% roots, info = basename(stan_file))
+    expect_false("min_x_pred_all" %in% roots, info = basename(stan_file))
+  }
+})
+
 test_that("backend_relist_flat_draw_to_init ignores non-parameter extras in the draw", {
   backend_relist_flat_draw_to_init <- get_internal("backend_relist_flat_draw_to_init")
 
