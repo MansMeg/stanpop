@@ -194,3 +194,61 @@ refit_constructor_argument_names <- function() {
 refit_warm_start_argument_names <- function() {
   c("init", "inv_metric", "metric", "step_size")
 }
+
+#' Normalize explicit warm-start overrides for a refit
+#'
+#' @description
+#' Validate and normalize the `warm_start` list supplied to
+#' [refit_poll_of_polls()]. The helper requires a named list, rejects duplicate
+#' or unsupported element names, and enforces the public `metric` name rather
+#' than the internal `metric_type` variant.
+#'
+#' An empty list means that `refit_poll_of_polls()` should fall back to its
+#' automatic warm-start defaults. Named `NULL` entries are preserved so callers
+#' can explicitly disable a default warm-start component later in the refit
+#' pipeline.
+#'
+#' @param warm_start A named list of explicit warm-start overrides. Supported
+#'   elements are `init`, `inv_metric`, `metric`, and `step_size`.
+#'
+#' @return The validated `warm_start` list, preserving any named `NULL`
+#'   elements.
+#'
+#' @keywords internal
+normalize_refit_warm_start <- function(warm_start) {
+  checkmate::assert_list(warm_start, null.ok = FALSE)
+  if(length(warm_start) == 0L) {
+    return(warm_start)
+  }
+  if(is.null(names(warm_start)) || any(names(warm_start) == "")) {
+    stop("All elements of 'warm_start' must be named.", call. = FALSE)
+  }
+  if(any(duplicated(names(warm_start)))) {
+    stop("Elements of 'warm_start' must have unique names.", call. = FALSE)
+  }
+  if("metric_type" %in% names(warm_start)) {
+    stop(
+      "Use 'metric' rather than 'metric_type' in 'warm_start'.",
+      call. = FALSE
+    )
+  }
+  unknown_names <- setdiff(names(warm_start), refit_warm_start_argument_names())
+  if(length(unknown_names) > 0L) {
+    stop(
+      "Unknown 'warm_start' element(s): ",
+      paste0(unknown_names, collapse = ", "),
+      ". Supported elements are: ",
+      paste0(refit_warm_start_argument_names(), collapse = ", "),
+      ".",
+      call. = FALSE
+    )
+  }
+  warm_start
+}
+
+#' @keywords internal
+refit_remove_inherited_warm_start_arguments <- function(sample_args) {
+  checkmate::assert_list(sample_args, names = "named")
+  sample_args[c("init", "inv_metric", "step_size", "metric_file")] <- NULL
+  sample_args
+}
