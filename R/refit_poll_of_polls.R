@@ -342,7 +342,7 @@ refit_materialize_warm_start_arguments <- function(x,
       warm_start$metric_type
     )
     if(!is.null(sample_args$metric) && !is.null(inv_metric_value)) {
-      refit_assert_metric_type_matches_inv_metric(
+      assert_metric_type_matches_inv_metric(
         metric_type = sample_args$metric,
         inv_metric = inv_metric_value
       )
@@ -635,4 +635,29 @@ refit_metric_type_from_inv_metric <- function(inv_metric) {
     return(metric_types[[1]])
   }
   backend_metric_type_from_inv_metric(inv_metric)
+}
+
+#' @keywords internal
+assert_metric_type_matches_inv_metric <- function(metric_type, inv_metric) {
+  checkmate::assert_choice(metric_type, choices = c("diag_e", "dense_e", "unit_e"))
+  if(metric_type == "unit_e") {
+    stop(
+      "'metric = \"unit_e\"' is incompatible with a supplied inverse metric.",
+      call. = FALSE
+    )
+  }
+  inferred_metric_type <- refit_metric_type_from_inv_metric(inv_metric)
+  if(!identical(metric_type, inferred_metric_type)) {
+    stop(
+      "The supplied 'metric' does not match the shape of 'inv_metric'. ",
+      "Expected '", inferred_metric_type, "'.",
+      call. = FALSE
+    )
+  }
+  invisible(TRUE)
+}
+
+#' @keywords internal
+refit_default <- function(x, default) {
+  if(is.null(x)) default else x
 }
