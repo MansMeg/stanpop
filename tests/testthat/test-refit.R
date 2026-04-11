@@ -432,9 +432,8 @@ test_that("refit_poll_of_polls errors when automatic init reuse is incomplete", 
 
 test_that("refit_poll_of_polls with cmdstanr fully warm-starts model8k5 from rstan", {
   skip_if_no_stan_tests()
-  skip_if_no_rstan_tests()
   skip_if_no_cmdstanr_tests()
-  skip_if_no_cmdstanr()
+
   if(!requireNamespace("rstan", quietly = TRUE)) {
     testthat::skip("Package 'rstan' is not available.")
   }
