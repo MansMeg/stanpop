@@ -6,6 +6,10 @@ on:
 
 name: R-CMD-check-stan-8k.yaml
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions: read-all
 
 jobs:
