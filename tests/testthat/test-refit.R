@@ -352,7 +352,7 @@ test_that("refit_poll_of_polls validates inv_metric against changed polls_data b
       )
     },
     backend_get_num_upars = function(...) 2L,
-    refit_build_preflight_parameter_dimensions = function(...) {
+    refit_build_expected_parameter_dimensions = function(...) {
       list(
         num_upars = 3L,
         init_skeleton = list(list(x = numeric(3)))
@@ -405,7 +405,7 @@ test_that("refit_poll_of_polls gives a clear error when changed polls_data inval
       )
     },
     backend_get_num_upars = function(...) 2L,
-    refit_build_preflight_parameter_dimensions = function(...) {
+    refit_build_expected_parameter_dimensions = function(...) {
       list(
         num_upars = 3L,
         init_skeleton = list(list(x = numeric(3)))
