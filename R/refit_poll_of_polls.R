@@ -478,3 +478,25 @@ refit_translate_sample_arguments_cmdstanr_to_rstan <- function(sample_args) {
         "stepsize")] <- NULL
   out
 }
+
+#' Merge stored and explicit sample arguments for a refit
+#'
+#' @keywords internal
+refit_merge_sample_arguments <- function(sample_args, sample_overrides) {
+  checkmate::assert_list(sample_args, names = "named")
+  checkmate::assert_list(sample_overrides, null.ok = TRUE)
+
+  if(length(sample_overrides) == 0L) {
+    return(sample_args)
+  }
+  if(is.null(names(sample_overrides)) || any(names(sample_overrides) == "")) {
+    stop("Sampler overrides in '...' must all be named.", call. = FALSE)
+  }
+
+  for(i in seq_along(sample_overrides)) {
+    name <- names(sample_overrides)[[i]]
+    value <- sample_overrides[[i]]
+    sample_args <- refit_set_named_argument(sample_args, name, value)
+  }
+  sample_args
+}
