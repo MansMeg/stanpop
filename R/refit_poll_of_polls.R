@@ -366,3 +366,115 @@ refit_materialize_warm_start_arguments <- function(x,
   }
   sample_args
 }
+
+#' Translate stored sample arguments between backends
+#'
+#' @keywords internal
+refit_translate_sample_arguments <- function(sample_args, from_backend, to_backend) {
+  checkmate::assert_list(sample_args, names = "named", null.ok = TRUE)
+  assert_pop_backend(from_backend)
+  assert_pop_backend(to_backend)
+
+  if(identical(from_backend, to_backend) || length(sample_args) == 0L) {
+    return(sample_args)
+  }
+  if(from_backend == "rstan" && to_backend == "cmdstanr") {
+    return(refit_translate_sample_arguments_rstan_to_cmdstanr(sample_args))
+  }
+  if(from_backend == "cmdstanr" && to_backend == "rstan") {
+    return(refit_translate_sample_arguments_cmdstanr_to_rstan(sample_args))
+  }
+  sample_args
+}
+
+#' @keywords internal
+refit_translate_sample_arguments_rstan_to_cmdstanr <- function(sample_args) {
+  out <- sample_args
+  control <- refit_default(sample_args$control, list())
+
+  if("iter" %in% names(sample_args)) {
+    warmup <- refit_default(sample_args$warmup, floor(sample_args$iter / 2))
+    out$iter_warmup <- warmup
+    out$iter_sampling <- max(sample_args$iter - warmup, 0)
+  } else if("warmup" %in% names(sample_args)) {
+    out$iter_warmup <- sample_args$warmup
+  }
+
+  if("cores" %in% names(sample_args)) out$parallel_chains <- sample_args$cores
+  if("algorithm" %in% names(sample_args) && identical(sample_args$algorithm, "Fixed_param")) {
+    out$fixed_param <- TRUE
+  }
+  if("adapt_delta" %in% names(control)) out$adapt_delta <- control$adapt_delta
+  if("max_treedepth" %in% names(control)) out$max_treedepth <- control$max_treedepth
+  if("stepsize" %in% names(control)) out$step_size <- control$stepsize
+  if("metric" %in% names(control)) out$metric <- control$metric
+  if("adapt_engaged" %in% names(control)) out$adapt_engaged <- control$adapt_engaged
+
+  out[c("file", "model_name", "data", "control", "iter", "warmup", "cores", "algorithm", "init_r")] <- NULL
+  out
+}
+
+#' @keywords internal
+refit_translate_sample_arguments_cmdstanr_to_rstan <- function(sample_args) {
+  out <- sample_args
+  control <- refit_default(sample_args$control, list())
+
+  if("iter_warmup" %in% names(sample_args) || "iter_sampling" %in% names(sample_args)) {
+    warmup <- refit_default(sample_args$iter_warmup, 0L)
+    iter_sampling <- refit_default(sample_args$iter_sampling, 0L)
+    out$warmup <- warmup
+    out$iter <- warmup + iter_sampling
+  }
+
+  if("parallel_chains" %in% names(sample_args)) out$cores <- sample_args$parallel_chains
+  if("adapt_delta" %in% names(sample_args)) control$adapt_delta <- sample_args$adapt_delta
+  if("max_treedepth" %in% names(sample_args)) control$max_treedepth <- sample_args$max_treedepth
+  if("step_size" %in% names(sample_args)) control$stepsize <- sample_args$step_size
+  if("stepsize" %in% names(sample_args)) control$stepsize <- sample_args$stepsize
+  if("metric" %in% names(sample_args)) control$metric <- sample_args$metric
+  if("adapt_engaged" %in% names(sample_args)) control$adapt_engaged <- sample_args$adapt_engaged
+  if(length(control) > 0) out$control <- control
+
+  if("fixed_param" %in% names(sample_args) && isTRUE(sample_args$fixed_param)) {
+    out$algorithm <- "Fixed_param"
+  }
+
+  out[c("data",
+        "save_latent_dynamics",
+        "output_dir",
+        "output_basename",
+        "sig_figs",
+        "parallel_chains",
+        "chain_ids",
+        "threads_per_chain",
+        "opencl_ids",
+        "iter_warmup",
+        "iter_sampling",
+        "save_warmup",
+        "max_treedepth",
+        "adapt_engaged",
+        "adapt_delta",
+        "step_size",
+        "metric",
+        "metric_file",
+        "inv_metric",
+        "init_buffer",
+        "term_buffer",
+        "window",
+        "fixed_param",
+        "show_messages",
+        "show_exceptions",
+        "diagnostics",
+        "save_metric",
+        "save_cmdstan_config",
+        "cores",
+        "num_cores",
+        "num_chains",
+        "num_warmup",
+        "num_samples",
+        "validate_csv",
+        "save_extra_diagnostics",
+        "max_depth",
+        "stepsize")] <- NULL
+  out
+}
