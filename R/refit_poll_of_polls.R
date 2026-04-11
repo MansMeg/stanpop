@@ -832,6 +832,45 @@ refit_is_per_chain_init_list <- function(x) {
     (is.null(names(x)) || all(names(x) == "")) &&
     all(vapply(x, is.list, logical(1)))
 }
+
+#' Normalize init values for warm-start validation
+#'
+#' @description
+#' Convert a supplied `init` value into a per-chain list that can be validated
+#' against the expected init skeleton. Shared init lists are recycled across
+#' chains, while incompatible chain counts trigger an early error.
+#'
+#' @param init Warm-start `init` value.
+#' @param chains Integer scalar giving the number of chains.
+#'
+#' @return A list with one init object per chain, or `NULL` when no init should
+#'   be validated.
+#'
+#' @keywords internal
+refit_normalize_init_for_validation <- function(init, chains) {
+  checkmate::assert_integerish(chains, len = 1L, lower = 1L, any.missing = FALSE)
+
+  if(is.null(init) || !is.list(init)) {
+    return(NULL)
+  }
+  if(refit_is_per_chain_init_list(init)) {
+    if(length(init) != chains) {
+      stop(
+        "The warm-start argument 'init' contains ", length(init),
+        " chain(s), but 'chains = ", chains, "'. ",
+        "Use a matching 'chains' value or disable init reuse with warm_start = list(init = NULL).",
+        call. = FALSE
+      )
+    }
+    return(init)
+  }
+
+  # A single named init list is treated as one shared init to reuse across all chains.
+  if(!is.null(names(init)) && all(names(init) != "")) {
+    return(rep(list(init), chains))
+  }
+  NULL
+}
 #' @keywords internal
 assert_refit_last_draws_complete_for_init <- function(backend, fit, init) {
   assert_pop_backend(backend)
