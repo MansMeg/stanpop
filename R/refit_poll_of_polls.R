@@ -181,3 +181,16 @@ assert_refit_poll_of_polls_backend <- function(backend) {
   }
   invisible(TRUE)
 }
+
+#' @keywords internal
+refit_constructor_argument_names <- function() {
+  setdiff(
+    names(formals(poll_of_polls)),
+    c("...", "y", "model", "backend")
+  )
+}
+
+#' @keywords internal
+refit_warm_start_argument_names <- function() {
+  c("init", "inv_metric", "metric", "step_size")
+}
