@@ -355,7 +355,12 @@ backend_build_init_skeleton_from_variable_names <- function(variable_names) {
 #'
 #' @keywords internal
 backend_get_rstan_init_skeleton <- function(fit) {
-  parameter_roots <- fit@model_pars
+  parameter_roots <- backend_extract_parameter_roots_from_stan_code(
+    fit@stanmodel@model_code
+  )
+  if(length(parameter_roots) == 0L) {
+    parameter_roots <- fit@model_pars
+  }
   if(length(fit@inits) > 0L){
     return(lapply(fit@inits, function(chain_init) {
       chain_init[intersect(names(chain_init), parameter_roots)]
@@ -372,6 +377,51 @@ backend_get_rstan_init_skeleton <- function(fit) {
       array(NA_real_, dim = parameter_dims)
     })
   })
+}
+
+#' @keywords internal
+backend_extract_parameter_roots_from_stan_code <- function(stan_code) {
+  checkmate::assert_string(stan_code)
+
+  lines <- strsplit(stan_code, "\n", fixed = TRUE)[[1]]
+  # Strip line comments and surrounding whitespace before locating the parameters block.
+  normalized_lines <- trimws(sub("//.*$", "", lines))
+  start_idx <- which(grepl("^parameters\\s*\\{$", normalized_lines))
+  if(length(start_idx) == 0L) {
+    return(character())
+  }
+
+  normalized_lines <- normalized_lines[(start_idx[[1]] + 1L):length(normalized_lines)]
+  end_idx <- which(normalized_lines == "}")
+  if(length(end_idx) == 0L) {
+    return(character())
+  }
+
+  lines <- normalized_lines[seq_len(end_idx[[1]] - 1L)]
+  lines <- lines[nzchar(lines)]
+
+  declarations <- character()
+  current <- character()
+  for(line in lines) {
+    current <- c(current, line)
+    if(grepl(";\\s*$", line)) {
+      declarations <- c(declarations, paste(current, collapse = " "))
+      current <- character()
+    }
+  }
+
+  roots <- vapply(declarations, function(declaration) {
+    match <- regmatches(
+      declaration,
+      regexec("([A-Za-z][A-Za-z0-9_]*)\\s*(?:\\[[^;]*\\])?\\s*;\\s*$", declaration, perl = TRUE)
+    )[[1]]
+    if(length(match) < 2L) {
+      return(NA_character_)
+    }
+    match[[2]]
+  }, character(1))
+
+  unique(roots[!is.na(roots)])
 }
 
 #' Relist a flat Stan draw into an init object
