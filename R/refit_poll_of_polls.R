@@ -591,3 +591,36 @@ refit_set_rstan_control_argument <- function(sample_args, name, value) {
   }
   sample_args
 }
+
+#' Extract one field from per-chain sampler state
+#'
+#' @description
+#' Pull a single named field from the sampler state returned by
+#' [backend_get_sampler_state()]. The input `state` is a list with one entry
+#' per chain, and this helper collects the requested field across chains.
+#'
+#' By default the return value preserves that per-chain list structure, which
+#' is appropriate for fields such as `inv_metric`. When `simplify = TRUE`, the
+#' extracted values are flattened to an atomic vector, which is convenient for
+#' scalar-per-chain fields such as `step_size`.
+#'
+#' @param state A per-chain sampler state list, typically returned by
+#'   [backend_get_sampler_state()].
+#' @param field Name of the sampler-state field to extract from each chain.
+#' @param simplify Logical indicating whether to flatten the extracted values
+#'   with [unlist()].
+#'
+#' @return A list of per-chain field values, or an atomic vector when
+#'   `simplify = TRUE`.
+#'
+#' @keywords internal
+refit_sampler_state_field <- function(state, field, simplify = FALSE) {
+  checkmate::assert_list(state)
+  checkmate::assert_string(field)
+
+  values <- lapply(state, function(x) x[[field]])
+  if(!isTRUE(simplify)) {
+    return(values)
+  }
+  unlist(values, use.names = FALSE)
+}
