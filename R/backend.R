@@ -233,7 +233,7 @@ backend_get_last_draws_for_init <- function(backend, fit, ...) {
 #' @keywords internal
 backend_get_last_draws_for_init_rstan <- function(fit, ...) {
   skeleton <- backend_get_rstan_init_skeleton(fit)
-  draws <- rstan::extract(fit, permuted = FALSE, inc_warmup = FALSE)
+  draws <- as.array(fit)
   if(dim(draws)[1] < 1L){
     stop("RStan fit does not contain post-warmup draws.", call. = FALSE)
   }
@@ -245,6 +245,39 @@ backend_get_last_draws_for_init_rstan <- function(fit, ...) {
     names(chain_draw) <- variable_names
     backend_relist_flat_draw_to_init(chain_draw, skeleton[[chain_id]])
   })
+}
+
+#' Build a backend-neutral init skeleton
+#'
+#' @description
+#' Return the parameter-shaped skeleton needed to validate or relist Stan init
+#' values across backends. The result is a list with one skeleton per chain,
+#' where each skeleton is a named list of parameters in the structure expected
+#' by Stan's `init` argument.
+#'
+#' For RStan, the skeleton comes from the stored init objects or from
+#' parameter-dimension metadata. For CmdStanR, the skeleton is reconstructed
+#' from the saved draw variable names and repeated once per chain.
+#'
+#' @param backend Stan backend used by `fit`.
+#' @param fit A fitted backend object, either an `rstan::stanfit` or a
+#'   `cmdstanr` fit object.
+#' @param ... Reserved for backend-specific extensions.
+#'
+#' @return A list with one parameter-shaped init skeleton per chain.
+#'
+#' @keywords internal
+backend_get_init_skeleton <- function(backend, fit, ...) {
+  assert_pop_backend(backend)
+  if(backend == "rstan") {
+    return(backend_get_rstan_init_skeleton(fit, ...))
+  }
+  if(backend == "cmdstanr") {
+    draws <- as.array(fit$draws(inc_warmup = FALSE, format = "draws_array"))
+    skeleton <- backend_build_init_skeleton_from_variable_names(dimnames(draws)[[3]])
+    return(rep(list(skeleton), dim(draws)[2]))
+  }
+  stop("Unknown backend '", backend, "'.", call. = FALSE)
 }
 
 #' @keywords internal
