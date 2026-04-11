@@ -1191,6 +1191,35 @@ refit_parameter_dimension_source_label <- function(changed_polls_data) {
   }
   "the stored parameter dimensions in 'x'"
 }
+
+#' Explain parameter-dimension changes in warm-start errors
+#'
+#' @description
+#' Build the part of a validation error message that explains how the number of
+#' unconstrained parameters changed between the stored fit and the refit.
+#'
+#' @param changed_polls_data Logical indicating whether `polls_data` changed.
+#' @param old_num_upars Number of unconstrained parameters in `x`.
+#' @param new_num_upars Number of unconstrained parameters implied by the refit.
+#'
+#' @return Character scalar, or `""` when no extra hint is needed.
+#'
+#' @keywords internal
+refit_parameter_dimension_change_hint <- function(changed_polls_data,
+                                                  old_num_upars = NULL,
+                                                  new_num_upars = NULL) {
+  if(!isTRUE(changed_polls_data) ||
+     is.null(old_num_upars) ||
+     is.null(new_num_upars) ||
+     identical(old_num_upars, new_num_upars)) {
+    return("")
+  }
+  paste0(
+    "'x' has ", old_num_upars,
+    " unconstrained parameter(s) but the refit model has ", new_num_upars,
+    ". This usually means the changed polls_data altered parameter dimensions. "
+  )
+}
 #' @keywords internal
 assert_refit_last_draws_complete_for_init <- function(backend, fit, init) {
   assert_pop_backend(backend)
