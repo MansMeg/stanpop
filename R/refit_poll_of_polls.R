@@ -694,10 +694,10 @@ assert_warm_start_is_compatible <- function(x, constructor_args, sample_args) {
 
   # If polls_data changed, rebuild the refit parameter dimensions before validating reuse.
   if(changed_polls_data && (!is.null(normalized_init) || !is.null(normalized_inv_metric))) {
-    preflight <- refit_build_expected_parameter_dimensions(constructor_args)
-    expected_num_upars <- preflight$num_upars
+    expected_dimensions <- refit_build_expected_parameter_dimensions(constructor_args)
+    expected_num_upars <- expected_dimensions$num_upars
     if(!is.null(normalized_init)) {
-      expected_skeleton <- refit_nonempty_init_skeleton(preflight$init_skeleton)
+      expected_skeleton <- refit_nonempty_init_skeleton(expected_dimensions$init_skeleton)
     }
   }
 
@@ -1226,7 +1226,7 @@ refit_parameter_dimension_change_hint <- function(changed_polls_data,
 #' @description
 #' Construct Stan data for the refit inputs and run a minimal one-chain RStan
 #' fit to recover the unconstrained parameter count and init skeleton implied by
-#' the refit model. This is used only for preflight validation when changed
+#' the refit model. This is used only for early validation when changed
 #' `polls_data` requires checking whether warm-start values still fit.
 #'
 #' @param constructor_args Named constructor argument list for the refit call.
@@ -1271,15 +1271,43 @@ refit_build_expected_parameter_dimensions <- function(constructor_args) {
     init_skeleton = backend_get_init_skeleton("rstan", fit)
   )
 }
+
+#' Resolve Stan model context for expected-dimension validation
+#'
+#' @description
+#' Resolve the Stan file path and model name needed for a minimal fit that
+#' recovers the expected parameter dimensions for refit validation.
+#' The input may be either a built-in `poll_of_polls` model name or an explicit
+#' path to a `.stan` file.
+#'
+#' @param model Model identifier or `.stan` file path.
+#'
+#' @return A list with elements `stan_file` and `model_name`.
+#'
+#' @keywords internal
+refit_model_context <- function(model) {
+  checkmate::assert_string(model)
+
+  if(checkmate::test_file_exists(model, extension = "stan")) {
+    return(list(
+      stan_file = model,
+      model_name = remove_file_extension(basename(model))
+    ))
+  }
+
+  checkmate::assert_choice(model, choices = supported_pop_models())
+  list(
+    stan_file = get_pop_stan_model_file_path(model),
+    model_name = model
+  )
+}
+
 #' @keywords internal
 assert_refit_last_draws_complete_for_init <- function(backend, fit, init) {
   assert_pop_backend(backend)
   checkmate::assert_list(init)
 
-  expected <- backend_get_init_skeleton(backend, fit)
-  expected <- lapply(expected, function(chain_expected) {
-    chain_expected[vapply(chain_expected, length, integer(1)) > 0L]
-  })
+  expected <- refit_nonempty_init_skeleton(backend_get_init_skeleton(backend, fit))
   if(length(init) != length(expected)) {
     stop(
       "Automatic init reuse requires one complete last draw per chain. ",
