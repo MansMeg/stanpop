@@ -163,6 +163,9 @@ test_that("refit_poll_of_polls defaults to cmdstanr and inherits omitted argumen
     backend_get_last_draws_for_init = function(...) {
       list(list(x = c(0.11, 0.22)), list(x = c(0.33, 0.44)))
     },
+    backend_get_init_skeleton = function(...) {
+      list(list(x = numeric(2)), list(x = numeric(2)))
+    },
     backend_get_sampler_state = function(...) {
       list(
         list(step_size = 0.12, inv_metric = c(1, 2), metric_type = "diag_e"),
@@ -333,7 +336,26 @@ test_that("refit_poll_of_polls validates warm_start names", {
   )
 })
 
-test_that("refit_poll_of_polls with cmdstanr reuses constrained init values and inverse metric from rstan", {
+test_that("refit_poll_of_polls errors when automatic init reuse is incomplete", {
+  pop <- make_mock_pop_for_refit_helpers("cmdstanr")
+
+  testthat::local_mocked_bindings(
+    backend_get_last_draws_for_init = function(...) {
+      list(list(x = c(0.11, 0.22)))
+    },
+    backend_get_init_skeleton = function(...) {
+      list(list(x = numeric(2), sigma = 0))
+    },
+    .package = "stanpop"
+  )
+
+  expect_error(
+    resolve_refit_arguments_for_test(pop),
+    "Automatic init reuse requires a complete last draw"
+  )
+})
+
+test_that("refit_poll_of_polls with cmdstanr fully warm-starts model8k5 from rstan", {
   skip_if_no_stan_tests()
   skip_if_no_rstan_tests()
   skip_if_no_cmdstanr_tests()
@@ -342,6 +364,7 @@ test_that("refit_poll_of_polls with cmdstanr reuses constrained init values and 
 
   backend_get_sampler_state <- get_internal("backend_get_sampler_state")
   backend_get_last_draws_for_init <- get_internal("backend_get_last_draws_for_init")
+  backend_get_init_skeleton <- get_internal("backend_get_init_skeleton")
 
   case <- make_model8_mixed_smoke_case(npolls = 12)
   cfg <- list(
@@ -380,7 +403,11 @@ test_that("refit_poll_of_polls with cmdstanr reuses constrained init values and 
 
   original_state <- backend_get_sampler_state("rstan", pop$stan_fit)
   original_init <- backend_get_last_draws_for_init("rstan", pop$stan_fit)
+  original_skeleton <- backend_get_init_skeleton("rstan", pop$stan_fit)
 
+  expect_length(original_init, 1)
+  expect_setequal(names(original_init[[1]]), names(original_skeleton[[1]]))
+  expect_false(any(vapply(original_init[[1]], function(x) anyNA(x), logical(1))))
   expect_true("sigma_x" %in% names(original_init[[1]]))
   expect_true(all(original_init[[1]]$sigma_x > 0))
 
@@ -405,15 +432,14 @@ test_that("refit_poll_of_polls with cmdstanr reuses constrained init values and 
   refit_state <- backend_get_sampler_state("cmdstanr", refit$stan_fit)
 
   expect_identical(refit$backend, "cmdstanr")
-  expect_identical(refit$stan_arguments$metric, original_state[[1]]$metric_type)
-  expect_equal(refit$stan_arguments$inv_metric[[1]], original_state[[1]]$inv_metric, tolerance = 1e-12)
-  expect_equal(as.numeric(refit$stan_arguments$step_size), original_state[[1]]$step_size, tolerance = 1e-12)
   expect_equal(
     lapply(refit$stan_arguments$init, unlist, use.names = TRUE),
     lapply(original_init, unlist, use.names = TRUE),
     tolerance = 1e-12
   )
-  expect_true(all(refit$stan_arguments$init[[1]]$sigma_x > 0))
+  expect_identical(refit$stan_arguments$metric, original_state[[1]]$metric_type)
+  expect_equal(refit$stan_arguments$inv_metric[[1]], original_state[[1]]$inv_metric, tolerance = 1e-12)
+  expect_equal(as.numeric(refit$stan_arguments$step_size), original_state[[1]]$step_size, tolerance = 1e-12)
 
   expect_identical(refit_state[[1]]$metric_type, original_state[[1]]$metric_type)
   expect_equal(refit_state[[1]]$inv_metric, original_state[[1]]$inv_metric, tolerance = 1e-12)
