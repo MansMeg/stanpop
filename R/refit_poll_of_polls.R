@@ -571,3 +571,23 @@ refit_set_step_size_argument <- function(sample_args, backend, value) {
   }
   refit_set_rstan_control_argument(sample_args, "stepsize", value)
 }
+
+#' @keywords internal
+refit_set_rstan_control_argument <- function(sample_args, name, value) {
+  checkmate::assert_list(sample_args, names = "named")
+  checkmate::assert_string(name)
+
+  control <- refit_default(sample_args$control, list())
+  if(is.null(value)) {
+    control[[name]] <- NULL
+  } else {
+    control[[name]] <- value
+  }
+
+  if(length(control) == 0L) {
+    sample_args$control <- NULL
+  } else {
+    sample_args$control <- control
+  }
+  sample_args
+}
