@@ -73,13 +73,15 @@ test_that("backend_extract_parameter_roots_from_stan_code parses the test Stan e
 
 test_that("backend_extract_parameter_roots_from_stan_code parses the packaged Stan models", {
   backend_extract_parameter_roots_from_stan_code <- get_internal("backend_extract_parameter_roots_from_stan_code")
+  stan_models_dir <- dirname(get_pop_stan_model_file_path(supported_pop_models()[1]))
 
   stan_files <- list.files(
-    testthat::test_path("..", "..", "inst", "stan_models"),
+    stan_models_dir,
     pattern = "\\.stan$",
     full.names = TRUE
   )
 
+  expect_true(dir.exists(stan_models_dir))
   expect_true(length(stan_files) > 0L)
 
   for(stan_file in stan_files) {
