@@ -306,6 +306,124 @@ test_that("refit_poll_of_polls can disable default warm-start values via NULL", 
   expect_false("step_size" %in% names(args))
 })
 
+test_that("refit_poll_of_polls rejects incompatible chains overrides before sampling", {
+  pop <- make_mock_pop_for_refit_helpers("rstan")
+
+  testthat::local_mocked_bindings(
+    backend_get_last_draws_for_init = function(...) {
+      list(list(x = c(0.11, 0.22)), list(x = c(0.33, 0.44)))
+    },
+    backend_get_init_skeleton = function(...) {
+      list(list(x = numeric(2)), list(x = numeric(2)))
+    },
+    backend_get_sampler_state = function(...) {
+      list(
+        list(step_size = 0.12, inv_metric = c(1, 2), metric_type = "diag_e"),
+        list(step_size = 0.34, inv_metric = c(3, 4), metric_type = "diag_e")
+      )
+    },
+    backend_get_num_upars = function(...) 2L,
+    .package = "stanpop"
+  )
+
+  expect_error(
+    refit_poll_of_polls(pop, chains = 1),
+    "warm-start argument 'init' contains 2 chain\\(s\\)"
+  )
+})
+
+test_that("refit_poll_of_polls validates inv_metric against changed polls_data before sampling", {
+  pop <- make_mock_pop_for_refit_helpers("rstan")
+  new_polls_data <- polls_data(
+    y = data.frame(x = c(0.41, 0.46, 0.49)),
+    house = factor(c("A", "A", "B")),
+    publish_date = as.Date(c("2020-01-02", "2020-01-09", "2020-01-16")),
+    start_date = as.Date(c("2020-01-01", "2020-01-08", "2020-01-15")),
+    end_date = as.Date(c("2020-01-02", "2020-01-09", "2020-01-16")),
+    n = c(1000L, 1000L, 900L),
+    poll_id = c("p1", "p2", "p3")
+  )
+
+  testthat::local_mocked_bindings(
+    backend_get_sampler_state = function(...) {
+      list(
+        list(step_size = 0.12, inv_metric = c(1, 2), metric_type = "diag_e"),
+        list(step_size = 0.34, inv_metric = c(3, 4), metric_type = "diag_e")
+      )
+    },
+    backend_get_num_upars = function(...) 2L,
+    refit_build_preflight_parameter_dimensions = function(...) {
+      list(
+        num_upars = 3L,
+        init_skeleton = list(list(x = numeric(3)))
+      )
+    },
+    .package = "stanpop"
+  )
+
+  expect_error(
+    refit_poll_of_polls(
+      pop,
+      polls_data = new_polls_data,
+      warm_start = list(init = NULL)
+    ),
+    "changed polls_data altered parameter dimensions"
+  )
+  expect_error(
+    refit_poll_of_polls(
+      pop,
+      polls_data = new_polls_data,
+      warm_start = list(init = NULL)
+    ),
+    "expects 3 unconstrained parameter\\(s\\), but chain 1 encodes 2"
+  )
+})
+
+test_that("refit_poll_of_polls gives a clear error when changed polls_data invalidates init reuse", {
+  pop <- make_mock_pop_for_refit_helpers("rstan")
+  new_polls_data <- polls_data(
+    y = data.frame(x = c(0.41, 0.46, 0.49)),
+    house = factor(c("A", "A", "B")),
+    publish_date = as.Date(c("2020-01-02", "2020-01-09", "2020-01-16")),
+    start_date = as.Date(c("2020-01-01", "2020-01-08", "2020-01-15")),
+    end_date = as.Date(c("2020-01-02", "2020-01-09", "2020-01-16")),
+    n = c(1000L, 1000L, 900L),
+    poll_id = c("p1", "p2", "p3")
+  )
+
+  testthat::local_mocked_bindings(
+    backend_get_last_draws_for_init = function(...) {
+      list(list(x = c(0.11, 0.22)), list(x = c(0.33, 0.44)))
+    },
+    backend_get_init_skeleton = function(...) {
+      list(list(x = numeric(2)), list(x = numeric(2)))
+    },
+    backend_get_sampler_state = function(...) {
+      list(
+        list(step_size = 0.12, inv_metric = c(1, 2), metric_type = "diag_e"),
+        list(step_size = 0.34, inv_metric = c(3, 4), metric_type = "diag_e")
+      )
+    },
+    backend_get_num_upars = function(...) 2L,
+    refit_build_preflight_parameter_dimensions = function(...) {
+      list(
+        num_upars = 3L,
+        init_skeleton = list(list(x = numeric(3)))
+      )
+    },
+    .package = "stanpop"
+  )
+
+  expect_error(
+    refit_poll_of_polls(pop, polls_data = new_polls_data),
+    "Warm-start init is incompatible with the refit model dimensions built from 'polls_data'"
+  )
+  expect_error(
+    refit_poll_of_polls(pop, polls_data = new_polls_data),
+    "changed parameter shape\\(s\\): x"
+  )
+})
+
 test_that("refit_poll_of_polls v1 only supports cmdstanr", {
   pop <- make_mock_pop_for_refit_helpers("cmdstanr")
 
