@@ -650,6 +650,9 @@ assert_refit_last_draws_complete_for_init <- function(backend, fit, init) {
   checkmate::assert_list(init)
 
   expected <- backend_get_init_skeleton(backend, fit)
+  expected <- lapply(expected, function(chain_expected) {
+    chain_expected[vapply(chain_expected, length, integer(1)) > 0L]
+  })
   if(length(init) != length(expected)) {
     stop(
       "Automatic init reuse requires one complete last draw per chain. ",

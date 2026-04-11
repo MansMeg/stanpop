@@ -481,7 +481,10 @@ backend_relist_flat_draw_to_init <- function(draw, skeleton) {
     values <- unname(draw[idx])
 
     if(length(template) == 0L){
-      out[[root]] <- template
+      # Zero-size parameters (for example matrix[0, 0]) cannot be serialized as
+      # useful init values for CmdStan, so omit them and let Stan rebuild them
+      # from the model dimensions.
+      out[[root]] <- NULL
       next
     }
     # Some RStan fits do not retain reusable values for every parameter root,

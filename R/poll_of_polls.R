@@ -666,8 +666,10 @@ extract_poll_of_polls_refit_arguments <- function(x){
     # the fitted object, not the raw input values, so the Stan data is rebuilt
     # exactly as in `x` unless the caller overrides it explicitly.
     model_time_range = x$model_time_range,
-    latent_time_ranges = x$latent_time_range,
-    hyper_parameters = x$model_arguments,
+    # `poll_of_polls()` expects the constructor-style latent time range input,
+    # not the fully resolved internal `x$latent_time_range` representation.
+    latent_time_ranges = pop_input_argument_or_default(input_args, "latent_time_ranges", NULL),
+    hyper_parameters = pop_refit_hyper_parameters(x),
     slow_scales = if(!is.null(x$time_line) && "slow_scales" %in% names(x$time_line)) {
       x$time_line$slow_scales
     } else {
@@ -694,6 +696,16 @@ pop_input_argument_or_default <- function(input_args, name, default = NULL){
     return(input_args[[name]])
   }
   default
+}
+
+pop_refit_hyper_parameters <- function(x) {
+  assert_pop(x)
+  if(!is.null(x$stan_data) &&
+     "stan_data" %in% names(x$stan_data) &&
+     is.list(x$stan_data$stan_data)) {
+    return(get_model_model_arguments(x, all = TRUE))
+  }
+  x$model_arguments
 }
 
 #' @rdname extract_poll_of_polls_refit_arguments

@@ -63,7 +63,12 @@ make_mock_pop_for_refit_helpers <- function(backend = c("cmdstanr", "rstan")){
         time_scale = "day",
         time_scale_overrides = NULL,
         model_time_range = NULL,
-        latent_time_ranges = NULL,
+        latent_time_ranges = list(
+          x = list(
+            from = as.Date("2020-01-01"),
+            to = as.Date("2020-01-31")
+          )
+        ),
         hyper_parameters = list(use_softmax = 1L),
         slow_scales = as.Date("2020-01-15"),
         stan_arguments = sample_args,
@@ -117,7 +122,7 @@ test_that("extract_poll_of_polls_refit_arguments returns constructor arguments o
   expect_identical(args$backend, "cmdstanr")
   expect_identical(args$compile_args, pop$compile_arguments)
   expect_identical(args$model_time_range, pop$model_time_range)
-  expect_identical(args$latent_time_ranges, pop$latent_time_range)
+  expect_identical(args$latent_time_ranges, pop$input_args$latent_time_ranges)
   expect_identical(args$hyper_parameters, pop$model_arguments)
   expect_identical(args$slow_scales, as.Date("2020-01-15"))
 })
@@ -430,7 +435,9 @@ test_that("refit_poll_of_polls with cmdstanr fully warm-starts model8k5 from rst
   skip_if_no_rstan_tests()
   skip_if_no_cmdstanr_tests()
   skip_if_no_cmdstanr()
-  assert_rstan_available()
+  if(!requireNamespace("rstan", quietly = TRUE)) {
+    testthat::skip("Package 'rstan' is not available.")
+  }
 
   backend_get_sampler_state <- get_internal("backend_get_sampler_state")
   backend_get_last_draws_for_init <- get_internal("backend_get_last_draws_for_init")
@@ -474,6 +481,9 @@ test_that("refit_poll_of_polls with cmdstanr fully warm-starts model8k5 from rst
   original_state <- backend_get_sampler_state("rstan", pop$stan_fit)
   original_init <- backend_get_last_draws_for_init("rstan", pop$stan_fit)
   original_skeleton <- backend_get_init_skeleton("rstan", pop$stan_fit)
+  original_skeleton <- lapply(original_skeleton, function(chain_skeleton) {
+    chain_skeleton[vapply(chain_skeleton, length, integer(1)) > 0L]
+  })
 
   expect_length(original_init, 1)
   expect_setequal(names(original_init[[1]]), names(original_skeleton[[1]]))
