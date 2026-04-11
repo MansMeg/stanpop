@@ -990,6 +990,91 @@ refit_recycle_init_skeleton <- function(expected, chains) {
     call. = FALSE
   )
 }
+
+#' Assert that warm-start init values match expected parameter dimensions
+#'
+#' @description
+#' Compare a per-chain warm-start `init` against the expected constrained
+#' parameter names and shapes for the refit. The helper collects missing roots,
+#' unexpected roots, shape mismatches, and missing values into one focused error
+#' message.
+#'
+#' @param init Per-chain warm-start init list.
+#' @param expected Per-chain expected init skeleton.
+#' @param source_label Short text describing where the expected parameter
+#'   dimensions came from.
+#' @param changed_polls_data Logical indicating whether `polls_data` changed.
+#' @param old_num_upars Number of unconstrained parameters in `x`.
+#' @param new_num_upars Number of unconstrained parameters implied by the refit.
+#'
+#' @return Invisible `TRUE` when `init` matches the expected parameter
+#'   dimensions.
+#'
+#' @keywords internal
+assert_refit_init_matches_skeleton <- function(init,
+                                               expected,
+                                               source_label,
+                                               changed_polls_data = FALSE,
+                                               old_num_upars = NULL,
+                                               new_num_upars = NULL) {
+  checkmate::assert_list(init)
+  checkmate::assert_list(expected)
+  checkmate::assert_string(source_label)
+
+  if(length(init) != length(expected)) {
+    stop(
+      "Warm-start init validation expected ", length(expected),
+      " chain(s), but found ", length(init), ".",
+      call. = FALSE
+    )
+  }
+
+  # Compare each chain's init against the expected parameter names and shapes,
+  # then collect all incompatibilities into one error message.
+  issues <- unlist(lapply(seq_along(expected), function(chain_id) {
+    chain_init <- init[[chain_id]]
+    chain_expected <- expected[[chain_id]]
+    if(!is.list(chain_init) || is.null(names(chain_init)) || any(names(chain_init) == "")) {
+      return(paste0("chain ", chain_id, ": init must be a named parameter list"))
+    }
+
+    missing <- setdiff(names(chain_expected), names(chain_init))
+    unexpected <- setdiff(names(chain_init), names(chain_expected))
+    shape_mismatches <- names(chain_expected)[vapply(names(chain_expected), function(root) {
+      if(!root %in% names(chain_init)) {
+        return(FALSE)
+      }
+      !identical(
+        refit_object_shape(chain_init[[root]]),
+        refit_object_shape(chain_expected[[root]])
+      )
+    }, logical(1))]
+    missing_values <- names(chain_init)[vapply(chain_init, anyNA, logical(1))]
+
+    c(
+      if(length(missing) > 0L) paste0("chain ", chain_id, " missing parameter roots: ", paste0(missing, collapse = ", ")),
+      if(length(unexpected) > 0L) paste0("chain ", chain_id, " has unexpected parameter roots: ", paste0(unexpected, collapse = ", ")),
+      if(length(shape_mismatches) > 0L) paste0("chain ", chain_id, " has changed parameter shape(s): ", paste0(shape_mismatches, collapse = ", ")),
+      if(length(missing_values) > 0L) paste0("chain ", chain_id, " has missing values in parameter root(s): ", paste0(missing_values, collapse = ", "))
+    )
+  }), use.names = FALSE)
+
+  # Print error message if any issues were found.
+  if(length(issues) > 0L) {
+    stop(
+      "Warm-start init is incompatible with ", source_label, ". ",
+      refit_parameter_dimension_change_hint(
+        changed_polls_data = changed_polls_data,
+        old_num_upars = old_num_upars,
+        new_num_upars = new_num_upars
+      ),
+      paste0(issues, collapse = "; "),
+      call. = FALSE
+    )
+  }
+
+  invisible(TRUE)
+}
 #' @keywords internal
 assert_refit_last_draws_complete_for_init <- function(backend, fit, init) {
   assert_pop_backend(backend)
