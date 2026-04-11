@@ -172,6 +172,50 @@ test_that("backend_build_init_skeleton_from_variable_names reconstructs paramete
   expect_equal(dim(skeleton$gamma), c(2L, 2L), tolerance = 0)
 })
 
+test_that("backend_build_init_skeleton_from_variable_names can ignore generated quantities", {
+  backend_build_init_skeleton_from_variable_names <- get_internal("backend_build_init_skeleton_from_variable_names")
+
+  skeleton <- backend_build_init_skeleton_from_variable_names(
+    c("alpha", "beta[1]", "beta[2]", "min_x_pred", "lp__", "stepsize__"),
+    parameter_roots = c("alpha", "beta")
+  )
+
+  expect_named(skeleton, c("alpha", "beta"))
+  expect_false("min_x_pred" %in% names(skeleton))
+})
+
+test_that("backend_get_cmdstanr_parameter_roots prefers Stan code from the runset", {
+  backend_get_cmdstanr_parameter_roots <- get_internal("backend_get_cmdstanr_parameter_roots")
+
+  mock_fit <- list(
+    runset = list(
+      stan_code = function() {
+        c(
+          "parameters {",
+          "  real alpha;",
+          "  vector[2] beta;",
+          "}",
+          "generated quantities {",
+          "  real min_x_pred;",
+          "}"
+        )
+      }
+    ),
+    metadata = function() {
+      list(
+        model_params = c("alpha", "beta[1]", "beta[2]", "min_x_pred")
+      )
+    }
+  )
+
+  roots <- backend_get_cmdstanr_parameter_roots(
+    mock_fit,
+    variable_names = c("alpha", "beta[1]", "beta[2]", "min_x_pred", "lp__")
+  )
+
+  expect_identical(roots, c("alpha", "beta"))
+})
+
 test_that("backend_sample with rstan returns a stanfit", {
   skip_if_no_stan_tests()
   skip_if_no_rstan_tests()

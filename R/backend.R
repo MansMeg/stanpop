@@ -274,7 +274,11 @@ backend_get_init_skeleton <- function(backend, fit, ...) {
   }
   if(backend == "cmdstanr") {
     draws <- as.array(fit$draws(inc_warmup = FALSE, format = "draws_array"))
-    skeleton <- backend_build_init_skeleton_from_variable_names(dimnames(draws)[[3]])
+    variable_names <- dimnames(draws)[[3]]
+    skeleton <- backend_build_init_skeleton_from_variable_names(
+      variable_names,
+      parameter_roots = backend_get_cmdstanr_parameter_roots(fit, variable_names = variable_names)
+    )
     return(rep(list(skeleton), dim(draws)[2]))
   }
   stop("Unknown backend '", backend, "'.", call. = FALSE)
@@ -289,7 +293,10 @@ backend_get_last_draws_for_init_cmdstanr <- function(fit, ...) {
 
   last_iter <- dim(draws)[1]
   variable_names <- dimnames(draws)[[3]]
-  skeleton <- backend_build_init_skeleton_from_variable_names(variable_names)
+  skeleton <- backend_build_init_skeleton_from_variable_names(
+    variable_names,
+    parameter_roots = backend_get_cmdstanr_parameter_roots(fit, variable_names = variable_names)
+  )
   lapply(seq_len(dim(draws)[2]), function(chain_id){
     chain_draw <- as.numeric(draws[last_iter, chain_id, ])
     names(chain_draw) <- variable_names
@@ -309,17 +316,27 @@ backend_get_last_draws_for_init_cmdstanr <- function(fit, ...) {
 #' @param variable_names A character vector of variable names from a CmdStanR
 #'   draws object. This may include Stan sampler method variables, which are
 #'   ignored when constructing the parameter skeleton.
+#' @param parameter_roots Optional character vector restricting the skeleton to
+#'   specific parameter roots, for example the names declared in the Stan
+#'   `parameters` block.
 #'
 #' @keywords internal
-backend_build_init_skeleton_from_variable_names <- function(variable_names) {
+backend_build_init_skeleton_from_variable_names <- function(variable_names,
+                                                            parameter_roots = NULL) {
   checkmate::assert_character(variable_names, any.missing = FALSE, null.ok = FALSE)
+  checkmate::assert_character(parameter_roots, any.missing = FALSE, unique = TRUE, null.ok = TRUE)
 
   cmdstan_method_variables <- c(
     "lp__", "accept_stat__", "stepsize__", "treedepth__",
     "n_leapfrog__", "divergent__", "energy__"
   )
   variable_names <- variable_names[!variable_names %in% cmdstan_method_variables]
-  parameter_roots <- unique(sub("\\[.*$", "", variable_names))
+  draw_roots <- unique(sub("\\[.*$", "", variable_names))
+  if(is.null(parameter_roots)) {
+    parameter_roots <- draw_roots
+  } else {
+    parameter_roots <- intersect(parameter_roots, draw_roots)
+  }
 
   out <- lapply(parameter_roots, function(root) {
     indexed_names <- variable_names[grepl(paste0("^", root, "\\["), variable_names)]
@@ -338,6 +355,56 @@ backend_build_init_skeleton_from_variable_names <- function(variable_names) {
 
   names(out) <- parameter_roots
   out
+}
+
+#' Extract CmdStanR parameter roots for init reconstruction
+#'
+#' @description
+#' Resolve the parameter roots that should be used when rebuilding CmdStanR
+#' init values from saved draws. The helper prefers the Stan source file when
+#' available so only parameters declared in the `parameters` block are used,
+#' then falls back to CmdStanR metadata, and finally to the draw variable roots.
+#'
+#' @param fit A `cmdstanr` fit object.
+#' @param variable_names Optional draw variable names used as a final fallback.
+#'
+#' @keywords internal
+backend_get_cmdstanr_parameter_roots <- function(fit, variable_names = NULL) {
+  checkmate::assert_character(variable_names, any.missing = FALSE, null.ok = TRUE)
+
+  runset <- try(fit$runset, silent = TRUE)
+  if(!inherits(runset, "try-error") && !is.null(runset)) {
+    stan_code <- try(runset$stan_code(), silent = TRUE)
+    if(!inherits(stan_code, "try-error") && length(stan_code) > 0L) {
+      parameter_roots <- backend_extract_parameter_roots_from_stan_code(
+        paste(stan_code, collapse = "\n")
+      )
+      if(length(parameter_roots) > 0L) {
+        return(parameter_roots)
+      }
+    }
+  }
+
+  metadata <- try(fit$metadata(), silent = TRUE)
+  if(!inherits(metadata, "try-error")) {
+    if(!is.null(metadata$stan_file) &&
+       checkmate::test_file_exists(metadata$stan_file, extension = "stan")) {
+      stan_code <- paste(readLines(metadata$stan_file, warn = FALSE), collapse = "\n")
+      parameter_roots <- backend_extract_parameter_roots_from_stan_code(stan_code)
+      if(length(parameter_roots) > 0L) {
+        return(parameter_roots)
+      }
+    }
+
+    if(!is.null(metadata$model_params) && length(metadata$model_params) > 0L) {
+      return(metadata$model_params)
+    }
+  }
+
+  if(is.null(variable_names)) {
+    return(character())
+  }
+  unique(sub("\\[.*$", "", variable_names))
 }
 
 #' Build an RStan init skeleton
