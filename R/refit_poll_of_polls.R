@@ -694,7 +694,7 @@ assert_warm_start_is_compatible <- function(x, constructor_args, sample_args) {
 
   # If polls_data changed, rebuild the refit parameter dimensions before validating reuse.
   if(changed_polls_data && (!is.null(normalized_init) || !is.null(normalized_inv_metric))) {
-    preflight <- refit_build_preflight_parameter_dimensions(constructor_args)
+    preflight <- refit_build_expected_parameter_dimensions(constructor_args)
     expected_num_upars <- preflight$num_upars
     if(!is.null(normalized_init)) {
       expected_skeleton <- refit_nonempty_init_skeleton(preflight$init_skeleton)
@@ -1218,6 +1218,57 @@ refit_parameter_dimension_change_hint <- function(changed_polls_data,
     "'x' has ", old_num_upars,
     " unconstrained parameter(s) but the refit model has ", new_num_upars,
     ". This usually means the changed polls_data altered parameter dimensions. "
+  )
+}
+
+#' Rebuild refit parameter dimensions for warm-start checks
+#'
+#' @description
+#' Construct Stan data for the refit inputs and run a minimal one-chain RStan
+#' fit to recover the unconstrained parameter count and init skeleton implied by
+#' the refit model. This is used only for preflight validation when changed
+#' `polls_data` requires checking whether warm-start values still fit.
+#'
+#' @param constructor_args Named constructor argument list for the refit call.
+#'
+#' @return A list with elements `num_upars` and `init_skeleton`.
+#'
+#' @keywords internal
+refit_build_expected_parameter_dimensions <- function(constructor_args) {
+  checkmate::assert_list(constructor_args, names = "named")
+
+  model_context <- refit_model_context(constructor_args$model)
+  stan_data <- stan_polls_data(
+    x = constructor_args$polls_data,
+    y_name = constructor_args$y,
+    model = model_context$model_name,
+    time_scale = constructor_args$time_scale,
+    time_scale_overrides = constructor_args$time_scale_overrides,
+    known_state = constructor_args$known_state,
+    model_time_range = constructor_args$model_time_range,
+    latent_time_ranges = constructor_args$latent_time_ranges,
+    hyper_parameters = constructor_args$hyper_parameters,
+    slow_scales = constructor_args$slow_scales
+  )
+
+  expected_fit <- suppressWarnings(
+    utils::capture.output(
+      fit <- rstan::stan(
+        file = model_context$stan_file,
+        model_name = model_context$model_name,
+        data = stan_data$stan_data,
+        iter = 1,
+        warmup = 0,
+        chains = 1,
+        refresh = 0
+      )
+    )
+  )
+  rm(expected_fit)
+
+  list(
+    num_upars = backend_get_num_upars("rstan", fit),
+    init_skeleton = backend_get_init_skeleton("rstan", fit)
   )
 }
 #' @keywords internal
