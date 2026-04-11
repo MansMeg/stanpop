@@ -871,6 +871,76 @@ refit_normalize_init_for_validation <- function(init, chains) {
   }
   NULL
 }
+
+#' Normalize inverse metrics for warm-start validation
+#'
+#' @description
+#' Convert a supplied inverse metric into one inverse metric per chain for
+#' validation. Shared inverse metrics are recycled across chains, while
+#' incompatible chain counts trigger an early error.
+#'
+#' @param inv_metric Warm-start inverse metric value.
+#' @param chains Integer scalar giving the effective number of chains.
+#'
+#' @return A list with one inverse metric per chain, or `NULL` when no inverse
+#'   metric should be validated.
+#'
+#' @keywords internal
+refit_normalize_inv_metric_for_validation <- function(inv_metric, chains) {
+  checkmate::assert_integerish(chains, len = 1L, lower = 1L, any.missing = FALSE)
+
+  if(is.null(inv_metric)) {
+    return(NULL)
+  }
+  if(is.list(inv_metric)) {
+    if(length(inv_metric) != chains) {
+      stop(
+        "The warm-start argument 'inv_metric' contains ", length(inv_metric),
+        " chain(s), but 'chains = ", chains, "'. ",
+        "Use a matching 'chains' value or disable inverse-metric reuse with warm_start = list(inv_metric = NULL).",
+        call. = FALSE
+      )
+    }
+    return(inv_metric)
+  }
+  rep(list(inv_metric), chains)
+}
+
+#' Normalize step sizes for warm-start validation
+#'
+#' @description
+#' Normalize a supplied step size to one numeric value per chain for validation
+#' against the requested chain count. Shared step sizes are recycled, while
+#' incompatible chain counts trigger an early error.
+#'
+#' @param step_size Warm-start step size value.
+#' @param chains Integer scalar giving the number of chains.
+#'
+#' @return Numeric vector of length `chains`, or `NULL` when no step size
+#'   should be validated.
+#'
+#' @keywords internal
+refit_normalize_step_size_for_validation <- function(step_size, chains) {
+  checkmate::assert_integerish(chains, len = 1L, lower = 1L, any.missing = FALSE)
+
+  if(is.null(step_size)) {
+    return(NULL)
+  }
+
+  checkmate::assert_numeric(step_size, lower = .Machine$double.eps, any.missing = FALSE)
+  if(length(step_size) == 1L) {
+    return(rep(as.numeric(step_size), chains))
+  }
+  if(length(step_size) != chains) {
+    stop(
+      "The warm-start argument 'step_size' contains ", length(step_size),
+      " chain-specific value(s), but 'chains = ", chains, "'. ",
+      "Use a matching 'chains' value or disable step-size reuse with warm_start = list(step_size = NULL).",
+      call. = FALSE
+    )
+  }
+  as.numeric(step_size)
+}
 #' @keywords internal
 assert_refit_last_draws_complete_for_init <- function(backend, fit, init) {
   assert_pop_backend(backend)
