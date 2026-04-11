@@ -29,7 +29,8 @@
 #'
 #' @param x Existing [poll_of_polls] object to refit.
 #' @param warm_start A named list controlling warm-start initialization.
-#'   Supported elements are `init`, `inv_metric`, `metric`, and `step_size`.
+#'   Supported elements are `init`, `inv_metric`, `metric_type`, and
+#'   `step_size`.
 #'   Omitted elements use the automatic defaults extracted from `x`.
 #'   Set an element to `NULL` to disable that default warm-start component.
 #'   For example, `warm_start = list(inv_metric = NULL)` reuses the last draw
@@ -42,7 +43,7 @@
 #' @param ... Named overrides. Names matching [poll_of_polls()] constructor
 #'   arguments, except `y`, `model`, and `backend`, override stored model
 #'   inputs. All other names are treated as backend sampler arguments.
-#'   Warm-start controls such as `init`, `inv_metric`, `metric`, and
+#'   Warm-start controls such as `init`, `inv_metric`, `metric_type`, and
 #'   `step_size` must be supplied through `warm_start`, not `...`.
 #'
 #' @return A refitted [poll_of_polls] object.
@@ -105,12 +106,6 @@ resolve_refit_poll_of_polls_arguments <- function(x,
       "refit_poll_of_polls() always inherits 'y' and 'model' from 'x'. ",
       "Supply 'backend' as an explicit argument, not through '...'. ",
       "Use poll_of_polls() directly to change 'y' or 'model'.",
-      call. = FALSE
-    )
-  }
-  if("metric_type" %in% names(dots)) {
-    stop(
-      "Use 'metric' rather than 'metric_type' in refit_poll_of_polls(...).",
       call. = FALSE
     )
   }
@@ -192,7 +187,7 @@ refit_constructor_argument_names <- function() {
 
 #' @keywords internal
 refit_warm_start_argument_names <- function() {
-  c("init", "inv_metric", "metric", "step_size")
+  c("init", "inv_metric", "metric_type", "step_size")
 }
 
 #' Normalize explicit warm-start overrides for a refit
@@ -200,8 +195,8 @@ refit_warm_start_argument_names <- function() {
 #' @description
 #' Validate and normalize the `warm_start` list supplied to
 #' [refit_poll_of_polls()]. The helper requires a named list, rejects duplicate
-#' or unsupported element names, and enforces the public `metric` name rather
-#' than the internal `metric_type` variant.
+#' or unsupported element names, and enforces the public `metric_type` name
+#' rather than the backend sampler argument name `metric`.
 #'
 #' An empty list means that `refit_poll_of_polls()` should fall back to its
 #' automatic warm-start defaults. Named `NULL` entries are preserved so callers
@@ -209,7 +204,7 @@ refit_warm_start_argument_names <- function() {
 #' pipeline.
 #'
 #' @param warm_start A named list of explicit warm-start overrides. Supported
-#'   elements are `init`, `inv_metric`, `metric`, and `step_size`.
+#'   elements are `init`, `inv_metric`, `metric_type`, and `step_size`.
 #'
 #' @return The validated `warm_start` list, preserving any named `NULL`
 #'   elements.
@@ -226,9 +221,9 @@ normalize_refit_warm_start <- function(warm_start) {
   if(any(duplicated(names(warm_start)))) {
     stop("Elements of 'warm_start' must have unique names.", call. = FALSE)
   }
-  if("metric_type" %in% names(warm_start)) {
+  if("metric" %in% names(warm_start)) {
     stop(
-      "Use 'metric' rather than 'metric_type' in 'warm_start'.",
+      "Use 'metric_type' rather than 'metric' in 'warm_start'.",
       call. = FALSE
     )
   }
