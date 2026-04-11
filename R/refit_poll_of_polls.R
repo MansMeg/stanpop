@@ -1075,6 +1075,122 @@ assert_refit_init_matches_skeleton <- function(init,
 
   invisible(TRUE)
 }
+
+#' Assert that inverse metrics match expected unconstrained dimensions
+#'
+#' @description
+#' Validate that each supplied inverse metric encodes the same number of
+#' unconstrained parameters as the refit model. This catches incompatible mass
+#' matrices before Stan starts sampling.
+#'
+#' @param inv_metric Per-chain inverse metric list.
+#' @param expected_num_upars Integer scalar giving the expected number of
+#'   unconstrained parameters for the refit.
+#' @param source_label Short text describing where the expected parameter
+#'   dimensions came from.
+#' @param changed_polls_data Logical indicating whether `polls_data` changed.
+#' @param old_num_upars Number of unconstrained parameters in `x`.
+#'
+#' @return Invisible `TRUE` when all inverse metrics match the expected
+#'   unconstrained dimension.
+#'
+#' @keywords internal
+assert_refit_inv_metric_matches_upars <- function(inv_metric,
+                                                  expected_num_upars,
+                                                  source_label,
+                                                  changed_polls_data = FALSE,
+                                                  old_num_upars = NULL) {
+  checkmate::assert_list(inv_metric)
+  checkmate::assert_integerish(expected_num_upars, len = 1L, lower = 1L, any.missing = FALSE)
+  checkmate::assert_string(source_label)
+
+  metric_dims <- vapply(inv_metric, refit_inv_metric_dimension, integer(1))
+  mismatched_chains <- which(metric_dims != expected_num_upars)
+  if(length(mismatched_chains) > 0L) {
+    chain_details <- paste0(
+      "chain ", mismatched_chains,
+      " encodes ", metric_dims[mismatched_chains], " unconstrained parameter(s)"
+    )
+    stop(
+      "Warm-start inv_metric is incompatible with ", source_label, ". ",
+      refit_parameter_dimension_change_hint(
+        changed_polls_data = changed_polls_data,
+        old_num_upars = old_num_upars,
+        new_num_upars = expected_num_upars
+      ),
+      "The refit model expects ", expected_num_upars,
+      " unconstrained parameter(s), but ",
+      paste0(chain_details, collapse = "; "),
+      ". Disable inverse-metric reuse with warm_start = list(inv_metric = NULL).",
+      call. = FALSE
+    )
+  }
+
+  invisible(TRUE)
+}
+
+#' Determine inverse-metric dimension
+#'
+#' @description
+#' Return the unconstrained parameter dimension encoded by an inverse metric.
+#' Dense metrics are validated as square matrices.
+#'
+#' @param inv_metric Inverse metric value, either a numeric vector or a square
+#'   numeric matrix.
+#'
+#' @return Integer scalar giving the unconstrained parameter dimension.
+#'
+#' @keywords internal
+refit_inv_metric_dimension <- function(inv_metric) {
+  if(is.matrix(inv_metric)) {
+    if(nrow(inv_metric) != ncol(inv_metric)) {
+      stop("Each dense inverse metric must be a square matrix.", call. = FALSE)
+    }
+    return(nrow(inv_metric))
+  }
+
+  checkmate::assert_numeric(inv_metric, any.missing = FALSE, null.ok = FALSE)
+  length(inv_metric)
+}
+
+#' Summarize object shape for comparison
+#'
+#' @description
+#' Return a compact shape descriptor for an object: scalars and vectors are
+#' represented by their length, while arrays and matrices are represented by
+#' their full dimensions. This is used when comparing warm-start init values
+#' with the expected parameter dimensions.
+#'
+#' @param x Object whose shape should be summarized.
+#'
+#' @return An integer vector describing the shape of `x`.
+#'
+#' @keywords internal
+refit_object_shape <- function(x) {
+  if(is.null(dim(x))) {
+    return(length(x))
+  }
+  dim(x)
+}
+
+#' Describe the source of expected parameter dimensions
+#'
+#' @description
+#' Build a short label for error messages that explains whether warm-start
+#' validation is comparing against the stored fit in `x` or against parameter
+#' dimensions rebuilt from changed `polls_data`.
+#'
+#' @param changed_polls_data Logical indicating whether `polls_data` changed.
+#'
+#' @return Character scalar used in warm-start validation errors.
+#'
+#' @keywords internal
+refit_parameter_dimension_source_label <- function(changed_polls_data) {
+  if(isTRUE(changed_polls_data)) {
+    return("the refit model dimensions built from 'polls_data'")
+  }
+  "the stored parameter dimensions in 'x'"
+}
 #' @keywords internal
 assert_refit_last_draws_complete_for_init <- function(backend, fit, init) {
   assert_pop_backend(backend)
