@@ -12,7 +12,9 @@
 #'
 #' Warm starts are filled in automatically unless you override them in
 #' `warm_start`. Omitted `warm_start` elements are taken from the last draw and
-#' sampler state of `x`.
+#' sampler state of `x`. When `polls_data` changes, reused warm-start values
+#' are validated against the refit model's parameter dimensions before
+#' sampling begins.
 #'
 #' Structural model inputs other than `polls_data` are always inherited from
 #' `x`; use [poll_of_polls()] directly to change `y`, `model`, `time_scale`,
@@ -67,6 +69,11 @@ refit_poll_of_polls <- function(x,
     backend = resolved$constructor_args$backend,
     sample_args = resolved$sample_args,
     warm_start = resolved$warm_start
+  )
+  assert_warm_start_is_compatible(
+    x = x,
+    constructor_args = resolved$constructor_args,
+    sample_args = resolved$sample_args
   )
 
   do.call(
