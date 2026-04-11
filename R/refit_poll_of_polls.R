@@ -651,6 +651,86 @@ refit_sampler_state_field <- function(state, field, simplify = FALSE) {
   unlist(values, use.names = FALSE)
 }
 
+#' Assert warm-start compatibility before sampling
+#'
+#' @description
+#' Validate that the warm-start inputs selected for a refit are compatible with
+#' the requested chain count and with the parameter dimensions implied by the
+#' refit model. When `polls_data` changes, this helper rebuilds the refit model
+#' dimensions before sampling so incompatible `init` values or inverse metrics
+#' fail early with a focused error.
+#'
+#' @param x Existing [poll_of_polls] object that provides the stored fit used
+#'   for warm-start defaults.
+#' @param constructor_args Named constructor argument list for the refit call.
+#' @param sample_args Named sampler argument list after warm-start arguments
+#'   have been materialized.
+#'
+#' @return Invisible `TRUE` when the selected warm-start settings are
+#'   compatible with the refit. Otherwise an error is thrown before sampling.
+#'
+#' @keywords internal
+assert_warm_start_is_compatible <- function(x, constructor_args, sample_args) {
+  assert_pop(x)
+  checkmate::assert_list(constructor_args, names = "named")
+  checkmate::assert_list(sample_args, names = "named")
+
+  # If no warm-start state is being reused, there is nothing to validate here.
+  if(!any(c("init", "inv_metric", "step_size") %in% names(sample_args))) {
+    return(invisible(TRUE))
+  }
+
+  # Resolve the refit chain count, then coerce warm-start inputs into comparable per-chain forms.
+  requested_chains <- refit_requested_chains(x, sample_args)
+  normalized_init <- refit_normalize_init_for_validation(sample_args$init, requested_chains)
+  normalized_inv_metric <- refit_normalize_inv_metric_for_validation(sample_args$inv_metric, requested_chains)
+  refit_normalize_step_size_for_validation(sample_args$step_size, requested_chains)
+
+  # Start from the parameter dimensions in x, then replace them if changed polls_data requires a rebuilt refit shape.
+  changed_polls_data <- !identical(constructor_args$polls_data, x$polls_data)
+  old_num_upars <- backend_get_num_upars(x$backend, x$stan_fit)
+  expected_num_upars <- old_num_upars
+  expected_skeleton <- NULL
+
+  # If polls_data changed, rebuild the refit parameter dimensions before validating reuse.
+  if(changed_polls_data && (!is.null(normalized_init) || !is.null(normalized_inv_metric))) {
+    preflight <- refit_build_preflight_parameter_dimensions(constructor_args)
+    expected_num_upars <- preflight$num_upars
+    if(!is.null(normalized_init)) {
+      expected_skeleton <- refit_nonempty_init_skeleton(preflight$init_skeleton)
+    }
+  }
+
+  # Check that any reused init still matches the constrained parameter dimensions.
+  if(!is.null(normalized_init)) {
+    if(is.null(expected_skeleton)) {
+      expected_skeleton <- refit_nonempty_init_skeleton(
+        backend_get_init_skeleton(x$backend, x$stan_fit)
+      )
+    }
+    assert_refit_init_matches_skeleton(
+      init = normalized_init,
+      expected = refit_recycle_init_skeleton(expected_skeleton, length(normalized_init)),
+      source_label = refit_parameter_dimension_source_label(changed_polls_data),
+      changed_polls_data = changed_polls_data,
+      old_num_upars = old_num_upars,
+      new_num_upars = expected_num_upars
+    )
+  }
+
+  # Check that any reused inverse metric still matches the unconstrained dimension.
+  if(!is.null(normalized_inv_metric)) {
+    assert_refit_inv_metric_matches_upars(
+      inv_metric = normalized_inv_metric,
+      expected_num_upars = expected_num_upars,
+      source_label = refit_parameter_dimension_source_label(changed_polls_data),
+      changed_polls_data = changed_polls_data,
+      old_num_upars = old_num_upars
+    )
+  }
+
+  invisible(TRUE)
+}
 #' @keywords internal
 assert_refit_last_draws_complete_for_init <- function(backend, fit, init) {
   assert_pop_backend(backend)
