@@ -662,10 +662,17 @@ extract_poll_of_polls_refit_arguments <- function(x){
     time_scale = pop_input_argument_or_default(input_args, "time_scale", x$time_scale),
     time_scale_overrides = pop_input_argument_or_default(input_args, "time_scale_overrides", x$time_scale_overrides),
     known_state = x$known_state,
-    model_time_range = pop_input_argument_or_default(input_args, "model_time_range", x$model_time_range),
-    latent_time_ranges = pop_input_argument_or_default(input_args, "latent_time_ranges", x$latent_time_range),
-    hyper_parameters = pop_input_argument_or_default(input_args, "hyper_parameters", x$model_arguments),
-    slow_scales = pop_input_argument_or_default(input_args, "slow_scales", NULL),
+    # Refit should inherit the resolved model ranges and hyper parameters from
+    # the fitted object, not the raw input values, so the Stan data is rebuilt
+    # exactly as in `x` unless the caller overrides it explicitly.
+    model_time_range = x$model_time_range,
+    latent_time_ranges = x$latent_time_range,
+    hyper_parameters = x$model_arguments,
+    slow_scales = if(!is.null(x$time_line) && "slow_scales" %in% names(x$time_line)) {
+      x$time_line$slow_scales
+    } else {
+      pop_input_argument_or_default(input_args, "slow_scales", NULL)
+    },
     backend = pop_input_argument_or_default(input_args, "backend", x$backend),
     compile_args = pop_input_argument_or_default(input_args, "compile_args", x$compile_arguments),
     cache_dir = pop_input_argument_or_default(input_args, "cache_dir", x$cache_dir)
