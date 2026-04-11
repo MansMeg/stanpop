@@ -216,6 +216,47 @@ test_that("backend_get_cmdstanr_parameter_roots prefers Stan code from the runse
   expect_identical(roots, c("alpha", "beta"))
 })
 
+test_that("backend_get_cmdstanr_parameter_roots falls back to metadata and draw names", {
+  backend_get_cmdstanr_parameter_roots <- get_internal("backend_get_cmdstanr_parameter_roots")
+
+  metadata_fit <- list(
+    runset = list(
+      stan_code = function() stop("stan code unavailable")
+    ),
+    metadata = function() {
+      list(
+        sampler_diagnostics = c("accept_stat__", "stepsize__", "treedepth__"),
+        model_params = c("lp__", "accept_stat__", "stepsize__", "alpha[1]", "alpha[2]", "beta", "min_x_pred")
+      )
+    }
+  )
+
+  expect_identical(
+    backend_get_cmdstanr_parameter_roots(
+      metadata_fit,
+      variable_names = c("alpha[1]", "alpha[2]", "beta", "min_x_pred", "lp__", "accept_stat__", "stepsize__")
+    ),
+    c("alpha", "beta", "min_x_pred")
+  )
+
+  variable_fit <- list(
+    runset = list(
+      stan_code = function() stop("stan code unavailable")
+    ),
+    metadata = function() {
+      list()
+    }
+  )
+
+  expect_identical(
+    backend_get_cmdstanr_parameter_roots(
+      variable_fit,
+      variable_names = c("alpha[1]", "alpha[2]", "beta", "min_x_pred", "lp__", "stepsize__")
+    ),
+    c("alpha", "beta", "min_x_pred")
+  )
+})
+
 test_that("backend_sample with rstan returns a stanfit", {
   skip_if_no_stan_tests()
   skip_if_no_rstan_tests()

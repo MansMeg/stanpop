@@ -306,9 +306,19 @@ test_that("refit_poll_of_polls can disable default warm-start values via NULL", 
   expect_false("step_size" %in% names(args))
 })
 
-test_that("refit_poll_of_polls rejects incompatible chains overrides before sampling", {
+test_that("refit_poll_of_polls can disable init or inverse-metric reuse independently", {
   pop <- make_mock_pop_for_refit_helpers("rstan")
+  new_polls_data <- polls_data(
+    y = data.frame(x = c(0.41, 0.46, 0.49)),
+    house = factor(c("A", "A", "B")),
+    publish_date = as.Date(c("2020-01-02", "2020-01-09", "2020-01-16")),
+    start_date = as.Date(c("2020-01-01", "2020-01-08", "2020-01-15")),
+    end_date = as.Date(c("2020-01-02", "2020-01-09", "2020-01-16")),
+    n = c(1000L, 1000L, 900L),
+    poll_id = c("p1", "p2", "p3")
+  )
 
+  expected_case <- "init_mismatch"
   testthat::local_mocked_bindings(
     backend_get_last_draws_for_init = function(...) {
       list(list(x = c(0.11, 0.22)), list(x = c(0.33, 0.44)))
@@ -323,11 +333,73 @@ test_that("refit_poll_of_polls rejects incompatible chains overrides before samp
       )
     },
     backend_get_num_upars = function(...) 2L,
+    refit_build_expected_parameter_dimensions = function(...) {
+      if(identical(expected_case, "init_mismatch")) {
+        return(list(
+          num_upars = 2L,
+          init_skeleton = list(list(x = numeric(3)))
+        ))
+      }
+      list(
+        num_upars = 3L,
+        init_skeleton = list(list(x = numeric(2)))
+      )
+    },
+    poll_of_polls = function(...) {
+      list(args = list(...))
+    },
     .package = "stanpop"
   )
 
   expect_error(
-    refit_poll_of_polls(pop, chains = 1),
+    refit_poll_of_polls(pop, polls_data = new_polls_data),
+    "Warm-start init is incompatible"
+  )
+
+  init_disabled <- refit_poll_of_polls(
+    pop,
+    polls_data = new_polls_data,
+    warm_start = list(init = NULL)
+  )
+
+  expect_false("init" %in% names(init_disabled$args))
+  expect_identical(init_disabled$args$inv_metric, list(c(1, 2), c(3, 4)))
+  expect_identical(init_disabled$args$metric, "diag_e")
+  expect_equal(init_disabled$args$step_size, c(0.12, 0.34))
+
+  expected_case <- "inv_metric_mismatch"
+
+  expect_error(
+    refit_poll_of_polls(pop, polls_data = new_polls_data),
+    "expects 3 unconstrained parameter\\(s\\), but chain 1 encodes 2"
+  )
+
+  inv_metric_disabled <- refit_poll_of_polls(
+    pop,
+    polls_data = new_polls_data,
+    warm_start = list(inv_metric = NULL)
+  )
+
+  expect_true("init" %in% names(inv_metric_disabled$args))
+  expect_false("inv_metric" %in% names(inv_metric_disabled$args))
+  expect_identical(inv_metric_disabled$args$metric, "diag_e")
+  expect_equal(inv_metric_disabled$args$step_size, c(0.12, 0.34))
+})
+
+test_that("refit_poll_of_polls rejects incompatible chains overrides before sampling", {
+  pop <- make_mock_pop_for_refit_helpers("cmdstanr")
+  warm_start_init <- list(list(x = c(0.11, 0.22)), list(x = c(0.33, 0.44)))
+
+  expect_error(
+    refit_poll_of_polls(
+      pop,
+      chains = 1,
+      warm_start = list(
+        init = warm_start_init,
+        inv_metric = NULL,
+        step_size = NULL
+      )
+    ),
     "warm-start argument 'init' contains 2 chain\\(s\\)"
   )
 })

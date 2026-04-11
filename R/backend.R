@@ -371,6 +371,12 @@ backend_build_init_skeleton_from_variable_names <- function(variable_names,
 #' @keywords internal
 backend_get_cmdstanr_parameter_roots <- function(fit, variable_names = NULL) {
   checkmate::assert_character(variable_names, any.missing = FALSE, null.ok = TRUE)
+  # Prefer cmdstanr metadata when it is available, but keep a fallback list so
+  # mock fits and older metadata shapes still drop sampler method variables.
+  cmdstan_method_variables <- c(
+    "lp__", "accept_stat__", "stepsize__", "treedepth__",
+    "n_leapfrog__", "divergent__", "energy__"
+  )
 
   runset <- try(fit$runset, silent = TRUE)
   if(!inherits(runset, "try-error") && !is.null(runset)) {
@@ -387,6 +393,10 @@ backend_get_cmdstanr_parameter_roots <- function(fit, variable_names = NULL) {
 
   metadata <- try(fit$metadata(), silent = TRUE)
   if(!inherits(metadata, "try-error")) {
+    if(!is.null(metadata$sampler_diagnostics) && length(metadata$sampler_diagnostics) > 0L) {
+      cmdstan_method_variables <- unique(c("lp__", metadata$sampler_diagnostics))
+    }
+
     if(!is.null(metadata$stan_file) &&
        checkmate::test_file_exists(metadata$stan_file, extension = "stan")) {
       stan_code <- paste(readLines(metadata$stan_file, warn = FALSE), collapse = "\n")
@@ -397,14 +407,17 @@ backend_get_cmdstanr_parameter_roots <- function(fit, variable_names = NULL) {
     }
 
     if(!is.null(metadata$model_params) && length(metadata$model_params) > 0L) {
-      return(metadata$model_params)
+      metadata_roots <- unique(sub("\\[.*$", "", metadata$model_params))
+      metadata_roots <- metadata_roots[!metadata_roots %in% cmdstan_method_variables]
+      return(metadata_roots)
     }
   }
 
   if(is.null(variable_names)) {
     return(character())
   }
-  unique(sub("\\[.*$", "", variable_names))
+  variable_roots <- unique(sub("\\[.*$", "", variable_names))
+  variable_roots[!variable_roots %in% cmdstan_method_variables]
 }
 
 #' Build an RStan init skeleton
