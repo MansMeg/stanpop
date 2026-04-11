@@ -50,6 +50,7 @@ make_mock_pop_for_refit_helpers <- function(backend = c("cmdstanr", "rstan")){
       known_state = tibble::tibble(date = as.Date("2020-01-01"), x = 0.41),
       model_time_range = time_range(c(as.Date("2020-01-01"), as.Date("2020-01-31"))),
       latent_time_range = list(x = time_range(c(as.Date("2020-01-01"), as.Date("2020-01-31")))),
+      time_line = list(slow_scales = as.Date("2020-01-15")),
       stan_arguments = sample_args,
       stan_fit = structure(list(), class = "mock_stan_fit"),
       model_arguments = list(use_softmax = 1L),
@@ -74,15 +75,21 @@ make_mock_pop_for_refit_helpers <- function(backend = c("cmdstanr", "rstan")){
 }
 
 resolve_refit_arguments_for_test <- function(x,
-                                             warm_start = list(),
+                                             polls_data = x$polls_data,
                                              backend = "cmdstanr",
+                                             compile_args = x$compile_arguments,
+                                             cache_dir = x$cache_dir,
+                                             warm_start = list(),
                                              dots = list()) {
   resolve_refit_poll_of_polls_arguments <- get_internal("resolve_refit_poll_of_polls_arguments")
   refit_materialize_warm_start_arguments <- get_internal("refit_materialize_warm_start_arguments")
 
   resolved <- resolve_refit_poll_of_polls_arguments(
     x = x,
+    polls_data = polls_data,
     backend = backend,
+    compile_args = compile_args,
+    cache_dir = cache_dir,
     dots = dots,
     warm_start = warm_start
   )
@@ -109,8 +116,9 @@ test_that("extract_poll_of_polls_refit_arguments returns constructor arguments o
   expect_identical(args$known_state, pop$known_state)
   expect_identical(args$backend, "cmdstanr")
   expect_identical(args$compile_args, pop$compile_arguments)
-  expect_null(args$model_time_range)
-  expect_null(args$latent_time_ranges)
+  expect_identical(args$model_time_range, pop$model_time_range)
+  expect_identical(args$latent_time_ranges, pop$latent_time_range)
+  expect_identical(args$hyper_parameters, pop$model_arguments)
   expect_identical(args$slow_scales, as.Date("2020-01-15"))
 })
 
@@ -147,10 +155,10 @@ test_that("extract_poll_of_polls_sample_arguments falls back to nested input arg
   )
 })
 
-test_that("refit_poll_of_polls has a public override-oriented signature", {
+test_that("refit_poll_of_polls has a narrow refit-oriented signature", {
   expect_identical(
     names(formals(refit_poll_of_polls)),
-    c("x", "warm_start", "backend", "...")
+    c("x", "polls_data", "backend", "compile_args", "cache_dir", "warm_start", "...")
   )
   expect_false("y" %in% names(formals(refit_poll_of_polls)))
   expect_false("model" %in% names(formals(refit_poll_of_polls)))
@@ -182,6 +190,8 @@ test_that("refit_poll_of_polls defaults to cmdstanr and inherits omitted argumen
   expect_identical(args$polls_data, pop$polls_data)
   expect_identical(args$known_state, pop$known_state)
   expect_identical(args$backend, "cmdstanr")
+  expect_identical(args$compile_args, pop$compile_arguments)
+  expect_identical(args$cache_dir, pop$cache_dir)
   expect_identical(args$iter_warmup, 250)
   expect_identical(args$iter_sampling, 500)
   expect_identical(args$parallel_chains, 2)
@@ -193,23 +203,30 @@ test_that("refit_poll_of_polls defaults to cmdstanr and inherits omitted argumen
   expect_identical(args$metric, "diag_e")
 })
 
-test_that("refit_poll_of_polls treats explicit NULL constructor arguments as overrides", {
+test_that("refit_poll_of_polls applies explicit polls_data, compile_args, and cache_dir overrides", {
   pop <- make_mock_pop_for_refit_helpers("cmdstanr")
+  new_polls_data <- polls_data(
+    y = data.frame(x = c(0.41, 0.46, 0.47)),
+    house = factor(c("A", "A", "B")),
+    publish_date = as.Date(c("2020-01-02", "2020-01-09", "2020-01-16")),
+    start_date = as.Date(c("2020-01-01", "2020-01-08", "2020-01-15")),
+    end_date = as.Date(c("2020-01-02", "2020-01-09", "2020-01-16")),
+    n = c(1000L, 1000L, 900L),
+    poll_id = c("p1", "p2", "p3")
+  )
   args <- resolve_refit_arguments_for_test(
     pop,
+    polls_data = new_polls_data,
+    compile_args = NULL,
+    cache_dir = NULL,
     warm_start = list(
       init = NULL,
       inv_metric = NULL,
       step_size = NULL
-    ),
-    dots = list(
-      known_state = NULL,
-      compile_args = NULL,
-      cache_dir = NULL
     )
   )
 
-  expect_null(args$known_state)
+  expect_identical(args$polls_data, new_polls_data)
   expect_null(args$compile_args)
   expect_null(args$cache_dir)
 })
@@ -314,12 +331,65 @@ test_that("refit_poll_of_polls errors when warm-start names are supplied in dots
   )
 })
 
-test_that("refit_poll_of_polls errors when y or model are supplied through dots", {
+test_that("refit_poll_of_polls errors when inherited model inputs are supplied through dots", {
   pop <- make_mock_pop_for_refit_helpers("cmdstanr")
 
   expect_error(
     refit_poll_of_polls(pop, y = "other"),
-    "always inherits 'y' and 'model'"
+    "Only backend sampler arguments belong in '\\.\\.\\.'"
+  )
+  expect_error(
+    refit_poll_of_polls(
+      pop,
+      time_scale = "week"
+    ),
+    "Only backend sampler arguments belong in '\\.\\.\\.'"
+  )
+  expect_error(
+    refit_poll_of_polls(
+      pop,
+      time_scale_overrides = data.frame(
+        from = as.Date("2020-01-10"),
+        to = as.Date("2020-01-15"),
+        time_scale = "week"
+      )
+    ),
+    "Only backend sampler arguments belong in '\\.\\.\\.'"
+  )
+  expect_error(
+    refit_poll_of_polls(
+      pop,
+      known_state = tibble::tibble(date = as.Date("2020-01-02"), x = 0.45)
+    ),
+    "Only backend sampler arguments belong in '\\.\\.\\.'"
+  )
+  expect_error(
+    refit_poll_of_polls(
+      pop,
+      model_time_range = time_range(c(as.Date("2020-02-01"), as.Date("2020-02-29")))
+    ),
+    "Only backend sampler arguments belong in '\\.\\.\\.'"
+  )
+  expect_error(
+    refit_poll_of_polls(
+      pop,
+      latent_time_ranges = list(x = time_range(c(as.Date("2020-02-01"), as.Date("2020-02-29"))))
+    ),
+    "Only backend sampler arguments belong in '\\.\\.\\.'"
+  )
+  expect_error(
+    refit_poll_of_polls(
+      pop,
+      hyper_parameters = list(use_softmax = 0L)
+    ),
+    "Only backend sampler arguments belong in '\\.\\.\\.'"
+  )
+  expect_error(
+    refit_poll_of_polls(
+      pop,
+      slow_scales = as.Date("2020-01-20")
+    ),
+    "Only backend sampler arguments belong in '\\.\\.\\.'"
   )
 })
 
