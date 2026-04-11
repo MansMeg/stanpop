@@ -40,15 +40,20 @@ jobs:
 
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          extra-packages: any::rcmdcheck, any::cmdstanr, any::posterior
+          extra-packages: any::rcmdcheck, any::posterior
           needs: check
 
       - name: Install CmdStan
         run: |
+          cat("cmdstanr:", as.character(utils::packageVersion("cmdstanr")), "\n")
           cmdstan_dir <- cmdstanr::install_cmdstan(cores = 2, overwrite = FALSE)
           cmdstanr::set_cmdstan_path(cmdstan_dir)
+          cmdstanr::cmdstan_make_local(cpp_options = list(STAN_THREADS = TRUE))
+          cmdstanr::rebuild_cmdstan()
           cat("CmdStan path:", cmdstanr::cmdstan_path(), "\n")
           cat("CmdStan version:", cmdstanr::cmdstan_version(), "\n")
+          cat("make/local:\n")
+          cat(cmdstanr::cmdstan_make_local(), sep = "\n")
         shell: Rscript {0}
 
       - uses: r-lib/actions/check-r-package@v2
