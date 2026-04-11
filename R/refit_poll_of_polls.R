@@ -247,3 +247,122 @@ refit_remove_inherited_warm_start_arguments <- function(sample_args) {
   sample_args[c("init", "inv_metric", "step_size", "metric_file")] <- NULL
   sample_args
 }
+
+#' Materialize warm-start arguments for a refit call
+#'
+#' @description
+#' Fill the backend sampling arguments needed for a warm-started refit. The
+#' helper starts from an existing list of sampler arguments, then inserts or
+#' removes `init`, `inv_metric`, `metric_type`, and `step_size` according to
+#' the explicit `warm_start` list.
+#'
+#' Omitted warm-start elements are filled automatically from the stored fit in
+#' `x`: the final constrained draw is reused for `init`, while the sampler
+#' state supplies `inv_metric` and `step_size`. When an inverse metric is
+#' present and no explicit `metric_type` is supplied, the metric type is
+#' inferred from the shape of that inverse metric. Named `NULL` entries in
+#' `warm_start` explicitly disable the corresponding warm-start component.
+#'
+#' This helper only materializes warm-start related sampler arguments. It does
+#' not rebuild the model inputs or merge ordinary sampler overrides.
+#'
+#' @param x A fitted `poll_of_polls` object that provides the stored fit and
+#'   sampler state for automatic warm-start defaults.
+#' @param backend Backend for the refit sampler arguments.
+#' @param sample_args A named list of backend sampling arguments after ordinary
+#'   sampler overrides have been merged.
+#' @param warm_start A validated named list of explicit warm-start overrides.
+#'   Supported elements are `init`, `inv_metric`, `metric_type`, and
+#'   `step_size`.
+#'
+#' @return A named list of sampling arguments with warm-start fields
+#'   materialized.
+#'
+#' @keywords internal
+refit_materialize_warm_start_arguments <- function(x,
+                                                   backend,
+                                                   sample_args,
+                                                   warm_start = list()) {
+  assert_pop(x)
+  assert_pop_backend(backend)
+  checkmate::assert_list(sample_args, names = "named")
+  warm_start <- normalize_refit_warm_start(warm_start)
+
+  state <- NULL
+  last_draws <- NULL
+
+  get_sampler_state <- function() {
+    if(is.null(state)) {
+      if(is.null(x$stan_fit)) {
+        stop("The stored fit is missing, so sampler state cannot be reused.", call. = FALSE)
+      }
+      state <- backend_get_sampler_state(x$backend, x$stan_fit)
+    }
+    state
+  }
+
+  get_last_draws <- function() {
+    if(is.null(last_draws)) {
+      if(is.null(x$stan_fit)) {
+        stop("The stored fit is missing, so init values cannot be reused.", call. = FALSE)
+      }
+      last_draws <- backend_get_last_draws_for_init(x$backend, x$stan_fit)
+    }
+    last_draws
+  }
+
+  # Handle init
+  if("init" %in% names(warm_start)) {
+    sample_args <- refit_set_named_argument(sample_args, "init", warm_start$init)
+  } else {
+    sample_args <- refit_set_named_argument(sample_args, "init", get_last_draws())
+  }
+
+  # Handle inv metric
+  if("inv_metric" %in% names(warm_start)) {
+    sample_args <- refit_set_inv_metric_argument(
+      sample_args,
+      backend,
+      warm_start$inv_metric
+    )
+  } else if(is.null(sample_args$metric_file)) {
+    sample_args <- refit_set_inv_metric_argument(
+      sample_args,
+      backend,
+      refit_sampler_state_field(get_sampler_state(), "inv_metric")
+    )
+  }
+  inv_metric_value <- sample_args$inv_metric
+
+  # `metric_type` is the public refit name; CmdStanR expects the sampler arg `metric`.
+  if("metric_type" %in% names(warm_start)) {
+    sample_args <- refit_set_metric_type_argument(
+      sample_args,
+      backend,
+      warm_start$metric_type
+    )
+    if(!is.null(sample_args$metric) && !is.null(inv_metric_value)) {
+      refit_assert_metric_type_matches_inv_metric(
+        metric_type = sample_args$metric,
+        inv_metric = inv_metric_value
+      )
+    }
+  } else if(!is.null(inv_metric_value)) {
+    sample_args <- refit_set_metric_type_argument(
+      sample_args,
+      backend,
+      refit_metric_type_from_inv_metric(inv_metric_value)
+    )
+  }
+
+  if("step_size" %in% names(warm_start)) {
+    sample_args <- refit_set_step_size_argument(sample_args, backend, warm_start$step_size)
+  } else {
+    sample_args <- refit_set_step_size_argument(
+      sample_args,
+      backend,
+      refit_sampler_state_field(get_sampler_state(), "step_size", simplify = TRUE)
+    )
+  }
+  sample_args
+}
