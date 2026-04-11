@@ -777,6 +777,61 @@ refit_resolve_chain_count <- function(x, sample_args) {
 
   length(backend_get_sampler_state(x$backend, x$stan_fit))
 }
+
+#' Detect chain-specific warm-start lengths
+#'
+#' @description
+#' Return the number of chains encoded in a warm-start value when that value is
+#' chain-specific. Shared values return `NA_integer_`, which signals that the
+#' value can be recycled across chains.
+#'
+#' @param value Warm-start value to inspect.
+#' @param name Name of the warm-start component. Supported values are `init`,
+#'   `inv_metric`, and `step_size`.
+#'
+#' @return Integer scalar giving the chain count implied by `value`, or
+#'   `NA_integer_` when `value` is not chain-specific.
+#'
+#' @keywords internal
+refit_chain_specific_argument_length <- function(value, name) {
+  checkmate::assert_string(name)
+
+  if(is.null(value)) {
+    return(NA_integer_)
+  }
+  if(name == "init") {
+    if(refit_is_per_chain_init_list(value)) {
+      return(length(value))
+    }
+    return(NA_integer_)
+  }
+  if(name == "inv_metric" && is.list(value)) {
+    return(length(value))
+  }
+  if(name == "step_size" && length(value) > 1L) {
+    return(length(value))
+  }
+  NA_integer_
+}
+
+#' Detect per-chain init lists
+#'
+#' @description
+#' Test whether an `init` value is already expressed as one named init list per
+#' chain, which is the structure expected for chain-specific warm-start
+#' validation.
+#'
+#' @param x Candidate init value.
+#'
+#' @return Logical scalar.
+#'
+#' @keywords internal
+refit_is_per_chain_init_list <- function(x) {
+  is.list(x) &&
+    length(x) > 0L &&
+    (is.null(names(x)) || all(names(x) == "")) &&
+    all(vapply(x, is.list, logical(1)))
+}
 #' @keywords internal
 assert_refit_last_draws_complete_for_init <- function(backend, fit, init) {
   assert_pop_backend(backend)
