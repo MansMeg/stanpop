@@ -2,12 +2,9 @@
 % Please edit documentation in R/rerun_poll_of_polls.R
 \name{rerun_poll_of_polls}
 \alias{rerun_poll_of_polls}
-\alias{reestimate_poll_of_polls}
 \title{Re-estimate a poll_off_polls stan model with new stan arguments}
 \usage{
 rerun_poll_of_polls(x, ...)
-
-reestimate_poll_of_polls(x, ...)
 }
 \arguments{
 \item{x}{a poll_of_polls object}

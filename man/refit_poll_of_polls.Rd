@@ -15,7 +15,15 @@ refit_poll_of_polls(
   ...
 )
 
-reestimate_poll_of_polls(x, ...)
+reestimate_poll_of_polls(
+  x,
+  polls_data = x$polls_data,
+  backend = "cmdstanr",
+  compile_args = x$compile_arguments,
+  cache_dir = x$cache_dir,
+  warm_start = list(),
+  ...
+)
 }
 \arguments{
 \item{x}{Existing [poll_of_polls] object to refit.}

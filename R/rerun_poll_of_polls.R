@@ -24,7 +24,3 @@ rerun_poll_of_polls <- function(x, ...){
   pop$stan_fit <- stan_fit
   return(pop)
 }
-
-#' @rdname rerun_poll_of_polls
-#' @export
-reestimate_poll_of_polls <- rerun_poll_of_polls

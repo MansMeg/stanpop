@@ -4,12 +4,19 @@
 \alias{backend_build_init_skeleton_from_variable_names}
 \title{Build a CmdStanR init skeleton from draw names}
 \usage{
-backend_build_init_skeleton_from_variable_names(variable_names)
+backend_build_init_skeleton_from_variable_names(
+  variable_names,
+  parameter_roots = NULL
+)
 }
 \arguments{
 \item{variable_names}{A character vector of variable names from a CmdStanR
 draws object. This may include Stan sampler method variables, which are
 ignored when constructing the parameter skeleton.}
+
+\item{parameter_roots}{Optional character vector restricting the skeleton to
+specific parameter roots, for example the names declared in the Stan
+`parameters` block.}
 }
 \description{
 Reconstruct a parameter-shaped init skeleton from the flat variable names in
