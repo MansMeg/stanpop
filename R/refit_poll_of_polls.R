@@ -941,6 +941,55 @@ refit_normalize_step_size_for_validation <- function(step_size, chains) {
   }
   as.numeric(step_size)
 }
+
+#' Remove zero-length roots from an init skeleton
+#'
+#' @description
+#' Drop parameter roots with zero length from a per-chain init skeleton. These
+#' roots do not produce usable init values and should not be treated as missing
+#' warm-start parameters.
+#'
+#' @param skeleton Per-chain init skeleton, typically from
+#'   [backend_get_init_skeleton()].
+#'
+#' @return The filtered per-chain init skeleton.
+#'
+#' @keywords internal
+refit_nonempty_init_skeleton <- function(skeleton) {
+  checkmate::assert_list(skeleton)
+  lapply(skeleton, function(chain_expected) {
+    chain_expected[vapply(chain_expected, length, integer(1)) > 0L]
+  })
+}
+
+#' Recycle init skeletons to the requested chain count
+#'
+#' @description
+#' Ensure that an expected init skeleton is available for each chain being
+#' validated. A single-chain skeleton is recycled across chains; otherwise the
+#' skeleton list must already match the requested chain count.
+#'
+#' @param expected Per-chain init skeleton.
+#' @param chains Integer scalar giving the requested chain count.
+#'
+#' @return A per-chain init skeleton with length `chains`.
+#'
+#' @keywords internal
+refit_recycle_init_skeleton <- function(expected, chains) {
+  checkmate::assert_list(expected)
+  checkmate::assert_integerish(chains, len = 1L, lower = 1L, any.missing = FALSE)
+
+  if(length(expected) == chains) {
+    return(expected)
+  }
+  if(length(expected) == 1L) {
+    return(rep(expected, chains))
+  }
+  stop(
+    "Expected init skeleton for ", chains, " chain(s), but found ", length(expected), ".",
+    call. = FALSE
+  )
+}
 #' @keywords internal
 assert_refit_last_draws_complete_for_init <- function(backend, fit, init) {
   assert_pop_backend(backend)
