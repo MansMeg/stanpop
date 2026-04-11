@@ -5,12 +5,34 @@
 \alias{reestimate_poll_of_polls}
 \title{Refit a poll_of_polls object}
 \usage{
-refit_poll_of_polls(x, warm_start = list(), backend = "cmdstanr", ...)
+refit_poll_of_polls(
+  x,
+  polls_data = x$polls_data,
+  backend = "cmdstanr",
+  compile_args = x$compile_arguments,
+  cache_dir = x$cache_dir,
+  warm_start = list(),
+  ...
+)
 
 reestimate_poll_of_polls(x, ...)
 }
 \arguments{
 \item{x}{Existing [poll_of_polls] object to refit.}
+
+\item{polls_data}{a [polls_data] object. Defaults to `x$polls_data`.}
+
+\item{backend}{Stan backend to use for the refit. Only `backend = "cmdstanr"`
+is currently supported because RStan does not accept a supplied mass
+matrix.
+The argument remains explicit so a future version can extend backend
+support without changing the public API.}
+
+\item{compile_args}{additional arguments passed to
+[cmdstanr::cmdstan_model()] when `backend = "cmdstanr"`. Defaults to
+`x$compile_arguments`.}
+
+\item{cache_dir}{directory to cache model. Defaults to `x$cache_dir`.}
 
 \item{warm_start}{A named list controlling warm-start initialization.
 Supported elements are `init`, `inv_metric`, `metric_type`, and
@@ -20,45 +42,30 @@ Set an element to `NULL` to disable that default warm-start component.
 For example, `warm_start = list(inv_metric = NULL)` reuses the last draw
 but does not reuse the inverse metric.}
 
-\item{backend}{Stan backend to use for the refit. Only `backend = "cmdstanr"`
-is currently supported because RStan does not accept a supplied mass
-matrix.
-The argument remains explicit so a future version can extend backend
-support without changing the public API.}
-
-\item{...}{Named overrides. Names matching [poll_of_polls()] constructor
-arguments, except `y`, `model`, and `backend`, override stored model
-inputs. All other names are treated as backend sampler arguments.
-Warm-start controls such as `init`, `inv_metric`, `metric_type`, and
-`step_size` must be supplied through `warm_start`, not `...`.}
+\item{...}{Named backend sampler arguments supplied to
+`CmdStanModel$sample()`. Warm-start controls such as `init`, `inv_metric`,
+`metric_type`, and `step_size` must be supplied through `warm_start`, not
+`...`.}
 }
 \value{
 A refitted [poll_of_polls] object.
 }
 \description{
 `refit_poll_of_polls()` reconstructs a call to [poll_of_polls()] from an
-existing [poll_of_polls] object. The public API is intentionally small:
-supply the existing object `x`, optionally choose a `backend`, and use `...`
-for any overrides.
+existing [poll_of_polls] object. The public API mirrors the practical refit
+use case: optionally replace `polls_data`, optionally choose refit-specific
+settings such as `backend`, `compile_args`, `cache_dir`, and `warm_start`,
+and use `...` only for backend sampler arguments.
 
-Named entries in `...` are interpreted in two groups:
-
-1. Names matching [poll_of_polls()] constructor arguments, except `y`,
-   `model`, and `backend`, override the stored model inputs.
-2. All other names in `...` are treated as backend sampler arguments.
-
-Constructor arguments inherit from `x` when omitted. Supplying a value in
-`...` replaces the stored value, including `NULL` for arguments where
-clearing the stored value is meaningful, such as `known_state`,
-`compile_args`, or `cache_dir`.
-
-Sampler arguments also inherit from `x` and can be overridden or removed via
-`...`. Named `NULL` values remove stored sampler arguments.
+Backend sampler arguments inherit from `x` and can be overridden or removed
+via `...`. Named `NULL` values remove stored sampler arguments.
 
 Warm starts are filled in automatically unless you override them in
 `warm_start`. Omitted `warm_start` elements are taken from the last draw and
 sampler state of `x`.
 
-The original `y` and `model` are always inherited from `x`; use
-[poll_of_polls()] directly to change them.
+Structural model inputs other than `polls_data` are always inherited from
+`x`; use [poll_of_polls()] directly to change `y`, `model`, `time_scale`,
+`time_scale_overrides`, `known_state`, `model_time_range`,
+`latent_time_ranges`, `hyper_parameters`, or `slow_scales`.
 }

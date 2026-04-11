@@ -4,15 +4,24 @@
 \alias{resolve_refit_poll_of_polls_arguments}
 \title{Resolve refit arguments before rebuilding the model}
 \usage{
-resolve_refit_poll_of_polls_arguments(x, backend, dots, warm_start)
+resolve_refit_poll_of_polls_arguments(
+  x,
+  polls_data,
+  backend,
+  compile_args,
+  cache_dir,
+  dots,
+  warm_start
+)
 }
 \description{
-Split a refit call into the pieces needed to rebuild a [poll_of_polls()]
-call from an existing object. This helper validates the requested backend,
-separates constructor overrides from backend sampler overrides, normalizes
-the `warm_start` specification, and returns the inherited constructor and
-sampler arguments after explicit overrides have been applied. Automatic
-warm-start defaults are not inserted here; they are added later by
-[refit_materialize_warm_start_arguments()].
+Build the pieces needed to rebuild a [poll_of_polls()] call from an
+existing object under the narrow refit API. This helper validates the
+requested backend, checks that `...` contains only backend sampler
+arguments, normalizes the `warm_start` specification, and returns the
+inherited constructor arguments after the explicit refit inputs
+(`polls_data`, `backend`, `compile_args`, and `cache_dir`) have been
+applied. Automatic warm-start defaults are not inserted here; they are added
+later by [refit_materialize_warm_start_arguments()].
 }
 \keyword{internal}
