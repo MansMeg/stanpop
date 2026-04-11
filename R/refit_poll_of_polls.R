@@ -500,3 +500,74 @@ refit_merge_sample_arguments <- function(sample_args, sample_overrides) {
   }
   sample_args
 }
+
+#' @keywords internal
+refit_set_named_argument <- function(args, name, value) {
+  checkmate::assert_list(args, names = "named")
+  checkmate::assert_string(name)
+
+  if(is.null(value)) {
+    args[[name]] <- NULL
+    return(args)
+  }
+  args[[name]] <- value
+  args
+}
+
+#' @keywords internal
+refit_set_inv_metric_argument <- function(sample_args, backend, value) {
+  assert_pop_backend(backend)
+  if(backend != "cmdstanr" && !is.null(value)) {
+    stop(
+      "Inverse metric reuse requires backend = 'cmdstanr'.",
+      call. = FALSE
+    )
+  }
+  if(backend == "cmdstanr" && !is.null(value)) {
+    sample_args$metric_file <- NULL
+  }
+  refit_set_named_argument(sample_args, "inv_metric", value)
+}
+
+#' @keywords internal
+refit_set_metric_type_argument <- function(sample_args, backend, value) {
+  assert_pop_backend(backend)
+  if(!is.null(value)) {
+    checkmate::assert_choice(value, choices = c("diag_e", "dense_e", "unit_e"))
+  }
+  if(backend == "cmdstanr") {
+    return(refit_set_named_argument(sample_args, "metric", value))
+  }
+  refit_set_rstan_control_argument(sample_args, "metric", value)
+}
+
+#' @keywords internal
+refit_set_step_size_argument <- function(sample_args, backend, value) {
+  assert_pop_backend(backend)
+
+  if(backend == "cmdstanr") {
+    if(!is.null(value)) {
+      checkmate::assert_numeric(value, lower = .Machine$double.eps, any.missing = FALSE)
+    }
+    return(refit_set_named_argument(sample_args, "step_size", value))
+  }
+
+  if(is.null(value)) {
+    return(refit_set_rstan_control_argument(sample_args, "stepsize", NULL))
+  }
+
+  # RStan only supports one shared step size, so collapse repeated values and reject chain-specific ones.
+  checkmate::assert_numeric(value, lower = .Machine$double.eps, any.missing = FALSE)
+  if(length(value) > 1L) {
+    unique_value <- unique(as.numeric(value))
+    if(length(unique_value) != 1L) {
+      stop(
+        "RStan only accepts a single step size value. ",
+        "Use backend = 'cmdstanr' for chain-specific step sizes.",
+        call. = FALSE
+      )
+    }
+    value <- unique_value[[1]]
+  }
+  refit_set_rstan_control_argument(sample_args, "stepsize", value)
+}
