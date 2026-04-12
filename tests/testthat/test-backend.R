@@ -172,6 +172,36 @@ test_that("backend_build_init_skeleton_from_variable_names reconstructs paramete
   expect_equal(dim(skeleton$gamma), c(2L, 2L), tolerance = 0)
 })
 
+test_that("backend_capture_warm_start_state stores the refit warm_start_state", {
+  backend_capture_warm_start_state <- get_internal("backend_capture_warm_start_state")
+
+  # Pin the exact warm_start_state bundle stored on a poll_of_polls object for later refits.
+  testthat::local_mocked_bindings(
+    backend_get_last_draws_for_init = function(...) {
+      list(list(alpha = 0.1))
+    },
+    backend_get_sampler_state = function(...) {
+      list(list(step_size = 0.25, inv_metric = c(1, 2), metric_type = "diag_e"))
+    },
+    backend_get_init_skeleton = function(...) {
+      list(list(alpha = 0))
+    },
+    backend_get_num_upars = function(...) 2L,
+    .package = "stanpop"
+  )
+
+  res <- backend_capture_warm_start_state(
+    "cmdstanr",
+    structure(list(), class = "mock_fit")
+  )
+
+  expect_named(res, c("init", "init_complete", "sampler_state", "init_skeleton", "num_upars"))
+  expect_identical(res$init, list(list(alpha = 0.1)))
+  expect_true(res$init_complete)
+  expect_identical(res$sampler_state[[1]]$metric_type, "diag_e")
+  expect_identical(res$init_skeleton, list(list(alpha = 0)))
+  expect_identical(res$num_upars, 2L)
+})
 test_that("backend_build_init_skeleton_from_variable_names can ignore generated quantities", {
   backend_build_init_skeleton_from_variable_names <- get_internal("backend_build_init_skeleton_from_variable_names")
 
