@@ -429,6 +429,21 @@ test_that("refit_poll_of_polls skips automatic init reuse when cached init is in
   expect_identical(res$args$metric, "diag_e")
   expect_equal(res$args$step_size, c(0.12, 0.34))
 })
+
+test_that("get_num_upars uses cached warm-start num_upars on poll_of_polls objects", {
+  pop <- make_mock_pop_for_refit_helpers("rstan")
+  pop$warm_start_state <- list(num_upars = 42L)
+
+  testthat::local_mocked_bindings(
+    backend_get_num_upars = function(...) {
+      stop("cached num_upars should be used")
+    },
+    .package = "stanpop"
+  )
+
+  expect_identical(get_num_upars(pop), 42L)
+})
+
 test_that("refit_poll_of_polls can disable init or inverse-metric reuse independently", {
   pop <- make_mock_pop_for_refit_helpers("rstan")
   new_polls_data <- polls_data(
@@ -507,6 +522,39 @@ test_that("refit_poll_of_polls can disable init or inverse-metric reuse independ
   expect_false("inv_metric" %in% names(inv_metric_disabled$args))
   expect_identical(inv_metric_disabled$args$metric, "diag_e")
   expect_equal(inv_metric_disabled$args$step_size, c(0.12, 0.34))
+})
+
+test_that("refit_poll_of_polls can refit an rstan-backed object when get_num_upars fails but sampler state is available", {
+  pop <- make_mock_pop_for_refit_helpers("rstan")
+
+  testthat::local_mocked_bindings(
+    get_num_upars = function(...) {
+      stop("the model object is not created or not valid")
+    },
+    .package = "rstan"
+  )
+  testthat::local_mocked_bindings(
+    backend_get_sampler_state = function(...) {
+      list(
+        list(step_size = 0.12, inv_metric = c(1, 2), metric_type = "diag_e"),
+        list(step_size = 0.34, inv_metric = c(3, 4), metric_type = "diag_e")
+      )
+    },
+    poll_of_polls = function(...) {
+      list(args = list(...))
+    },
+    .package = "stanpop"
+  )
+
+  res <- refit_poll_of_polls(
+    pop,
+    warm_start = list(init = NULL)
+  )
+
+  expect_false("init" %in% names(res$args))
+  expect_identical(res$args$inv_metric, list(c(1, 2), c(3, 4)))
+  expect_identical(res$args$metric, "diag_e")
+  expect_equal(res$args$step_size, c(0.12, 0.34))
 })
 
 test_that("refit_poll_of_polls rejects incompatible chains overrides before sampling", {
