@@ -635,7 +635,29 @@ backend_get_adaptation_info <- function(backend, fit, ...) {
 backend_get_num_upars <- function(backend, fit, ...) {
   assert_pop_backend(backend)
   if(backend == "rstan"){
-    return(rstan::get_num_upars(fit, ...))
+    num_upars <- try(rstan::get_num_upars(fit, ...), silent = TRUE)
+    if(!inherits(num_upars, "try-error")) {
+      return(num_upars)
+    }
+
+    sampler_state <- try(backend_get_sampler_state(backend, fit), silent = TRUE)
+    if(!inherits(sampler_state, "try-error") &&
+       length(sampler_state) > 0L &&
+       !is.null(sampler_state[[1]]$inv_metric)) {
+      if(is.matrix(sampler_state[[1]]$inv_metric)) {
+        return(nrow(sampler_state[[1]]$inv_metric))
+      }
+      return(length(sampler_state[[1]]$inv_metric))
+    }
+
+    stop(
+      "Unable to recover the number of unconstrained parameters from the stored rstan fit. ",
+      "This can happen after deserializing an rstan-backed poll_of_polls object ",
+      "whose stanfit model object is no longer valid. If you are refitting with ",
+      "refit_poll_of_polls(), disable warm-start reuse that depends on the old fit, ",
+      "for example warm_start = list(init = NULL, inv_metric = NULL, step_size = NULL).",
+      call. = FALSE
+    )
   }
   if(backend == "cmdstanr"){
     sampler_state <- backend_get_sampler_state(backend, fit)
