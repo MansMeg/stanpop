@@ -26,6 +26,9 @@
 #' The [stan_arguments] slot contains the backend sampling arguments supplied through `...`,
 #' except for the `data` argument which is stored in the [stan_data] slot.
 #' The [compile_arguments] slot contains the CmdStanR compilation arguments.
+#' The [warm_start_state] slot caches the reusable warm-start payload extracted
+#' from the fitted Stan object so future refits do not need to recover it from
+#' the backend fit after serialization.
 #'
 #'
 #' @export
@@ -163,6 +166,15 @@ poll_of_polls <- function(y,
     model_name = model,
     compile_arguments = compile_args
   )
+  warm_start_state <- try(backend_capture_warm_start_state(backend, stan_fit), silent = TRUE)
+  if(inherits(warm_start_state, "try-error")) {
+    warning(
+      "Unable to cache warm-start state in the poll_of_polls object: ",
+      conditionMessage(attr(warm_start_state, "condition")),
+      call. = FALSE
+    )
+    warm_start_state <- NULL
+  }
 
   pop <-  list(y = y,
                model = model,
@@ -193,6 +205,7 @@ poll_of_polls <- function(y,
                cache_dir = cache_dir,
                time_line = sd$time_line,
                stan_fit = stan_fit,
+               warm_start_state = warm_start_state,
                diagnostics = compute_diagnostics(stan_fit, backend = backend),
                model_arguments = hyper_parameters,
                stan_data = sd)
