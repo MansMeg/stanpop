@@ -727,6 +727,25 @@ backend_capture_warm_start_state <- function(backend, fit, ...) {
     num_upars = as.integer(backend_get_num_upars(backend, fit, ...))
   )
 }
+
+#' Filter zero-length roots from an init skeleton
+#'
+#' @description
+#' Drop parameter roots with zero length from a per-chain init skeleton before
+#' checking whether saved draws are complete enough to be reused as Stan
+#' `init` values.
+#'
+#' @param skeleton Per-chain init skeleton.
+#'
+#' @return The filtered per-chain init skeleton.
+#'
+#' @keywords internal
+backend_nonempty_init_skeleton <- function(skeleton) {
+  checkmate::assert_list(skeleton)
+  lapply(skeleton, function(chain_expected) {
+    chain_expected[vapply(chain_expected, length, integer(1)) > 0L]
+  })
+}
 #' Backend log probability evaluation
 #'
 #' @keywords internal
