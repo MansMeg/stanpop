@@ -106,6 +106,7 @@ poll_of_polls <- function(y,
 
   # SHA is setup both of all
   fun_args <- names(formals(poll_of_polls))[-which(names(formals(poll_of_polls)) %in% c("...", "cache_dir"))]
+  sha_input_names <- c(fun_args, "stanpop_version")
   sha_fun_args <- list(y = y,
                        model = readLines(smfp),
                        polls_data = polls_data,
@@ -119,7 +120,7 @@ poll_of_polls <- function(y,
                        latent_time_ranges = ltr,
                        hyper_parameters = hyper_parameters,
                        slow_scales = slow_scales)
-  checkmate::assert_set_equal(fun_args, names(sha_fun_args))
+  checkmate::assert_set_equal(sha_input_names, names(sha_fun_args))
   sha_stan_args <- list(data = sd$stan_data, ...)
   sha <- digest::digest(c(sha_fun_args, sha_stan_args), algo = "sha1")
 
