@@ -102,11 +102,14 @@ poll_of_polls <- function(y,
     checkmate::assert_directory(cache_dir)
   }
 
+  stanpop_version <- as.character(utils::packageVersion("stanpop"))
+
   # SHA is setup both of all
   fun_args <- names(formals(poll_of_polls))[-which(names(formals(poll_of_polls)) %in% c("...", "cache_dir"))]
   sha_fun_args <- list(y = y,
                        model = readLines(smfp),
                        polls_data = polls_data,
+                       stanpop_version = stanpop_version,
                        backend = backend,
                        compile_args = compile_args,
                        time_scale = time_scale,
@@ -179,6 +182,7 @@ poll_of_polls <- function(y,
   pop <-  list(y = y,
                model = model,
                backend = backend,
+               stanpop_version = stanpop_version,
                compile_arguments = compile_args,
                polls_data = polls_data,
                time_scale = time_scale,
