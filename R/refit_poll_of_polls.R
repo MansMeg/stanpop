@@ -285,6 +285,27 @@ refit_stored_warm_start_field <- function(x, name) {
   }
   state[[name]]
 }
+
+#' Test whether cached automatic init reuse is available
+#'
+#' @description
+#' Return whether a stored `warm_start_state` explicitly says that automatic
+#' `init` reuse is available. Older objects that do not store this flag return
+#' `NULL`, so callers can fall back to backend recovery when needed.
+#'
+#' @param x A fitted `poll_of_polls` object.
+#'
+#' @return `TRUE`, `FALSE`, or `NULL`.
+#'
+#' @keywords internal
+refit_cached_init_is_complete <- function(x) {
+  state <- refit_stored_warm_start_state(x)
+  if(is.null(state) || !"init_complete" %in% names(state)) {
+    return(NULL)
+  }
+  isTRUE(state$init_complete)
+}
+
 #' Materialize warm-start arguments for a refit call
 #'
 #' @description
@@ -325,40 +346,44 @@ refit_materialize_warm_start_arguments <- function(x,
   checkmate::assert_list(sample_args, names = "named")
   warm_start <- normalize_refit_warm_start(warm_start)
 
-  state <- NULL
+  need_last_draws <- !("init" %in% names(warm_start)) &&
+    !identical(refit_cached_init_is_complete(x), FALSE)
   last_draws <- NULL
-
-  get_sampler_state <- function() {
-    if(is.null(state)) {
-      if(is.null(x$stan_fit)) {
-        stop("The stored fit is missing, so sampler state cannot be reused.", call. = FALSE)
-      }
-      state <- backend_get_sampler_state(x$backend, x$stan_fit)
-    }
-    state
-  }
-
-  get_last_draws <- function() {
+  if(need_last_draws) {
+    last_draws <- refit_stored_warm_start_field(x, "init")
     if(is.null(last_draws)) {
       if(is.null(x$stan_fit)) {
         stop("The stored fit is missing, so init values cannot be reused.", call. = FALSE)
       }
       last_draws <- backend_get_last_draws_for_init(x$backend, x$stan_fit)
     }
-    last_draws
   }
 
   # Handle init
   if("init" %in% names(warm_start)) {
     sample_args <- refit_set_named_argument(sample_args, "init", warm_start$init)
   } else {
-    last_draws <- get_last_draws()
-    assert_refit_last_draws_complete_for_init(
-      backend = x$backend,
-      fit = x$stan_fit,
-      init = last_draws
-    )
-    sample_args <- refit_set_named_argument(sample_args, "init", last_draws)
+    if(!is.null(last_draws)) {
+      assert_refit_last_draws_complete_for_init(
+        x = x,
+        init = last_draws
+      )
+      sample_args <- refit_set_named_argument(sample_args, "init", last_draws)
+    }
+  }
+
+  need_sampler_state <- (
+    !("inv_metric" %in% names(warm_start)) && is.null(sample_args$metric_file)
+  ) || !("step_size" %in% names(warm_start))
+  state <- NULL
+  if(need_sampler_state) {
+    state <- refit_stored_warm_start_field(x, "sampler_state")
+    if(is.null(state)) {
+      if(is.null(x$stan_fit)) {
+        stop("The stored fit is missing, so sampler state cannot be reused.", call. = FALSE)
+      }
+      state <- backend_get_sampler_state(x$backend, x$stan_fit)
+    }
   }
 
   # Handle inv metric
@@ -372,7 +397,7 @@ refit_materialize_warm_start_arguments <- function(x,
     sample_args <- refit_set_inv_metric_argument(
       sample_args,
       backend,
-      refit_sampler_state_field(get_sampler_state(), "inv_metric")
+      refit_sampler_state_field(state, "inv_metric")
     )
   }
   inv_metric_value <- sample_args$inv_metric
@@ -404,7 +429,7 @@ refit_materialize_warm_start_arguments <- function(x,
     sample_args <- refit_set_step_size_argument(
       sample_args,
       backend,
-      refit_sampler_state_field(get_sampler_state(), "step_size", simplify = TRUE)
+      refit_sampler_state_field(state, "step_size", simplify = TRUE)
     )
   }
   sample_args
@@ -702,11 +727,22 @@ assert_warm_start_is_compatible <- function(x, constructor_args, sample_args) {
   normalized_init <- refit_normalize_init_for_validation(sample_args$init, no_of_chains_in_refit)
   normalized_inv_metric <- refit_normalize_inv_metric_for_validation(sample_args$inv_metric, no_of_chains_in_refit)
   refit_normalize_step_size_for_validation(sample_args$step_size, no_of_chains_in_refit)
+  if(is.null(normalized_init) && is.null(normalized_inv_metric)) {
+    return(invisible(TRUE))
+  }
 
   # Start from the parameter dimensions in x, then replace them if changed polls_data requires a rebuilt refit shape.
   changed_polls_data <- !identical(constructor_args$polls_data, x$polls_data)
-  old_num_upars <- backend_get_num_upars(x$backend, x$stan_fit)
-  expected_num_upars <- old_num_upars
+  need_old_num_upars <- !is.null(normalized_inv_metric) ||
+    (isTRUE(changed_polls_data) && !is.null(normalized_init))
+  old_num_upars <- NULL
+  if(need_old_num_upars) {
+    old_num_upars <- refit_stored_warm_start_field(x, "num_upars")
+    if(is.null(old_num_upars)) {
+      old_num_upars <- backend_get_num_upars(x$backend, x$stan_fit)
+    }
+  }
+  expected_num_upars <- NULL
   expected_skeleton <- NULL
 
   # If polls_data changed, rebuild the refit parameter dimensions before validating reuse.
@@ -716,22 +752,26 @@ assert_warm_start_is_compatible <- function(x, constructor_args, sample_args) {
     if(!is.null(normalized_init)) {
       expected_skeleton <- refit_nonempty_init_skeleton(expected_dimensions$init_skeleton)
     }
+  } else if(!is.null(normalized_inv_metric)) {
+    expected_num_upars <- old_num_upars
   }
 
   # Check that any reused init still matches the constrained parameter dimensions.
   if(!is.null(normalized_init)) {
     if(is.null(expected_skeleton)) {
-      expected_skeleton <- refit_nonempty_init_skeleton(
-        backend_get_init_skeleton(x$backend, x$stan_fit)
-      )
+      expected_skeleton <- refit_stored_warm_start_field(x, "init_skeleton")
+      if(is.null(expected_skeleton)) {
+        expected_skeleton <- backend_get_init_skeleton(x$backend, x$stan_fit)
+      }
+      expected_skeleton <- refit_nonempty_init_skeleton(expected_skeleton)
     }
     assert_refit_init_matches_skeleton(
       init = normalized_init,
       expected = refit_recycle_init_skeleton(expected_skeleton, length(normalized_init)),
       source_label = refit_parameter_dimension_source_label(changed_polls_data),
       changed_polls_data = changed_polls_data,
-      old_num_upars = old_num_upars,
-      new_num_upars = expected_num_upars
+      old_num_upars = if(isTRUE(changed_polls_data)) old_num_upars else NULL,
+      new_num_upars = if(isTRUE(changed_polls_data)) expected_num_upars else NULL
     )
   }
 
@@ -742,7 +782,7 @@ assert_warm_start_is_compatible <- function(x, constructor_args, sample_args) {
       expected_num_upars = expected_num_upars,
       source_label = refit_parameter_dimension_source_label(changed_polls_data),
       changed_polls_data = changed_polls_data,
-      old_num_upars = old_num_upars
+      old_num_upars = if(isTRUE(changed_polls_data)) old_num_upars else NULL
     )
   }
 
@@ -790,6 +830,11 @@ refit_resolve_chain_count <- function(x, sample_args) {
       )
     }
     return(unique_lengths[[1]])
+  }
+
+  sampler_state <- refit_stored_warm_start_field(x, "sampler_state")
+  if(!is.null(sampler_state)) {
+    return(length(sampler_state))
   }
 
   length(backend_get_sampler_state(x$backend, x$stan_fit))
@@ -1320,11 +1365,15 @@ refit_model_context <- function(model) {
 }
 
 #' @keywords internal
-assert_refit_last_draws_complete_for_init <- function(backend, fit, init) {
-  assert_pop_backend(backend)
+assert_refit_last_draws_complete_for_init <- function(x, init) {
+  assert_pop(x)
   checkmate::assert_list(init)
 
-  expected <- refit_nonempty_init_skeleton(backend_get_init_skeleton(backend, fit))
+  expected <- refit_stored_warm_start_field(x, "init_skeleton")
+  if(is.null(expected)) {
+    expected <- backend_get_init_skeleton(x$backend, x$stan_fit)
+  }
+  expected <- refit_nonempty_init_skeleton(expected)
   if(length(init) != length(expected)) {
     stop(
       "Automatic init reuse requires one complete last draw per chain. ",
