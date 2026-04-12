@@ -1121,51 +1121,34 @@ test_that("refit_poll_of_polls with cmdstanr uses and refreshes warm_start_state
   expect_identical(res$refit$warm_start_state$num_upars, res$refit_num_upars)
 })
 
+test_that("refit_poll_of_polls with cmdstanr refreshes warm_start_state from adapted model8k5 refits", {
+  skip_if_no_stan_tests()
+  skip_if_no_cmdstanr_tests()
+  skip_if_no_cmdstanr()
 
-  expect_silent(
-    capture.output(
-      suppressWarnings(
-        suppressMessages(
-          refit <- refit_poll_of_polls(
-            pop,
-            polls_data = new_polls_data,
-            iter_warmup = 0,
-            iter_sampling = 3,
-            adapt_engaged = FALSE,
-            refresh = 0,
-            seed = 4712,
-            cache_dir = NULL
-          )
-        )
-      )
-    )
+  res <- run_model8k5_refit_with_custom_cached_warm_start(
+    iter_warmup = 5,
+    iter_sampling = 5,
+    adapt_engaged = TRUE
   )
 
-  refit_state <- backend_get_sampler_state("cmdstanr", refit$stan_fit)
-  refit_init <- backend_get_last_draws_for_init("cmdstanr", refit$stan_fit)
-  refit_num_upars <- backend_get_num_upars("cmdstanr", refit$stan_fit)
-
-  # The actual refit call should use the warm_start_state stored on x.
+  # With warmup enabled, the cached warm_start_state on the returned object
+  # should match the adapted sampler state extracted from the new fit.
+  expect_true(isTRUE(res$refit$warm_start_state$init_complete))
+  expect_identical(
+    res$refit$warm_start_state$sampler_state[[1]]$metric_type,
+    res$refit_state[[1]]$metric_type
+  )
   expect_equal(
-    lapply(refit$stan_arguments$init, unlist, use.names = TRUE),
-    lapply(custom_init, unlist, use.names = TRUE),
+    res$refit$warm_start_state$sampler_state[[1]]$inv_metric,
+    res$refit_state[[1]]$inv_metric,
     tolerance = 1e-12
   )
-  expect_identical(refit$stan_arguments$metric, custom_sampler_state[[1]]$metric_type)
-  expect_equal(refit$stan_arguments$inv_metric[[1]], custom_sampler_state[[1]]$inv_metric, tolerance = 1e-12)
-  expect_equal(as.numeric(refit$stan_arguments$step_size), custom_sampler_state[[1]]$step_size, tolerance = 1e-12)
-
-  # The returned object should refresh warm_start_state from the new fit rather
-  # than keeping the cached values copied from x.
-  expect_true(isTRUE(refit$warm_start_state$init_complete))
   expect_equal(
-    lapply(refit$warm_start_state$init, unlist, use.names = TRUE),
-    lapply(refit_init, unlist, use.names = TRUE),
+    res$refit$warm_start_state$sampler_state[[1]]$step_size,
+    res$refit_state[[1]]$step_size,
     tolerance = 1e-12
   )
-  expect_identical(refit$warm_start_state$sampler_state[[1]]$metric_type, refit_state[[1]]$metric_type)
-  expect_equal(refit$warm_start_state$sampler_state[[1]]$inv_metric, refit_state[[1]]$inv_metric, tolerance = 1e-12)
-  expect_equal(refit$warm_start_state$sampler_state[[1]]$step_size, refit_state[[1]]$step_size, tolerance = 1e-12)
-  expect_identical(refit$warm_start_state$num_upars, refit_num_upars)
+})
 
 })
