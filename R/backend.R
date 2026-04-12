@@ -746,6 +746,37 @@ backend_nonempty_init_skeleton <- function(skeleton) {
     chain_expected[vapply(chain_expected, length, integer(1)) > 0L]
   })
 }
+
+#' Test whether init values cover an expected skeleton
+#'
+#' @description
+#' Check whether each chain in a per-chain `init` list contains all parameter
+#' roots expected by the corresponding init skeleton.
+#'
+#' @param init Per-chain init values.
+#' @param expected Per-chain init skeleton.
+#'
+#' @return Logical scalar indicating whether the init values are complete.
+#'
+#' @keywords internal
+backend_init_matches_skeleton <- function(init, expected) {
+  checkmate::assert_list(init)
+  checkmate::assert_list(expected)
+
+  if(length(init) != length(expected)) {
+    return(FALSE)
+  }
+
+  all(vapply(seq_along(expected), function(chain_id) {
+    chain_init <- init[[chain_id]]
+    chain_expected <- expected[[chain_id]]
+    is.list(chain_init) &&
+      !is.null(names(chain_init)) &&
+      all(names(chain_init) != "") &&
+      setequal(names(chain_init), names(chain_expected))
+  }, logical(1)))
+}
+
 #' Backend log probability evaluation
 #'
 #' @keywords internal
