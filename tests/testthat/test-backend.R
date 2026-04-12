@@ -579,6 +579,29 @@ test_that("backend_get_num_upars with rstan falls back to sampler state when the
     3L
   )
 })
+
+test_that("backend_get_num_upars with rstan gives a clearer error when recovery fails", {
+  backend_get_num_upars <- get_internal("backend_get_num_upars")
+
+  testthat::local_mocked_bindings(
+    get_num_upars = function(...) {
+      stop("the model object is not created or not valid")
+    },
+    .package = "rstan"
+  )
+  testthat::local_mocked_bindings(
+    backend_get_sampler_state = function(...) {
+      stop("adaptation info unavailable")
+    },
+    .package = "stanpop"
+  )
+
+  expect_error(
+    backend_get_num_upars("rstan", structure(list(), class = "mock_stan_fit")),
+    "Unable to recover the number of unconstrained parameters from the stored rstan fit"
+  )
+})
+
 test_that("backend_get_sampler_state with cmdstanr returns reusable sampler state", {
   skip_if_no_stan_tests()
   skip_if_no_cmdstanr_tests()
