@@ -26,6 +26,12 @@ get_num_upars <- function(object, ...){
 #' @rdname log_prob
 #' @export
 get_num_upars.poll_of_polls <- function(object, ...){
+  if("warm_start_state" %in% names(object) &&
+     is.list(object$warm_start_state) &&
+     "num_upars" %in% names(object$warm_start_state) &&
+     !is.null(object$warm_start_state$num_upars)) {
+    return(object$warm_start_state$num_upars)
+  }
   nu <- try(backend_get_num_upars(object$backend, object$stan_fit, ...), silent = TRUE)
   if(inherits(nu, "try-error")){
     nu <- length(get_adaptation_info(object)[[1]]$diag_inv_mass_matrix)
