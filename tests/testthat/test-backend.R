@@ -553,6 +553,32 @@ test_that("backend_get_sampler_state with rstan returns reusable sampler state",
   expect_length(state[[1]]$inv_metric, rstan::get_num_upars(fit))
 })
 
+test_that("backend_get_num_upars with rstan falls back to sampler state when the stanfit model is invalid", {
+  backend_get_num_upars <- get_internal("backend_get_num_upars")
+
+  # A deserialized stanfit can lose model-object-dependent queries like get_num_upars()
+  # even though the saved inverse metric is still recoverable from the stanfit object.
+  testthat::local_mocked_bindings(
+    get_num_upars = function(...) {
+      stop("the model object is not created or not valid")
+    },
+    .package = "rstan"
+  )
+  testthat::local_mocked_bindings(
+    backend_get_sampler_state = function(...) {
+      list(
+        list(inv_metric = c(1, 2, 3), metric_type = "diag_e"),
+        list(inv_metric = c(4, 5, 6), metric_type = "diag_e")
+      )
+    },
+    .package = "stanpop"
+  )
+
+  expect_identical(
+    backend_get_num_upars("rstan", structure(list(), class = "mock_stan_fit")),
+    3L
+  )
+})
 test_that("backend_get_sampler_state with cmdstanr returns reusable sampler state", {
   skip_if_no_stan_tests()
   skip_if_no_cmdstanr_tests()
