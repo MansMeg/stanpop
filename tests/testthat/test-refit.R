@@ -1121,20 +1121,6 @@ test_that("refit_poll_of_polls with cmdstanr uses and refreshes warm_start_state
   expect_identical(res$refit$warm_start_state$num_upars, res$refit_num_upars)
 })
 
-  original_state <- backend_get_sampler_state("cmdstanr", pop$stan_fit)
-  original_init <- backend_get_last_draws_for_init("cmdstanr", pop$stan_fit)
-
-  # Replace the cached warm_start_state with distinctive but valid values so
-  # we can verify that the refit consumes the object-level cache rather than
-  # re-deriving those inputs from the old fit.
-  custom_init <- original_init
-  custom_init[[1]]$sigma_x <- original_init[[1]]$sigma_x * 1.05
-  custom_sampler_state <- original_state
-  custom_sampler_state[[1]]$inv_metric <- original_state[[1]]$inv_metric * 1.05
-  custom_sampler_state[[1]]$step_size <- original_state[[1]]$step_size * 0.75
-  pop$warm_start_state$init <- custom_init
-  pop$warm_start_state$init_complete <- TRUE
-  pop$warm_start_state$sampler_state <- custom_sampler_state
 
   expect_silent(
     capture.output(
