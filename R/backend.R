@@ -669,6 +669,64 @@ backend_get_num_upars <- function(backend, fit, ...) {
   stop("Unknown backend '", backend, "'.", call. = FALSE)
 }
 
+#' Capture reusable warm-start state from a fitted backend object
+#'
+#' @description
+#' Extract the compact warm-start payload needed for future refits and store it
+#' independently of the backend fit object itself. The payload contains the
+#' final constrained draw for `init`, the unconstrained sampler state, the
+#' expected init skeleton, and the number of unconstrained parameters.
+#' If the stored fit does not contain a complete last draw for all init-able
+#' parameter roots, automatic `init` reuse is disabled while the remaining
+#' sampler state is still cached for future refits.
+#'
+#' @param backend Stan backend used by `fit`.
+#' @param fit A fitted backend object.
+#' @param ... Reserved for backend-specific extensions.
+#'
+#' @return A named list with elements `init`, `init_complete`, `sampler_state`,
+#'   `init_skeleton`, and `num_upars`.
+#'
+#' @keywords internal
+backend_capture_warm_start_state <- function(backend, fit, ...) {
+  assert_pop_backend(backend)
+
+  sampler_state <- backend_get_sampler_state(backend, fit, ...)
+  init_skeleton <- backend_get_init_skeleton(backend, fit, ...)
+  expected_init_skeleton <- backend_nonempty_init_skeleton(init_skeleton)
+  last_draws <- try(backend_get_last_draws_for_init(backend, fit, ...), silent = TRUE)
+  init_complete <- FALSE
+  init <- NULL
+
+  if(inherits(last_draws, "try-error")) {
+    warning(
+      "The stored fit does not contain a reusable complete last draw for automatic init reuse. ",
+      "This can happen, for example, when a restrictive 'pars' argument was used. ",
+      "Automatic init reuse will be disabled for this object, but sampler_state and num_upars are still cached. ",
+      "Original error: ",
+      conditionMessage(attr(last_draws, "condition")),
+      call. = FALSE
+    )
+  } else if(backend_init_matches_skeleton(last_draws, expected_init_skeleton)) {
+    init_complete <- TRUE
+    init <- last_draws
+  } else {
+    warning(
+      "The stored fit does not contain a complete last draw for all init-able parameters. ",
+      "This can happen, for example, when a restrictive 'pars' argument was used. ",
+      "Automatic init reuse will be disabled for this object, but sampler_state and num_upars are still cached.",
+      call. = FALSE
+    )
+  }
+
+  list(
+    init = init,
+    init_complete = init_complete,
+    sampler_state = sampler_state,
+    init_skeleton = init_skeleton,
+    num_upars = as.integer(backend_get_num_upars(backend, fit, ...))
+  )
+}
 #' Backend log probability evaluation
 #'
 #' @keywords internal
