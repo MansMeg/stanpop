@@ -53,6 +53,7 @@ make_mock_pop_for_refit_helpers <- function(backend = c("cmdstanr", "rstan")){
       time_line = list(slow_scales = as.Date("2020-01-15")),
       stan_arguments = sample_args,
       stan_fit = structure(list(), class = "mock_stan_fit"),
+      warm_start_state = NULL,
       model_arguments = list(use_softmax = 1L),
       cache_dir = NULL,
       input_args = list(
