@@ -202,6 +202,38 @@ test_that("backend_capture_warm_start_state stores the refit warm_start_state", 
   expect_identical(res$init_skeleton, list(list(alpha = 0)))
   expect_identical(res$num_upars, 2L)
 })
+
+test_that("backend_capture_warm_start_state disables cached init reuse when last draws are incomplete", {
+  backend_capture_warm_start_state <- get_internal("backend_capture_warm_start_state")
+
+  testthat::local_mocked_bindings(
+    backend_get_last_draws_for_init = function(...) {
+      list(list(alpha = 0.1))
+    },
+    backend_get_sampler_state = function(...) {
+      list(list(step_size = 0.25, inv_metric = c(1, 2), metric_type = "diag_e"))
+    },
+    backend_get_init_skeleton = function(...) {
+      list(list(alpha = 0, beta = numeric(2)))
+    },
+    backend_get_num_upars = function(...) 2L,
+    .package = "stanpop"
+  )
+
+  expect_warning(
+    res <- backend_capture_warm_start_state(
+      "cmdstanr",
+      structure(list(), class = "mock_fit")
+    ),
+    "Automatic init reuse will be disabled"
+  )
+
+  expect_null(res$init)
+  expect_false(res$init_complete)
+  expect_identical(res$sampler_state[[1]]$step_size, 0.25)
+  expect_identical(res$num_upars, 2L)
+})
+
 test_that("backend_build_init_skeleton_from_variable_names can ignore generated quantities", {
   backend_build_init_skeleton_from_variable_names <- get_internal("backend_build_init_skeleton_from_variable_names")
 
