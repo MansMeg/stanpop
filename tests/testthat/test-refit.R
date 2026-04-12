@@ -392,6 +392,43 @@ test_that("refit_poll_of_polls prefers cached warm-start state on x", {
   expect_identical(res$args$metric, "diag_e")
   expect_equal(res$args$step_size, c(0.12, 0.34))
 })
+
+test_that("refit_poll_of_polls skips automatic init reuse when cached init is incomplete", {
+  pop <- make_mock_pop_for_refit_helpers("rstan")
+  pop$warm_start_state <- list(
+    init = NULL,
+    init_complete = FALSE,
+    sampler_state = list(
+      list(step_size = 0.12, inv_metric = c(1, 2), metric_type = "diag_e"),
+      list(step_size = 0.34, inv_metric = c(3, 4), metric_type = "diag_e")
+    ),
+    init_skeleton = list(list(x = numeric(2)), list(x = numeric(2))),
+    num_upars = 2L
+  )
+
+  testthat::local_mocked_bindings(
+    backend_get_last_draws_for_init = function(...) {
+      stop("incomplete cached init should not trigger backend recovery")
+    },
+    backend_get_sampler_state = function(...) {
+      stop("cached sampler state should be used")
+    },
+    poll_of_polls = function(...) {
+      list(args = list(...))
+    },
+    .package = "stanpop"
+  )
+
+  res <- refit_poll_of_polls(pop)
+
+  expect_false("init" %in% names(res$args))
+  expect_identical(
+    res$args$inv_metric,
+    list(c(1, 2), c(3, 4))
+  )
+  expect_identical(res$args$metric, "diag_e")
+  expect_equal(res$args$step_size, c(0.12, 0.34))
+})
 test_that("refit_poll_of_polls can disable init or inverse-metric reuse independently", {
   pop <- make_mock_pop_for_refit_helpers("rstan")
   new_polls_data <- polls_data(
