@@ -64,4 +64,7 @@ The [input_args] slot contain all input arguments except polls data and known st
 The [stan_arguments] slot contains the backend sampling arguments supplied through `...`,
 except for the `data` argument which is stored in the [stan_data] slot.
 The [compile_arguments] slot contains the CmdStanR compilation arguments.
+The [warm_start_state] slot caches the reusable warm-start payload extracted
+from the fitted Stan object so future refits do not need to recover it from
+the backend fit after serialization.
 }
