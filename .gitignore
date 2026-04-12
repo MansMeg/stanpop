@@ -4,5 +4,8 @@
 .Ruserdata
 *.Rproj
 TODO.*
-/inst/stan_models/*.rds
-/tests/testthat/stan_code/*.rds
+/inst/stan_models/*
+!/inst/stan_models/*.*
+/tests/testthat/stan_code/*
+!/tests/testthat/stan_code/*.*
+
