@@ -1151,4 +1151,24 @@ test_that("refit_poll_of_polls with cmdstanr refreshes warm_start_state from ada
   )
 })
 
+test_that("refit_poll_of_polls with cmdstanr does not carry forward cached sampler state when adaptation runs", {
+  skip_if_no_stan_tests()
+  skip_if_no_cmdstanr_tests()
+  skip_if_no_cmdstanr()
+
+  res <- run_model8k5_refit_with_custom_cached_warm_start(
+    iter_warmup = 5,
+    iter_sampling = 5,
+    adapt_engaged = TRUE
+  )
+
+  # Because adaptation is enabled, the returned warm_start_state should be
+  # refreshed from the new fit rather than reusing the incoming cached sampler
+  # state unchanged. The inverse metric can legitimately stay the same, so we
+  # compare the full per-chain sampler-state bundle here instead.
+  expect_false(isTRUE(all.equal(
+    res$refit$warm_start_state$sampler_state[[1]],
+    res$custom_sampler_state[[1]],
+    tolerance = 1e-12
+  )))
 })
