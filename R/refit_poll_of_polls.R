@@ -268,6 +268,23 @@ refit_remove_inherited_warm_start_arguments <- function(sample_args) {
   sample_args
 }
 
+#' @keywords internal
+refit_stored_warm_start_state <- function(x) {
+  assert_pop(x)
+  if("warm_start_state" %in% names(x) && is.list(x$warm_start_state)) {
+    return(x$warm_start_state)
+  }
+  NULL
+}
+
+#' @keywords internal
+refit_stored_warm_start_field <- function(x, name) {
+  state <- refit_stored_warm_start_state(x)
+  if(is.null(state) || !name %in% names(state)) {
+    return(NULL)
+  }
+  state[[name]]
+}
 #' Materialize warm-start arguments for a refit call
 #'
 #' @description
