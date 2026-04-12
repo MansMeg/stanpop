@@ -1091,59 +1091,35 @@ test_that("refit_poll_of_polls with cmdstanr uses and refreshes warm_start_state
   skip_if_no_cmdstanr_tests()
   skip_if_no_cmdstanr()
 
-  backend_get_sampler_state <- get_internal("backend_get_sampler_state")
-  backend_get_last_draws_for_init <- get_internal("backend_get_last_draws_for_init")
-  backend_get_num_upars <- get_internal("backend_get_num_upars")
-
-  case <- make_model8_mixed_smoke_case(npolls = 12)
-  cfg <- list(
-    sigma_kappa_hyper = 0.03,
-    use_industry_bias = 1L,
-    use_house_bias = 0L,
-    use_design_effects = 0L,
-    use_multivariate_version = 2L,
-    use_softmax = 1L
+  res <- run_model8k5_refit_with_custom_cached_warm_start(
+    iter_warmup = 0,
+    iter_sampling = 3,
+    adapt_engaged = FALSE
   )
 
-  polls_df <- as.data.frame(case$polls_data)
-  added_poll <- polls_df[1, , drop = FALSE]
-  added_poll$.poll_id <- "extra_poll"
-  new_polls_data_df <- dplyr::bind_rows(polls_df, added_poll)
-  new_polls_data <- polls_data(
-    y = new_polls_data_df[, case$parties, drop = FALSE],
-    house = factor(new_polls_data_df$.house, levels = levels(polls_df$.house)),
-    publish_date = new_polls_data_df$.publish_date,
-    start_date = new_polls_data_df$.start_date,
-    end_date = new_polls_data_df$.end_date,
-    n = as.integer(new_polls_data_df$.n),
-    poll_id = new_polls_data_df$.poll_id
+  # The actual refit call should use the warm_start_state stored on x.
+  expect_equal(
+    lapply(res$refit$stan_arguments$init, unlist, use.names = TRUE),
+    lapply(res$custom_init, unlist, use.names = TRUE),
+    tolerance = 1e-12
   )
+  expect_identical(res$refit$stan_arguments$metric, res$custom_sampler_state[[1]]$metric_type)
+  expect_equal(res$refit$stan_arguments$inv_metric[[1]], res$custom_sampler_state[[1]]$inv_metric, tolerance = 1e-12)
+  expect_equal(as.numeric(res$refit$stan_arguments$step_size), res$custom_sampler_state[[1]]$step_size, tolerance = 1e-12)
 
-  expect_silent(
-    capture.output(
-      suppressWarnings(
-        suppressMessages(
-          pop <- poll_of_polls(
-            y = case$parties,
-            model = "model8k5",
-            polls_data = case$polls_data,
-            time_scale = case$time_scale,
-            time_scale_overrides = case$time_scale_overrides,
-            known_state = case$known_state,
-            hyper_parameters = cfg,
-            backend = "cmdstanr",
-            iter_warmup = 10,
-            iter_sampling = 5,
-            chains = 1,
-            parallel_chains = 1,
-            refresh = 0,
-            seed = 4711,
-            cache_dir = NULL
-          )
-        )
-      )
-    )
+  # The returned object should refresh warm_start_state from the new fit rather
+  # than keeping the cached values copied from x.
+  expect_true(isTRUE(res$refit$warm_start_state$init_complete))
+  expect_equal(
+    lapply(res$refit$warm_start_state$init, unlist, use.names = TRUE),
+    lapply(res$refit_init, unlist, use.names = TRUE),
+    tolerance = 1e-12
   )
+  expect_identical(res$refit$warm_start_state$sampler_state[[1]]$metric_type, res$refit_state[[1]]$metric_type)
+  expect_equal(res$refit$warm_start_state$sampler_state[[1]]$inv_metric, res$refit_state[[1]]$inv_metric, tolerance = 1e-12)
+  expect_equal(res$refit$warm_start_state$sampler_state[[1]]$step_size, res$refit_state[[1]]$step_size, tolerance = 1e-12)
+  expect_identical(res$refit$warm_start_state$num_upars, res$refit_num_upars)
+})
 
   original_state <- backend_get_sampler_state("cmdstanr", pop$stan_fit)
   original_init <- backend_get_last_draws_for_init("cmdstanr", pop$stan_fit)
