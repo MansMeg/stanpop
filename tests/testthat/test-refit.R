@@ -109,6 +109,109 @@ resolve_refit_arguments_for_test <- function(x,
   c(resolved$constructor_args, resolved$sample_args)
 }
 
+# Shared model8k5 regression setup used by the warm-start refit tests below.
+# It fits an initial cmdstanr object, perturbs the cached warm_start_state with
+# distinctive but still valid values, refits on polls_data with one extra poll,
+# and returns both the injected cache and the refit-derived state so the tests
+# can separately assert "used as input" and "refreshed on output".
+run_model8k5_refit_with_custom_cached_warm_start <- function(iter_warmup,
+                                                             iter_sampling,
+                                                             adapt_engaged) {
+  backend_get_sampler_state <- get_internal("backend_get_sampler_state")
+  backend_get_last_draws_for_init <- get_internal("backend_get_last_draws_for_init")
+  backend_get_num_upars <- get_internal("backend_get_num_upars")
+
+  case <- make_model8_mixed_smoke_case(npolls = 12)
+  cfg <- list(
+    sigma_kappa_hyper = 0.03,
+    use_industry_bias = 1L,
+    use_house_bias = 0L,
+    use_design_effects = 0L,
+    use_multivariate_version = 2L,
+    use_softmax = 1L
+  )
+
+  polls_df <- as.data.frame(case$polls_data)
+  added_poll <- polls_df[1, , drop = FALSE]
+  added_poll$.poll_id <- "extra_poll"
+  new_polls_data_df <- dplyr::bind_rows(polls_df, added_poll)
+  new_polls_data <- polls_data(
+    y = new_polls_data_df[, case$parties, drop = FALSE],
+    house = factor(new_polls_data_df$.house, levels = levels(polls_df$.house)),
+    publish_date = new_polls_data_df$.publish_date,
+    start_date = new_polls_data_df$.start_date,
+    end_date = new_polls_data_df$.end_date,
+    n = as.integer(new_polls_data_df$.n),
+    poll_id = new_polls_data_df$.poll_id
+  )
+
+  suppressMessages(
+    suppressWarnings(
+      capture.output(
+        pop <- poll_of_polls(
+          y = case$parties,
+          model = "model8k5",
+          polls_data = case$polls_data,
+          time_scale = case$time_scale,
+          time_scale_overrides = case$time_scale_overrides,
+          known_state = case$known_state,
+          hyper_parameters = cfg,
+          backend = "cmdstanr",
+          iter_warmup = 10,
+          iter_sampling = 5,
+          chains = 1,
+          parallel_chains = 1,
+          refresh = 0,
+          seed = 4711,
+          cache_dir = NULL
+        )
+      )
+    )
+  )
+
+  original_state <- backend_get_sampler_state("cmdstanr", pop$stan_fit)
+  original_init <- backend_get_last_draws_for_init("cmdstanr", pop$stan_fit)
+
+  custom_init <- original_init
+  custom_init[[1]]$sigma_x <- original_init[[1]]$sigma_x * 1.05
+  custom_sampler_state <- original_state
+  custom_sampler_state[[1]]$inv_metric <- original_state[[1]]$inv_metric * 1.05
+  custom_sampler_state[[1]]$step_size <- original_state[[1]]$step_size * 0.75
+  pop$warm_start_state$init <- custom_init
+  pop$warm_start_state$init_complete <- TRUE
+  pop$warm_start_state$sampler_state <- custom_sampler_state
+
+  suppressMessages(
+    suppressWarnings(
+      capture.output(
+        refit <- refit_poll_of_polls(
+          pop,
+          polls_data = new_polls_data,
+          iter_warmup = iter_warmup,
+          iter_sampling = iter_sampling,
+          adapt_engaged = adapt_engaged,
+          refresh = 0,
+          seed = 4712,
+          cache_dir = NULL
+        )
+      )
+    )
+  )
+
+  list(
+    pop = pop,
+    refit = refit,
+    new_polls_data = new_polls_data,
+    original_state = original_state,
+    original_init = original_init,
+    custom_init = custom_init,
+    custom_sampler_state = custom_sampler_state,
+    refit_state = backend_get_sampler_state("cmdstanr", refit$stan_fit),
+    refit_init = backend_get_last_draws_for_init("cmdstanr", refit$stan_fit),
+    refit_num_upars = backend_get_num_upars("cmdstanr", refit$stan_fit)
+  )
+}
+
 test_that("extract_poll_of_polls_refit_arguments returns constructor arguments only", {
   pop <- make_mock_pop_for_refit_helpers()
 
