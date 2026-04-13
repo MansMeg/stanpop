@@ -15,6 +15,7 @@
 save_pop <- function(x, file, compress = "xz") {
   assert_pop(x)
   checkmate::assert_path_for_output(file)
+  x <- prepare_pop_for_save(x)
 
   saveRDS(
     object = pop_save_payload(x),
@@ -44,6 +45,53 @@ load_pop <- function(file) {
   assert_save_pop_payload(x)
 
   x$pop
+}
+
+#' Prepare a poll_of_polls object for serialization
+#'
+#' @description
+#' Internal backend-dispatch helper used by [save_pop()]. It gives each backend
+#' a chance to normalize or materialize backend-specific state before the object
+#' is wrapped and serialized to disk.
+#'
+#' @param x A [poll_of_polls] object.
+#'
+#' @return A [poll_of_polls] object ready to be passed to [pop_save_payload()].
+#' @keywords internal
+prepare_pop_for_save <- function(x) {
+  assert_pop(x)
+  assert_pop_backend(x$backend)
+
+  if(identical(x$backend, "rstan")) {
+    return(x)
+  }
+  if(identical(x$backend, "cmdstanr")) {
+    return(prepare_cmdstanr_pop_for_save(x))
+  }
+
+  stop("Unknown backend '", x$backend, "'.", call. = FALSE)
+}
+
+#' Prepare a cmdstanr-backed poll_of_polls object for serialization
+#'
+#' @description
+#' Internal helper for backend-specific pre-save handling of cmdstanr-backed
+#' [poll_of_polls] objects. In this step it is intentionally a no-op and simply
+#' returns `x` unchanged; later steps can add CmdStanR-specific materialization
+#' here without changing [save_pop()].
+#'
+#' @param x A cmdstanr-backed [poll_of_polls] object.
+#'
+#' @return The input [poll_of_polls] object, unchanged in the current
+#'   implementation.
+#' @keywords internal
+prepare_cmdstanr_pop_for_save <- function(x) {
+  assert_pop(x)
+  if(!identical(x$backend, "cmdstanr")) {
+    stop("prepare_cmdstanr_pop_for_save() requires backend = 'cmdstanr'.", call. = FALSE)
+  }
+
+  x
 }
 
 

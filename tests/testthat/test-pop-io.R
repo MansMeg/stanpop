@@ -30,6 +30,25 @@ test_that("save_pop stores a wrapped poll_of_polls payload and load_pop restores
   expect_identical(loaded, pop)
 })
 
+test_that("prepare_pop_for_save is currently a no-op for rstan and cmdstanr", {
+  pop_rstan <- make_mock_pop_for_io("rstan")
+  pop_cmdstanr <- make_mock_pop_for_io("cmdstanr")
+
+  expect_identical(prepare_pop_for_save(pop_rstan), pop_rstan)
+})
+
+test_that("save_pop preserves cmdstanr-backed pops in the current no-op preparation step", {
+  pop <- make_mock_pop_for_io("cmdstanr")
+  tmp <- tempfile(fileext = ".rds")
+  on.exit(unlink(tmp), add = TRUE)
+
+  expect_identical(save_pop(pop, tmp), pop)
+
+  payload <- readRDS(tmp)
+  expect_identical(payload$backend, "cmdstanr")
+  expect_identical(payload$pop, pop)
+})
+
 test_that("load_pop rejects files not created by save_pop", {
   pop <- make_mock_pop_for_io()
   tmp <- tempfile(fileext = ".rds")
