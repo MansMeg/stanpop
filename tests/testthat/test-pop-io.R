@@ -39,6 +39,51 @@ test_that("load_pop rejects files not created by save_pop", {
 
   expect_error(
     load_pop(tmp),
-    "File was not created by save_pop\\(\\)\\."
+    "Missing 'format' field in save_pop\\(\\) payload\\."
+  )
+})
+
+test_that("load_pop rejects unsupported save_pop format versions", {
+  pop <- make_mock_pop_for_io()
+  tmp <- tempfile(fileext = ".rds")
+  on.exit(unlink(tmp), add = TRUE)
+
+  payload <- pop_save_payload(pop)
+  payload$format_version <- 2L
+  saveRDS(payload, file = tmp)
+
+  expect_error(
+    load_pop(tmp),
+    "Unsupported save_pop\\(\\) format version '2'\\. Expected '1'\\."
+  )
+})
+
+test_that("load_pop rejects payloads missing the pop field", {
+  pop <- make_mock_pop_for_io()
+  tmp <- tempfile(fileext = ".rds")
+  on.exit(unlink(tmp), add = TRUE)
+
+  payload <- pop_save_payload(pop)
+  payload$pop <- NULL
+  saveRDS(payload, file = tmp)
+
+  expect_error(
+    load_pop(tmp),
+    "Missing 'pop' field in save_pop\\(\\) payload\\."
+  )
+})
+
+test_that("load_pop rejects payloads whose backend disagrees with pop$backend", {
+  pop <- make_mock_pop_for_io()
+  tmp <- tempfile(fileext = ".rds")
+  on.exit(unlink(tmp), add = TRUE)
+
+  payload <- pop_save_payload(pop)
+  payload$backend <- "cmdstanr"
+  saveRDS(payload, file = tmp)
+
+  expect_error(
+    load_pop(tmp),
+    "The payload backend does not match pop\\$backend\\."
   )
 })
