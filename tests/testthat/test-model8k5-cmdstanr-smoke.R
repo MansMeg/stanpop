@@ -169,7 +169,7 @@ test_that("model8k5 print output matches across backends after normalization", {
   expect_identical(normalized_print_lines(pop_rstan), normalized_print_lines(pop_cmdstanr))
 })
 
-test_that("model8k5 pop objects can be saved, reloaded, and still extract samples on both backends", {
+test_that("model8k5 pop objects can be saved with save_pop, reloaded, and still extract samples on both backends", {
   skip_if_no_stan_tests()
   skip_if_no_cmdstanr_tests()
   skip_if_no_cmdstanr()
@@ -237,11 +237,11 @@ test_that("model8k5 pop objects can be saved, reloaded, and still extract sample
   tmp_cmdstanr <- tempfile(fileext = ".rds")
   on.exit(unlink(c(tmp_rstan, tmp_cmdstanr)), add = TRUE)
 
-  saveRDS(pop_rstan, tmp_rstan)
-  saveRDS(pop_cmdstanr, tmp_cmdstanr)
+  save_pop(pop_rstan, tmp_rstan)
+  save_pop(pop_cmdstanr, tmp_cmdstanr)
 
-  pop_rstan_reload <- readRDS(tmp_rstan)
-  pop_cmdstanr_reload <- readRDS(tmp_cmdstanr)
+  pop_rstan_reload <- load_pop(tmp_rstan)
+  pop_cmdstanr_reload <- load_pop(tmp_cmdstanr)
 
   x_pred_rstan <- extract(pop_rstan_reload, pars = "x_pred")$x_pred
   x_pred_cmdstanr <- extract(pop_cmdstanr_reload, pars = "x_pred")$x_pred
