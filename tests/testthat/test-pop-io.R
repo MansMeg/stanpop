@@ -335,3 +335,67 @@ test_that("reloaded rstan pop can be refit through cmdstanr", {
   expect_true(all(is.finite(x_pred)))
   expect_true(isTRUE(refit$warm_start_state$init_complete))
 })
+
+test_that("poll_of_polls cache uses wrapped save_pop objects for cmdstanr fits", {
+  skip_if_no_stan_tests()
+  skip_if_no_cmdstanr_tests()
+  skip_if_no_cmdstanr()
+
+  case <- make_model8_mixed_smoke_case(npolls = 12)
+  cfg <- list(
+    sigma_kappa_hyper = 0.03,
+    use_industry_bias = 1L,
+    use_house_bias = 0L,
+    use_design_effects = 0L,
+    use_multivariate_version = 2L,
+    use_softmax = 1L
+  )
+
+  cache_dir <- tempfile("pop-cache-")
+  on.exit(unlink(cache_dir, recursive = TRUE), add = TRUE)
+
+  fit_args <- list(
+    y = case$parties,
+    model = "model8k5",
+    polls_data = case$polls_data,
+    time_scale = case$time_scale,
+    time_scale_overrides = case$time_scale_overrides,
+    known_state = case$known_state,
+    hyper_parameters = cfg,
+    backend = "cmdstanr",
+    iter_sampling = 5,
+    iter_warmup = 5,
+    chains = 1,
+    refresh = 0,
+    seed = 4711,
+    cache_dir = cache_dir
+  )
+
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          pop <- do.call(poll_of_polls, fit_args)
+        )
+      )
+    )
+  )
+
+  output_files <- pop$stan_fit$output_files()
+  expect_true(length(output_files) > 0L)
+  expect_true(all(file.exists(output_files)))
+
+  unlink(output_files)
+  expect_false(any(file.exists(output_files)))
+
+  cached_pop <- NULL
+  expect_message(
+    cached_pop <- suppressWarnings(do.call(poll_of_polls, fit_args)),
+    "Cached results used\\."
+  )
+
+  x_pred <- extract(cached_pop, pars = "x_pred")$x_pred
+
+  expect_identical(cached_pop$backend, "cmdstanr")
+  expect_true(all(is.finite(x_pred)))
+})
