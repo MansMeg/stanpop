@@ -187,9 +187,13 @@ test_that("save_pop creates a self-contained cmdstanr file that still extracts a
 
   reloaded <- load_pop(tmp)
   x_pred <- extract(reloaded, pars = "x_pred")$x_pred
+  ls <- latent_state(reloaded)
+  md <- get_model_diagnostics(reloaded)
 
   expect_true(all(is.finite(x_pred)))
   expect_identical(reloaded$backend, "cmdstanr")
+  expect_true(all(is.finite(ls$latent_state)))
+  expect_true(all(is.finite(unlist(md))))
 })
 
 test_that("reloaded cmdstanr pop can be refit after the original output files are removed", {
