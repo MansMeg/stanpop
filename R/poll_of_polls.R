@@ -128,9 +128,18 @@ poll_of_polls <- function(y,
   if(!is.null(cache_dir)){
     cache_fp <- cache_file_path(sha, cache_dir)
     if(file.exists(cache_fp)){
-      pop <- readRDS(file = cache_fp)
-      message("Cached results used.")
-      return(pop)
+      pop <- try(load_pop(cache_fp), silent = TRUE)
+      if(!inherits(pop, "try-error")) {
+        message("Cached results used.")
+        return(pop)
+      }
+
+      warning(
+        "Ignoring unreadable cached poll_of_polls object at '", cache_fp, "': ",
+        conditionMessage(attr(pop, "condition")),
+        ". The model will be refit and the cache file replaced.",
+        call. = FALSE
+      )
     } else {
       dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
     }
@@ -218,7 +227,7 @@ poll_of_polls <- function(y,
 
   assert_pop(pop)
   # Save to cache
-  if(!is.null(cache_dir)) saveRDS(pop, file = cache_fp)
+  if(!is.null(cache_dir)) save_pop(pop, file = cache_fp)
   pop
 }
 
