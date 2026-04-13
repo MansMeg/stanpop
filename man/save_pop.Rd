@@ -20,5 +20,7 @@ Invisibly returns `x`.
 Save a [poll_of_polls] object in stanpop's wrapped on-disk format. The file
 contains a small metadata wrapper around the original object so
 [load_pop()] can verify that the file was created by [save_pop()] rather
-than by a plain [base::saveRDS()] call.
+than by a plain [base::saveRDS()] call. The same wrapped format is also used
+internally for cached objects created by [poll_of_polls()] when `cache_dir`
+is not [NULL].
 }

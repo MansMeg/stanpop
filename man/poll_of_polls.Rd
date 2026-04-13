@@ -54,7 +54,9 @@ when `backend = "cmdstanr"`. Ignored for `backend = "rstan"`.}
 These go to [rstan::stan()] when `backend = "rstan"` and to
 `CmdStanModel$sample()` when `backend = "cmdstanr"`.}
 
-\item{cache_dir}{directory to cache model. Default is cache in tempdir(). [NULL], no cache.}
+\item{cache_dir}{directory to cache model. Default is cache in tempdir().
+[NULL], no cache. Cached objects are stored with [save_pop()] in the same
+wrapped on-disk format used by the public save/load API.}
 }
 \description{
 Fit a poll of polls object

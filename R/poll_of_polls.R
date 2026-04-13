@@ -19,7 +19,9 @@
 #' @param ... further arguments passed directly to the backend sampler.
 #'   These go to [rstan::stan()] when `backend = "rstan"` and to
 #'   `CmdStanModel$sample()` when `backend = "cmdstanr"`.
-#' @param cache_dir directory to cache model. Default is cache in tempdir(). [NULL], no cache.
+#' @param cache_dir directory to cache model. Default is cache in tempdir().
+#'   [NULL], no cache. Cached objects are stored with [save_pop()] in the same
+#'   wrapped on-disk format used by the public save/load API.
 #'
 #' @details
 #' The [input_args] slot contain all input arguments except polls data and known state that are stored in the original object instead.
