@@ -56,14 +56,40 @@ extract.poll_of_polls <- function(object, ...){
   backend_extract(object$backend, object$stan_fit, ...)
 }
 
-#' Extract the data when Stan was run
+#' Extract the date when Stan was run
 #'
 #' @param object a [poll_of_polls] object
 #'
 #' @export
 get_stan_date <- function(object){
   checkmate::assert_class(object, "poll_of_polls")
-  lubridate::parse_date_time(substr(object$stan_fit@date,5,nchar(object$stan_fit@date)), orders = "%b %d %H:%M:%S %Y", tz = Sys.timezone())
+
+  if("stan_date" %in% names(object) && inherits(object$stan_date, "POSIXt")) {
+    return(object$stan_date)
+  }
+
+  if(identical(object$backend, "rstan")) {
+    return(lubridate::parse_date_time(
+      substr(object$stan_fit@date, 5, nchar(object$stan_fit@date)),
+      orders = "%b %d %H:%M:%S %Y",
+      tz = Sys.timezone()
+    ))
+  }
+
+  if(identical(object$backend, "cmdstanr")) {
+    output_files <- try(object$stan_fit$output_files(), silent = TRUE)
+    if(!inherits(output_files, "try-error") &&
+       length(output_files) > 0L &&
+       all(file.exists(output_files))) {
+      mtimes <- file.info(output_files)$mtime
+      mtimes <- mtimes[!is.na(mtimes)]
+      if(length(mtimes) > 0L) {
+        return(max(mtimes))
+      }
+    }
+  }
+
+  stop("Stan run date is not available on this poll_of_polls object.", call. = FALSE)
 }
 
 #' Extract the data when Stan was run

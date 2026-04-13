@@ -14,7 +14,7 @@ recompile_stanfit <- function(x){
 
   suppressWarnings(
     out <- utils::capture.output(
-      stan_fit <- rstan::stan(model_code = x$stan_fit@stanmodel@model_code,
+      stan_fit <- rstan::stan(model_code = get_stancode(x),
                               iter = 1, warmup = 0, chains = 1, data = x$stan_data$stan_data)
     )
   )

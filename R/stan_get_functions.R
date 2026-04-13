@@ -85,5 +85,31 @@ get_stancode <- function(object, ...){
 #' @rdname get_stancode
 #' @export
 get_stancode.poll_of_polls <- function(object, ...){
-  rstan::get_stancode(object$stan_fit, ...)
+  checkmate::assert_class(object, "poll_of_polls")
+
+  if("stan_code" %in% names(object) && !is.null(object$stan_code)) {
+    return(object$stan_code)
+  }
+
+  if(identical(object$backend, "rstan")) {
+    return(rstan::get_stancode(object$stan_fit, ...))
+  }
+  if(identical(object$backend, "cmdstanr")) {
+    runset <- try(object$stan_fit$runset, silent = TRUE)
+    if(!inherits(runset, "try-error") && !is.null(runset)) {
+      stan_code <- try(runset$stan_code(), silent = TRUE)
+      if(!inherits(stan_code, "try-error") && length(stan_code) > 0L) {
+        return(paste(stan_code, collapse = "\n"))
+      }
+    }
+
+    metadata <- try(object$stan_fit$metadata(), silent = TRUE)
+    if(!inherits(metadata, "try-error") &&
+       !is.null(metadata$stan_file) &&
+       checkmate::test_file_exists(metadata$stan_file, extension = "stan")) {
+      return(paste(readLines(metadata$stan_file, warn = FALSE), collapse = "\n"))
+    }
+  }
+
+  stop("Stan code is not available on this poll_of_polls object.", call. = FALSE)
 }

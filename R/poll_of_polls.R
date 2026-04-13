@@ -103,12 +103,14 @@ poll_of_polls <- function(y,
   }
 
   stanpop_version <- as.character(utils::packageVersion("stanpop"))
+  stan_code_lines <- readLines(smfp, warn = FALSE)
+  stan_code <- paste(stan_code_lines, collapse = "\n")
 
   # SHA is setup both of all
   fun_args <- names(formals(poll_of_polls))[-which(names(formals(poll_of_polls)) %in% c("...", "cache_dir"))]
   sha_input_names <- c(fun_args, "stanpop_version")
   sha_fun_args <- list(y = y,
-                       model = readLines(smfp),
+                       model = stan_code_lines,
                        polls_data = polls_data,
                        stanpop_version = stanpop_version,
                        backend = backend,
@@ -179,6 +181,7 @@ poll_of_polls <- function(y,
     model_name = model,
     compile_arguments = compile_args
   )
+  stan_date <- Sys.time()
   warm_start_state <- try(backend_capture_warm_start_state(backend, stan_fit), silent = TRUE)
   if(inherits(warm_start_state, "try-error")) {
     warning(
@@ -193,6 +196,8 @@ poll_of_polls <- function(y,
                model = model,
                backend = backend,
                stanpop_version = stanpop_version,
+               stan_code = stan_code,
+               stan_date = stan_date,
                compile_arguments = compile_args,
                polls_data = polls_data,
                time_scale = time_scale,

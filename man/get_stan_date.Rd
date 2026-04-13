@@ -2,7 +2,7 @@
 % Please edit documentation in R/utils.R
 \name{get_stan_date}
 \alias{get_stan_date}
-\title{Extract the data when Stan was run}
+\title{Extract the date when Stan was run}
 \usage{
 get_stan_date(object)
 }
@@ -10,5 +10,5 @@ get_stan_date(object)
 \item{object}{a [poll_of_polls] object}
 }
 \description{
-Extract the data when Stan was run
+Extract the date when Stan was run
 }
