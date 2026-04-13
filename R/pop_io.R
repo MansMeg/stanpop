@@ -76,22 +76,54 @@ prepare_pop_for_save <- function(x) {
 #'
 #' @description
 #' Internal helper for backend-specific pre-save handling of cmdstanr-backed
-#' [poll_of_polls] objects. In this step it is intentionally a no-op and simply
-#' returns `x` unchanged; later steps can add CmdStanR-specific materialization
-#' here without changing [save_pop()].
+#' [poll_of_polls] objects. It materializes the CmdStanR fit into a
+#' self-contained R object using CmdStanR's public `$save_object()` API and
+#' then replaces `x$stan_fit` with the reloaded object before serialization.
 #'
 #' @param x A cmdstanr-backed [poll_of_polls] object.
 #'
-#' @return The input [poll_of_polls] object, unchanged in the current
-#'   implementation.
+#' @return A [poll_of_polls] object whose `stan_fit` element is ready for
+#'   serialization without depending on the original CmdStan output files.
 #' @keywords internal
 prepare_cmdstanr_pop_for_save <- function(x) {
   assert_pop(x)
   if(!identical(x$backend, "cmdstanr")) {
     stop("prepare_cmdstanr_pop_for_save() requires backend = 'cmdstanr'.", call. = FALSE)
   }
+  if(is.null(x$stan_fit)) {
+    stop("cmdstanr-backed poll_of_polls objects must contain 'stan_fit'.", call. = FALSE)
+  }
+
+  x$stan_fit <- materialize_cmdstanr_fit_for_save(x$stan_fit)
 
   x
+}
+
+#' Materialize a CmdStanR fit for serialization
+#'
+#' @description
+#' Convert a CmdStanR fit that may still rely on external CmdStan output files
+#' into a self-contained R object by roundtripping through CmdStanR's public
+#' `$save_object()` method and [base::readRDS()]. This keeps the serialization
+#' logic aligned with CmdStanR's supported save path while returning the
+#' materialized fit object to stanpop.
+#'
+#' @param fit A CmdStanR fit object providing a `$save_object()` method.
+#'
+#' @return A materialized CmdStanR fit object read back from a temporary `.rds`
+#'   file.
+#' @keywords internal
+materialize_cmdstanr_fit_for_save <- function(fit) {
+  assert_cmdstanr_available()
+  if(is.null(fit$save_object) || !is.function(fit$save_object)) {
+    stop("CmdStanR fit does not provide a '$save_object()' method.", call. = FALSE)
+  }
+
+  tmp <- tempfile(fileext = ".rds")
+  on.exit(unlink(tmp), add = TRUE)
+
+  fit$save_object(file = tmp)
+  readRDS(tmp)
 }
 
 
