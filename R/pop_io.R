@@ -41,9 +41,7 @@ load_pop <- function(file) {
   checkmate::assert_file(file)
 
   x <- readRDS(file = file)
-  if(!is_save_pop_payload(x)) {
-    stop("File was not created by save_pop().", call. = FALSE)
-  }
+  assert_save_pop_payload(x)
 
   x$pop
 }
@@ -97,12 +95,68 @@ pop_backend_package_version <- function(backend) {
   as.character(utils::packageVersion(backend))
 }
 
+#' Validate a wrapped save_pop payload
+#'
+#' @description
+#' Internal validator for the on-disk wrapper format created by [save_pop()].
+#' The helper checks both the wrapper metadata and the embedded `pop` object and
+#' throws targeted errors for malformed or unsupported payloads.
+#'
+#' @param x Object read from disk.
+#'
+#' @return Invisibly returns [TRUE] when `x` is a valid wrapped payload.
+#' @keywords internal
+assert_save_pop_payload <- function(x) {
+  if(!is.list(x)) {
+    stop("Loaded object is not a valid save_pop() payload.", call. = FALSE)
+  }
+  if(!"format" %in% names(x)) {
+    stop("Missing 'format' field in save_pop() payload.", call. = FALSE)
+  }
+  if(!identical(x$format, "stanpop_pop")) {
+    stop(
+      "Unsupported save_pop() payload format '", x$format,
+      "'. Expected 'stanpop_pop'.",
+      call. = FALSE
+    )
+  }
+  if(!"format_version" %in% names(x)) {
+    stop("Missing 'format_version' field in save_pop() payload.", call. = FALSE)
+  }
+  if(!identical(x$format_version, 1L)) {
+    stop(
+      "Unsupported save_pop() format version '", x$format_version,
+      "'. Expected '1'.",
+      call. = FALSE
+    )
+  }
+  if(!"saved_at" %in% names(x)) {
+    stop("Missing 'saved_at' field in save_pop() payload.", call. = FALSE)
+  }
+  if(!"stanpop_version" %in% names(x)) {
+    stop("Missing 'stanpop_version' field in save_pop() payload.", call. = FALSE)
+  }
+  if(!"backend" %in% names(x)) {
+    stop("Missing 'backend' field in save_pop() payload.", call. = FALSE)
+  }
+  if(!"pop" %in% names(x)) {
+    stop("Missing 'pop' field in save_pop() payload.", call. = FALSE)
+  }
+  if(!inherits(x$pop, "poll_of_polls")) {
+    stop("The 'pop' field is not a poll_of_polls object.", call. = FALSE)
+  }
+  if(!identical(x$backend, x$pop$backend)) {
+    stop("The payload backend does not match pop$backend.", call. = FALSE)
+  }
+
+  invisible(TRUE)
+}
+
 #' Test whether an object matches the save_pop wrapper format
 #'
 #' @description
-#' Internal structural validator used by [load_pop()] to distinguish files
-#' created by [save_pop()] from plain `saveRDS()` output or unrelated serialized
-#' objects.
+#' Internal predicate wrapper around [assert_save_pop_payload()]. This is useful
+#' in tests and other code paths that want a boolean check rather than an error.
 #'
 #' @param x Object read from disk.
 #'
@@ -110,13 +164,11 @@ pop_backend_package_version <- function(backend) {
 #'   payload structure.
 #' @keywords internal
 is_save_pop_payload <- function(x) {
-  is.list(x) &&
-    identical(x$format, "stanpop_pop") &&
-    identical(x$format_version, 1L) &&
-    "saved_at" %in% names(x) &&
-    "stanpop_version" %in% names(x) &&
-    "backend" %in% names(x) &&
-    "pop" %in% names(x) &&
-    inherits(x$pop, "poll_of_polls") &&
-    identical(x$backend, x$pop$backend)
+  isTRUE(tryCatch(
+    {
+      assert_save_pop_payload(x)
+      TRUE
+    },
+    error = function(...) FALSE
+  ))
 }

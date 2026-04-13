@@ -14,8 +14,7 @@ Logical scalar indicating whether `x` matches the expected wrapped
   payload structure.
 }
 \description{
-Internal structural validator used by [load_pop()] to distinguish files
-created by [save_pop()] from plain `saveRDS()` output or unrelated serialized
-objects.
+Internal predicate wrapper around [assert_save_pop_payload()]. This is useful
+in tests and other code paths that want a boolean check rather than an error.
 }
 \keyword{internal}
