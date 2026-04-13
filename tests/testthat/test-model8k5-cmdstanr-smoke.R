@@ -249,6 +249,10 @@ test_that("model8k5 pop objects can be saved with save_pop, reloaded, and still 
   ls_cmdstanr <- latent_state(pop_cmdstanr_reload)
   md_rstan <- get_model_diagnostics(pop_rstan_reload)
   md_cmdstanr <- get_model_diagnostics(pop_cmdstanr_reload)
+  sc_rstan <- get_stancode(pop_rstan_reload)
+  sc_cmdstanr <- get_stancode(pop_cmdstanr_reload)
+  sd_rstan <- get_stan_date(pop_rstan_reload)
+  sd_cmdstanr <- get_stan_date(pop_cmdstanr_reload)
 
   expect_identical(pop_rstan_reload$backend, "rstan")
   expect_identical(pop_cmdstanr_reload$backend, "cmdstanr")
@@ -259,6 +263,10 @@ test_that("model8k5 pop objects can be saved with save_pop, reloaded, and still 
   expect_identical(names(md_rstan), names(md_cmdstanr))
   expect_true(all(is.finite(unlist(md_rstan))))
   expect_true(all(is.finite(unlist(md_cmdstanr))))
+  expect_true(nzchar(sc_rstan))
+  expect_true(nzchar(sc_cmdstanr))
+  expect_true(inherits(sd_rstan, "POSIXt"))
+  expect_true(inherits(sd_cmdstanr, "POSIXt"))
 })
 
 test_that("model8k5 print output includes diagnostics information on both backends", {

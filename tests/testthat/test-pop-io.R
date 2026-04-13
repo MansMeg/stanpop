@@ -189,11 +189,17 @@ test_that("save_pop creates a self-contained cmdstanr file that still extracts a
   x_pred <- extract(reloaded, pars = "x_pred")$x_pred
   ls <- latent_state(reloaded)
   md <- get_model_diagnostics(reloaded)
+  sc <- get_stancode(reloaded)
+  sd <- get_stan_date(reloaded)
+  recomp <- recompile_stanfit(reloaded)
 
   expect_true(all(is.finite(x_pred)))
   expect_identical(reloaded$backend, "cmdstanr")
   expect_true(all(is.finite(ls$latent_state)))
   expect_true(all(is.finite(unlist(md))))
+  expect_true(nzchar(sc))
+  expect_true(inherits(sd, "POSIXt"))
+  expect_s4_class(recomp, "stanfit")
 })
 
 test_that("reloaded cmdstanr pop can be refit after the original output files are removed", {
