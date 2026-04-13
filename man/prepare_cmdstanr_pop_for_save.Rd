@@ -10,13 +10,13 @@ prepare_cmdstanr_pop_for_save(x)
 \item{x}{A cmdstanr-backed [poll_of_polls] object.}
 }
 \value{
-The input [poll_of_polls] object, unchanged in the current
-  implementation.
+A [poll_of_polls] object whose `stan_fit` element is ready for
+  serialization without depending on the original CmdStan output files.
 }
 \description{
 Internal helper for backend-specific pre-save handling of cmdstanr-backed
-[poll_of_polls] objects. In this step it is intentionally a no-op and simply
-returns `x` unchanged; later steps can add CmdStanR-specific materialization
-here without changing [save_pop()].
+[poll_of_polls] objects. It materializes the CmdStanR fit into a
+self-contained R object using CmdStanR's public `$save_object()` API and
+then replaces `x$stan_fit` with the reloaded object before serialization.
 }
 \keyword{internal}
