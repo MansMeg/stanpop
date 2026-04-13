@@ -133,3 +133,205 @@ test_that("load_pop rejects payloads whose backend disagrees with pop$backend", 
     "The payload backend does not match pop\\$backend\\."
   )
 })
+
+test_that("save_pop creates a self-contained cmdstanr file that still extracts after output files are removed", {
+  skip_if_no_stan_tests()
+  skip_if_no_cmdstanr_tests()
+  skip_if_no_cmdstanr()
+
+  case <- make_model8_mixed_smoke_case(npolls = 12)
+  cfg <- list(
+    sigma_kappa_hyper = 0.03,
+    use_industry_bias = 1L,
+    use_house_bias = 0L,
+    use_design_effects = 0L,
+    use_multivariate_version = 2L,
+    use_softmax = 1L
+  )
+
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          pop <- poll_of_polls(
+            y = case$parties,
+            model = "model8k5",
+            polls_data = case$polls_data,
+            time_scale = case$time_scale,
+            time_scale_overrides = case$time_scale_overrides,
+            known_state = case$known_state,
+            hyper_parameters = cfg,
+            backend = "cmdstanr",
+            iter_sampling = 5,
+            iter_warmup = 5,
+            chains = 1,
+            refresh = 0,
+            seed = 4711,
+            cache_dir = NULL
+          )
+        )
+      )
+    )
+  )
+
+  tmp <- tempfile(fileext = ".rds")
+  output_files <- pop$stan_fit$output_files()
+  on.exit(unlink(c(tmp, output_files)), add = TRUE)
+
+  expect_true(length(output_files) > 0L)
+  expect_true(all(file.exists(output_files)))
+
+  save_pop(pop, tmp)
+  unlink(output_files)
+  expect_false(any(file.exists(output_files)))
+
+  reloaded <- load_pop(tmp)
+  x_pred <- extract(reloaded, pars = "x_pred")$x_pred
+
+  expect_true(all(is.finite(x_pred)))
+  expect_identical(reloaded$backend, "cmdstanr")
+})
+
+test_that("reloaded cmdstanr pop can be refit after the original output files are removed", {
+  skip_if_no_stan_tests()
+  skip_if_no_cmdstanr_tests()
+  skip_if_no_cmdstanr()
+
+  case <- make_model8_mixed_smoke_case(npolls = 12)
+  cfg <- list(
+    sigma_kappa_hyper = 0.03,
+    use_industry_bias = 1L,
+    use_house_bias = 0L,
+    use_design_effects = 0L,
+    use_multivariate_version = 2L,
+    use_softmax = 1L
+  )
+
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          pop <- poll_of_polls(
+            y = case$parties,
+            model = "model8k5",
+            polls_data = case$polls_data,
+            time_scale = case$time_scale,
+            time_scale_overrides = case$time_scale_overrides,
+            known_state = case$known_state,
+            hyper_parameters = cfg,
+            backend = "cmdstanr",
+            iter_sampling = 5,
+            iter_warmup = 5,
+            chains = 1,
+            refresh = 0,
+            seed = 4711,
+            cache_dir = NULL
+          )
+        )
+      )
+    )
+  )
+
+  tmp <- tempfile(fileext = ".rds")
+  output_files <- pop$stan_fit$output_files()
+  on.exit(unlink(c(tmp, output_files)), add = TRUE)
+
+  save_pop(pop, tmp)
+  unlink(output_files)
+  expect_false(any(file.exists(output_files)))
+
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          refit <- refit_poll_of_polls(
+            load_pop(tmp),
+            iter_warmup = 0,
+            iter_sampling = 3,
+            adapt_engaged = FALSE,
+            refresh = 0,
+            seed = 4712,
+            cache_dir = NULL
+          )
+        )
+      )
+    )
+  )
+
+  x_pred <- extract(refit, pars = "x_pred")$x_pred
+
+  expect_identical(refit$backend, "cmdstanr")
+  expect_true(all(is.finite(x_pred)))
+  expect_true(isTRUE(refit$warm_start_state$init_complete))
+})
+
+test_that("reloaded rstan pop can be refit through cmdstanr", {
+  skip_if_no_stan_tests()
+  skip_if_no_cmdstanr_tests()
+  skip_if_no_cmdstanr()
+  assert_rstan_available()
+
+  case <- make_model8_mixed_smoke_case(npolls = 12)
+  cfg <- list(
+    sigma_kappa_hyper = 0.03,
+    use_industry_bias = 1L,
+    use_house_bias = 0L,
+    use_design_effects = 0L,
+    use_multivariate_version = 2L,
+    use_softmax = 1L
+  )
+
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          pop <- poll_of_polls(
+            y = case$parties,
+            model = "model8k5",
+            polls_data = case$polls_data,
+            time_scale = case$time_scale,
+            time_scale_overrides = case$time_scale_overrides,
+            known_state = case$known_state,
+            hyper_parameters = cfg,
+            backend = "rstan",
+            iter = 15,
+            warmup = 10,
+            chains = 1,
+            refresh = 0,
+            seed = 4711,
+            cache_dir = NULL
+          )
+        )
+      )
+    )
+  )
+
+  tmp <- tempfile(fileext = ".rds")
+  on.exit(unlink(tmp), add = TRUE)
+
+  save_pop(pop, tmp)
+
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          refit <- refit_poll_of_polls(
+            load_pop(tmp),
+            iter_warmup = 0,
+            iter_sampling = 3,
+            adapt_engaged = FALSE,
+            refresh = 0,
+            seed = 4712,
+            cache_dir = NULL
+          )
+        )
+      )
+    )
+  )
+
+  x_pred <- extract(refit, pars = "x_pred")$x_pred
+
+  expect_identical(refit$backend, "cmdstanr")
+  expect_true(all(is.finite(x_pred)))
+  expect_true(isTRUE(refit$warm_start_state$init_complete))
+})
