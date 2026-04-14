@@ -332,6 +332,7 @@ assert_time_scale <- function(x){
 #' @param x a [data.frame] with columns [from], [to], and [time_scale].
 #' @param dates a [data.frame] with a [date] column containing the dates that
 #'   may be covered by the inclusive override ranges.
+#'   For now, override rows must use [time_scale] = "day".
 #' @param null.ok logical flag indicating if [NULL] is allowed for [x].
 #'
 #' @return Invisibly returns [TRUE] if the object is valid.
@@ -360,6 +361,12 @@ assert_time_scale_overrides <- function(x, dates, null.ok = TRUE){
   checkmate::assert_date(x$to, any.missing = FALSE, len = nrow(x))
   checkmate::assert_character(x$time_scale, any.missing = FALSE, len = nrow(x))
   checkmate::assert_subset(x$time_scale, choices = supported_time_scales())
+  if(any(x$time_scale != "day")){
+    stop(
+      "'time_scale_overrides' currently only supports rows with 'time_scale' = 'day'.",
+      call. = FALSE
+    )
+  }
 
   invalid_ranges <- x$from > x$to
   if(any(invalid_ranges)){
@@ -408,11 +415,13 @@ assert_time_scale_overrides <- function(x, dates, null.ok = TRUE){
 #' @description
 #' Create a daily schedule of effective time scales over a model time range.
 #' The default [time_scale] is used for all dates unless overridden by the
-#' inclusive ranges in [time_scale_overrides].
+#' inclusive ranges in [time_scale_overrides]. For now, override rows must use
+#' [time_scale] = "day".
 #'
 #' @param time_scale the default time scale to use outside override ranges.
 #' @param time_scale_overrides an optional [data.frame] with columns [from], [to],
-#'   and [time_scale] defining inclusive override ranges.
+#'   and [time_scale] defining inclusive override ranges. For now, override rows
+#'   must use [time_scale] = "day".
 #' @param model_time_range a [time_range] object describing the full date range
 #'   to normalize over.
 #'

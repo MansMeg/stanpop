@@ -118,6 +118,18 @@ test_that("time_scale_overrides are validated as inclusive non-overlapping range
     ),
     regexp = "subset"
   )
+
+  expect_error(
+    assert_time_scale_overrides(
+      tibble::tibble(
+        from = as.Date("2020-01-01"),
+        to = as.Date("2020-01-10"),
+        time_scale = "week"
+      ),
+      dates
+    ),
+    regexp = "only supports|time_scale.+day"
+  )
 })
 
 
