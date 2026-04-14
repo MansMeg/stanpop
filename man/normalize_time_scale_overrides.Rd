@@ -14,7 +14,8 @@ normalize_time_scale_overrides(
 \item{time_scale}{the default time scale to use outside override ranges.}
 
 \item{time_scale_overrides}{an optional [data.frame] with columns [from], [to],
-and [time_scale] defining inclusive override ranges.}
+and [time_scale] defining inclusive override ranges. For now, override rows
+must use [time_scale] = "day".}
 
 \item{model_time_range}{a [time_range] object describing the full date range
 to normalize over.}
@@ -29,6 +30,7 @@ A [tibble::tibble] with columns [date], [time_scale], and
 \description{
 Create a daily schedule of effective time scales over a model time range.
 The default [time_scale] is used for all dates unless overridden by the
-inclusive ranges in [time_scale_overrides].
+inclusive ranges in [time_scale_overrides]. For now, override rows must use
+[time_scale] = "day".
 }
 \keyword{internal}

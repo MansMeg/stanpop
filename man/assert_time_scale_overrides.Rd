@@ -10,7 +10,8 @@ assert_time_scale_overrides(x, dates, null.ok = TRUE)
 \item{x}{a [data.frame] with columns [from], [to], and [time_scale].}
 
 \item{dates}{a [data.frame] with a [date] column containing the dates that
-may be covered by the inclusive override ranges.}
+may be covered by the inclusive override ranges.
+For now, override rows must use [time_scale] = "day".}
 
 \item{null.ok}{logical flag indicating if [NULL] is allowed for [x].}
 }

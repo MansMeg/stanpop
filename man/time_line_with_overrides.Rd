@@ -18,7 +18,8 @@ to build the latent grid over.}
 \item{time_scale}{the default time scale to use outside override ranges.}
 
 \item{time_scale_overrides}{an optional [data.frame] with columns [from], [to],
-and [time_scale] defining inclusive override ranges.}
+and [time_scale] defining inclusive override ranges. For now, override rows
+must use [time_scale] = "day".}
 
 \item{week_start}{What is week starting day (1 = Monday, Default or 7 = Sunday).}
 }
