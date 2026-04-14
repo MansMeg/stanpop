@@ -1,30 +1,44 @@
-#' Re-estimate a poll_off_polls stan model with new stan arguments
+#' Rerun a poll_of_polls object without warm-start reuse
 #'
-#' @param x a poll_of_polls object
-#' @param ... argument to supply to rstan::stan
+#' @description
+#' `rerun_poll_of_polls()` is a backward-compatible wrapper around
+#' [refit_poll_of_polls()]. It uses the refit implementation but disables
+#' automatic warm-start reuse by default, so the rerun behaves like a plain
+#' re-estimation unless you call [refit_poll_of_polls()] directly.
 #'
+#' All arguments in `...` are forwarded to [refit_poll_of_polls()] except
+#' `warm_start`, which is intentionally not supported here.
+#'
+#' @param x Existing [poll_of_polls] object to rerun.
+#' @param ... Arguments forwarded to [refit_poll_of_polls()], such as
+#'   `polls_data`, `backend`, `compile_args`, `cache_dir`, and backend sampler
+#'   arguments.
+#'
+#' @return A rerun [poll_of_polls] object.
 #' @export
-rerun_poll_of_polls <- function(x, ...){
-  checkmate::assert_class(x, "poll_of_polls")
+rerun_poll_of_polls <- function(x, ...) {
+  dots <- list(...)
 
-  new_args <- list(...)
-  rstan_arguments <- x$stan_arguments
-  for(i in seq_along(new_args)){
-    rstan_arguments[[names(new_args)[i]]] <- new_args[[i]]
+  if(length(dots) > 0L && "warm_start" %in% names(dots)) {
+    stop(
+      "rerun_poll_of_polls() does not accept 'warm_start'. ",
+      "Use refit_poll_of_polls() for explicit warm-start control.",
+      call. = FALSE
+    )
   }
 
-  if(!is.null(rstan_arguments$data)) warning("The 'data' argument has been overwritten")
-  rstan_arguments$data <- x$stan_data$stan_data
-  if(is.null(rstan_arguments$model_code)) rstan_arguments$model_code = x$stan_fit@stanmodel@model_code
-  if(is.null(rstan_arguments$pars)) rstan_arguments$pars <- stan_parameters_to_store(x$model)
-
-
-  # Run Stan
-  stan_fit <- do.call(rstan::stan, rstan_arguments)
-  pop$stan_fit <- stan_fit
-  return(pop)
+  do.call(
+    refit_poll_of_polls,
+    c(
+      list(
+        x = x,
+        warm_start = list(
+          init = NULL,
+          inv_metric = NULL,
+          step_size = NULL
+        )
+      ),
+      dots
+    )
+  )
 }
-
-#' @rdname rerun_poll_of_polls
-#' @export
-reestimate_poll_of_polls <- rerun_poll_of_polls

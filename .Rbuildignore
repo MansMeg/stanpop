@@ -3,3 +3,10 @@ stanpop.Rproj$
 ^data-raw$
 ^.*\.Rproj$
 ^\.github$
+^inst/stan_models/.*\.rds$
+^tests/testthat/stan_code/.*\.rds$
+^inst/stan_models/model8k5$
+^tests/testthat/stan_code/sampler_state_constrained_test$
+^tests/testthat/stan_code/sampler_state_test$
+^scripts($|/)
+^tmp($|/)

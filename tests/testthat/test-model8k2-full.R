@@ -17,6 +17,7 @@ test_that("Test model 8k2 full model", {
 
 
   skip_if_no_stan_tests()
+  skip_if_no_rstan_tests()
   expect_silent(pop8k2_out <-
                   capture.output(
                     suppressWarnings(

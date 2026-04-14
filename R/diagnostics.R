@@ -91,19 +91,73 @@ diagnose_extract_min_eigen_value_Omega <- function(x){
 #'
 #' @export
 get_adaptation_info <- function(x, as.list = FALSE, ...){
-  ai <- rstan::get_adaptation_info(x$stan_fit, ...)
-  ai <- lapply(ai, parse_adaption_information)
+  ai <- backend_get_adaptation_info(x$backend, x$stan_fit, ...)
 }
 
+#' Parse RStan adaptation information
+#'
+#' @description
+#' Convert a single string from [rstan::get_adaptation_info()] into a list with
+#' reusable sampler-state fields. The returned structure includes the sampler
+#' step size, the inverse metric on its native scale, the derived
+#' `diag_inv_mass_matrix` used by existing diagnostics code, and the metric
+#' type (`diag_e` or `dense_e`).
+#'
+#' @param x A single adaptation information string as returned by
+#'   [rstan::get_adaptation_info()] for one chain.
+#'
+#' @return
+#' A list with elements `adaption_terminated`, `step_size`, `inv_metric`,
+#' `metric_type`, and `diag_inv_mass_matrix`.
+#'
+#' @keywords internal
 parse_adaption_information <- function(x){
   checkmate::assert_string(x)
-  x <- as.list(strsplit(x, "\n")[[1]])
-  res <- list(adaption_terminated = FALSE,
-              step_size = 0.0,
-              diag_inv_mass_matrix = c(0.0, 0.0))
-  res$adaption_terminated <- grepl(x[[1]], pattern = "Adaptation terminated")
-  res$step_size <- as.numeric(sub(x[[2]], pattern = "[^0-9]+", replacement = ""))
-  res$diag_inv_mass_matrix <- as.numeric(strsplit(sub(x[[4]], pattern = "#", replacement = ""), split = ", ")[[1]])
+  x <- strsplit(x, "\n", fixed = TRUE)[[1]]
+  x <- trimws(sub("^#\\s*", "", x))
+  x <- x[nzchar(x)]
+
+  res <- list(
+    adaption_terminated = any(grepl("^Adaptation terminated", x)),
+    step_size = NA_real_,
+    inv_metric = numeric(0),
+    metric_type = NA_character_
+  )
+
+  step_line <- x[grepl("^Step size\\s*=", x)]
+  if(length(step_line) > 0L){
+    res$step_size <- as.numeric(sub(".*=\\s*", "", step_line[[1]]))
+  }
+
+  metric_idx <- grep("inverse mass matrix", x, ignore.case = TRUE)
+  if(length(metric_idx) > 0L){
+    metric_header <- x[[metric_idx[[1]]]]
+    metric_rows <- character(0)
+    if(metric_idx[[1]] < length(x)){
+      metric_rows <- x[(metric_idx[[1]] + 1L):length(x)]
+    }
+    metric_rows <- metric_rows[nzchar(metric_rows)]
+
+    if(grepl("Diagonal elements", metric_header, ignore.case = TRUE)){
+      res$metric_type <- "diag_e"
+      if(length(metric_rows) > 0L){
+        res$inv_metric <- as.numeric(strsplit(metric_rows[[1]], split = ",\\s*")[[1]])
+      }
+    } else {
+      res$metric_type <- "dense_e"
+      if(length(metric_rows) > 0L){
+        parsed_rows <- lapply(metric_rows, function(row){
+          as.numeric(strsplit(row, split = ",\\s*")[[1]])
+        })
+        res$inv_metric <- do.call(rbind, parsed_rows)
+      }
+    }
+  }
+
+  res$diag_inv_mass_matrix <- as.numeric(res$inv_metric)
+  if(is.matrix(res$inv_metric)){
+    res$diag_inv_mass_matrix <- diag(res$inv_metric)
+  }
   res
 }
 

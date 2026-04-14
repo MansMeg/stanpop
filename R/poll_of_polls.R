@@ -12,12 +12,25 @@
 #' @param latent_time_ranges time ranges of the latent state of individual [y]s
 #' @param hyper_parameters hyperparameters to supply direct to the model
 #' @param slow_scales a vector of [Date]s that indicate breaks (right-inclusive) for a slower moving time scale.
-#' @param ... further arguments to [rstan::stan()] function
-#' @param cache_dir directory to cache model. Default is cache in tempdir(). [NULL], no cache.
+#' @param backend Stan backend to use. Supported values are [rstan] and
+#'   [cmdstanr].
+#' @param compile_args additional arguments passed to [cmdstanr::cmdstan_model()]
+#'   when `backend = "cmdstanr"`. Ignored for `backend = "rstan"`.
+#' @param ... further arguments passed directly to the backend sampler.
+#'   These go to [rstan::stan()] when `backend = "rstan"` and to
+#'   `CmdStanModel$sample()` when `backend = "cmdstanr"`.
+#' @param cache_dir directory to cache model. Default is cache in tempdir().
+#'   [NULL], no cache. Cached objects are stored with [save_pop()] in the same
+#'   wrapped on-disk format used by the public save/load API.
 #'
 #' @details
 #' The [input_args] slot contain all input arguments except polls data and known state that are stored in the original object instead.
-#' The [stan_arguments] slot contains all arguments that are supplied to the [rstan::stan()] function, except for the data argument which is stored in the [stan_data] slot.
+#' The [stan_arguments] slot contains the backend sampling arguments supplied through `...`,
+#' except for the `data` argument which is stored in the [stan_data] slot.
+#' The [compile_arguments] slot contains the CmdStanR compilation arguments.
+#' The [warm_start_state] slot caches the reusable warm-start payload extracted
+#' from the fitted Stan object so future refits do not need to recover it from
+#' the backend fit after serialization.
 #'
 #'
 #' @export
@@ -31,6 +44,8 @@ poll_of_polls <- function(y,
                           latent_time_ranges = NULL,
                           hyper_parameters = NULL,
                           slow_scales = NULL,
+                          backend = "rstan",
+                          compile_args = NULL,
                           ...,
                           cache_dir = file.path(tempdir(), "pop_cache")){
   checkmate::assert_subset(x = y, choices = names(y(polls_data)))
@@ -41,6 +56,8 @@ poll_of_polls <- function(y,
     smfp <- get_pop_stan_model_file_path(model)
   }
   checkmate::assert_choice(model, choices = supported_pop_models())
+  assert_pop_backend(backend)
+  checkmate::assert_list(compile_args, null.ok = TRUE)
   assert_polls_data(polls_data, min.rows = 1, min.cols = 1)
   assert_known_state(known_state)
   if(!is.null(known_state)){
@@ -88,11 +105,19 @@ poll_of_polls <- function(y,
     checkmate::assert_directory(cache_dir)
   }
 
+  stanpop_version <- as.character(utils::packageVersion("stanpop"))
+  stan_code_lines <- readLines(smfp, warn = FALSE)
+  stan_code <- paste(stan_code_lines, collapse = "\n")
+
   # SHA is setup both of all
   fun_args <- names(formals(poll_of_polls))[-which(names(formals(poll_of_polls)) %in% c("...", "cache_dir"))]
+  sha_input_names <- c(fun_args, "stanpop_version")
   sha_fun_args <- list(y = y,
-                       model = readLines(smfp),
+                       model = stan_code_lines,
                        polls_data = polls_data,
+                       stanpop_version = stanpop_version,
+                       backend = backend,
+                       compile_args = compile_args,
                        time_scale = time_scale,
                        time_scale_overrides = time_scale_overrides,
                        known_state = known_state,
@@ -100,7 +125,7 @@ poll_of_polls <- function(y,
                        latent_time_ranges = ltr,
                        hyper_parameters = hyper_parameters,
                        slow_scales = slow_scales)
-  checkmate::assert_set_equal(fun_args, names(sha_fun_args))
+  checkmate::assert_set_equal(sha_input_names, names(sha_fun_args))
   sha_stan_args <- list(data = sd$stan_data, ...)
   sha <- digest::digest(c(sha_fun_args, sha_stan_args), algo = "sha1")
 
@@ -108,30 +133,75 @@ poll_of_polls <- function(y,
   if(!is.null(cache_dir)){
     cache_fp <- cache_file_path(sha, cache_dir)
     if(file.exists(cache_fp)){
-      pop <- readRDS(file = cache_fp)
-      message("Cached results used.")
-      return(pop)
+      pop <- try(load_pop(cache_fp), silent = TRUE)
+      if(!inherits(pop, "try-error")) {
+        message("Cached results used.")
+        return(pop)
+      }
+
+      warning(
+        "Ignoring unreadable cached poll_of_polls object at '", cache_fp, "': ",
+        conditionMessage(attr(pop, "condition")),
+        ". The model will be refit and the cache file replaced.",
+        call. = FALSE
+      )
     } else {
       dir.create(cache_dir, recursive = TRUE, showWarnings = FALSE)
     }
   }
 
-  # Setup rstan arguments
-  rstan_arguments <- list(...)
+  # Setup Stan backend arguments
+  backend_arguments <- list(...)
   stan_arguments <- list(...)
-  if(!is.null(rstan_arguments$data)) warning("The 'data' argument has been overwritten")
-  rstan_arguments$data <- sd$stan_data
-  if(is.null(rstan_arguments$file)) rstan_arguments$file <- smfp
-  if(is.null(rstan_arguments$model_name)) rstan_arguments$model_name <- model
+  if(!is.null(backend_arguments$data)) warning("The 'data' argument has been overwritten")
+  backend_arguments$data <- sd$stan_data
+  if(backend == "cmdstanr"){
+    cmdstanr_rstan_only_args <- c("file", "model_name", "control", "iter", "warmup",
+                                  "cores", "algorithm", "init_r")
+    found_rstan_only_args <- intersect(names(backend_arguments), cmdstanr_rstan_only_args)
+    if(length(found_rstan_only_args) > 0){
+      stop(
+        "With backend = 'cmdstanr', supply CmdStanR sample arguments directly in '...'. ",
+        "Unsupported RStan-style arguments: ",
+        paste0(found_rstan_only_args, collapse = ", "),
+        ". Use e.g. 'iter_warmup', 'iter_sampling', 'parallel_chains', and 'compile_args'.",
+        call. = FALSE
+      )
+    }
+  }
+  if(backend == "rstan" && !is.null(compile_args) && length(compile_args) > 0){
+    warning("'compile_args' is ignored when backend = 'rstan'.", call. = FALSE)
+  }
   # The parameters to store should be supplied as an argument to stan instead.
-  # if(is.null(rstan_arguments$pars)) rstan_arguments$pars <- stan_parameters_to_store(model)
+  # if(is.null(backend_arguments$pars)) backend_arguments$pars <- stan_parameters_to_store(model)
   # TODO: rm stan_parameters_to_store() and just use the pars argument supplied by the user
 
   # Run Stan
-  stan_fit <- do.call(rstan::stan, rstan_arguments)
+  stan_fit <- backend_sample(
+    backend = backend,
+    sample_arguments = backend_arguments,
+    stan_file = smfp,
+    model_name = model,
+    compile_arguments = compile_args
+  )
+  stan_date <- Sys.time()
+  warm_start_state <- try(backend_capture_warm_start_state(backend, stan_fit), silent = TRUE)
+  if(inherits(warm_start_state, "try-error")) {
+    warning(
+      "Unable to cache warm-start state in the poll_of_polls object: ",
+      conditionMessage(attr(warm_start_state, "condition")),
+      call. = FALSE
+    )
+    warm_start_state <- NULL
+  }
 
   pop <-  list(y = y,
                model = model,
+               backend = backend,
+               stanpop_version = stanpop_version,
+               stan_code = stan_code,
+               stan_date = stan_date,
+               compile_arguments = compile_args,
                polls_data = polls_data,
                time_scale = time_scale,
                time_scale_overrides = time_scale_overrides,
@@ -142,6 +212,8 @@ poll_of_polls <- function(y,
                sha = sha,
                input_args = list(y = y,
                                  model = model,
+                                 backend = backend,
+                                 compile_args = compile_args,
                                  time_scale = time_scale,
                                  time_scale_overrides = time_scale_overrides,
                                  model_time_range = model_time_range,
@@ -155,14 +227,15 @@ poll_of_polls <- function(y,
                cache_dir = cache_dir,
                time_line = sd$time_line,
                stan_fit = stan_fit,
-               diagnostics = compute_diagnostics(stan_fit),
+               warm_start_state = warm_start_state,
+               diagnostics = compute_diagnostics(stan_fit, backend = backend),
                model_arguments = hyper_parameters,
                stan_data = sd)
   class(pop) <- c(paste0("pop_", model), "poll_of_polls")
 
   assert_pop(pop)
   # Save to cache
-  if(!is.null(cache_dir)) saveRDS(pop, file = cache_fp)
+  if(!is.null(cache_dir)) save_pop(pop, file = cache_fp)
   pop
 }
 
@@ -273,6 +346,7 @@ print.poll_of_polls <- function(x, ...){
   tr <- time_range(x$time_line)
   cat("Model is fit during the period ", as.character(tr["from"]), "--", as.character(tr["to"]), "\n", sep = "")
   cat("Stan model: ", x$model, ".stan\n", sep = "")
+  cat("Backend: ", x$backend, "\n", sep = "")
   cat("Number of parameters:", get_num_pars(x), "\n")
   cat("Number of unconstrained parameters:", get_num_upars(x), "\n")
   cat("Parties:", paste0(x$y, collapse = ", "), "\n")
@@ -419,7 +493,7 @@ assert_poll_data_and_latent_time_range_list_agree <- function(x, ltr){
 #' @param rm_idx remove parameter indecies (e.g. [1], [1,1], [1,1,1]) from the parameter names. Default is FALSE.
 #' @export
 parameter_names <- function(x, rm_idx = FALSE){
-  res <- try(names(x$stan_fit), silent = TRUE)
+  res <- try(backend_parameter_names(x$backend, x$stan_fit), silent = TRUE)
   if(rm_idx) res <- parameters_names_remove_indecies(res)
 
   if(inherits(res, "try-error")){
@@ -502,25 +576,40 @@ get_model_model_arguments <- function(x, all = TRUE){
 get_model_diagnostics <- function(x){
   checkmate::assert_class(x, "poll_of_polls")
   res <- list()
-  res$no_divergent_transistions <- sum(rstan::get_divergent_iterations(x$stan_fit))
-  res$no_max_treedepth <- sum(rstan::get_max_treedepth_iterations(x$stan_fit))
-  res$no_low_bfmi_chains <- length(rstan::get_low_bfmi_chains(x$stan_fit))
+  if(x$backend == "rstan"){
+    res$no_divergent_transistions <- sum(rstan::get_divergent_iterations(x$stan_fit))
+    res$no_max_treedepth <- sum(rstan::get_max_treedepth_iterations(x$stan_fit))
+    res$no_low_bfmi_chains <- length(rstan::get_low_bfmi_chains(x$stan_fit))
+    res$mean_no_leapfrog_steps <- mean(rstan::get_num_leapfrog_per_iteration(x$stan_fit))
+    tm <- rstan::get_elapsed_time(x$stan_fit)
+    res$mean_chain_warmup_time <- mean(tm[,"warmup"])
+    res$mean_chain_sampling_time <- mean(tm[,"sample"])
+  } else if(x$backend == "cmdstanr"){
+    ds <- x$stan_fit$diagnostic_summary(quiet = TRUE)
+    res$no_divergent_transistions <- sum(ds$num_divergent)
+    res$no_max_treedepth <- sum(ds$num_max_treedepth)
+    res$no_low_bfmi_chains <- sum(ds$ebfmi < 0.3, na.rm = TRUE)
+
+    sp <- get_sampler_params(x, inc_warmup = FALSE)
+    res$mean_no_leapfrog_steps <- mean(unlist(lapply(sp, function(chain) chain[, "n_leapfrog__"])))
+
+    tm <- x$stan_fit$time()
+    res$mean_chain_warmup_time <- mean(tm$chains$warmup)
+    res$mean_chain_sampling_time <- mean(tm$chains$sampling)
+  } else {
+    stop("Unknown backend '", x$backend, "' in get_model_diagnostics().", call. = FALSE)
+  }
   if(!is.null(x$diagnostics)){
     res$no_Rhat_above_1_1 <- sum(x$diagnostics$Rhat[!is.na(x$diagnostics$Rhat)] > 1.1)
     res$no_Rhat_is_NA <- sum(is.na(x$diagnostics$Rhat))
   }
 
-  res$mean_no_leapfrog_steps <- mean(rstan::get_num_leapfrog_per_iteration(x$stan_fit))
   ai <- get_adaptation_info(x)
   res$mean_chain_step_size <- mean(unlist(lapply(ai, function(x) x$step_size)))
   res$mean_chain_inv_mass_matrix_min <-
     mean(unlist(lapply(ai, function(x) min(x$diag_inv_mass_matrix))))
   res$mean_chain_inv_mass_matrix_max <-
     mean(unlist(lapply(ai, function(x) max(x$diag_inv_mass_matrix))))
-
-  tm <- rstan::get_elapsed_time(x$stan_fit)
-  res$mean_chain_warmup_time <- mean(tm[,"warmup"])
-  res$mean_chain_sampling_time <- mean(tm[,"sample"])
   res
 }
 
@@ -530,7 +619,7 @@ get_model_diagnostics <- function(x){
 #' @export
 get_ndraws <- function(x){
   checkmate::assert_class(x, "poll_of_polls")
-  sum(unlist(lapply(x$stan_fit@stan_args, function(x) {x$iter - x$warmup})))
+  backend_get_ndraws(x$backend, x$stan_fit)
 }
 
 #' @rdname get_ndraws
@@ -565,34 +654,114 @@ get_git_sha <- function(){
 }
 
 
-compute_diagnostics <- function(x){
-  fit_summary <- rstan::summary(x)
-  list(n_eff = fit_summary$summary[,"n_eff"],
-       Rhat = fit_summary$summary[,"Rhat"])
+compute_diagnostics <- function(x, backend = "rstan"){
+  backend_compute_diagnostics(backend = backend, fit = x)
 }
 
 
 
-#' Extract all pop arguments for poll_of_polls() from a pop object
+#' Extract refit-ready constructor arguments from a poll_of_polls object
 #'
 #' @description
-#' This function takes a pop object and extracts the relevant arguments for the poll_of_polls() function.
-#' It ensures that the pop object is valid and then retrieves the necessary information to be used as input for poll_of_polls().
+#' `extract_poll_of_polls_refit_arguments()` returns the named constructor
+#' arguments for [poll_of_polls()] that are stored in a [poll_of_polls] object.
+#' Unlike `x$input_args`, the returned list excludes backend sampler arguments
+#' from `...`, which are returned separately by
+#' [extract_poll_of_polls_sample_arguments()].
 #'
-#' @param x A pop object
+#' `extract_poll_of_polls_input_arguments()` is retained as a backward-compatible
+#' alias and returns the same refit-ready constructor arguments.
+#'
+#' @param x A pop object.
+#'
+#' @return
+#' `extract_poll_of_polls_refit_arguments()` and
+#' `extract_poll_of_polls_input_arguments()` return a list with the named
+#' [poll_of_polls()] constructor arguments, excluding sampler arguments from
+#' `...`.
+#'
+#' `extract_poll_of_polls_sample_arguments()` returns the sampler arguments that
+#' were supplied through `...` when the model was fit.
 #'
 #' @export
-extract_poll_of_polls_input_arguments <- function(x){
+extract_poll_of_polls_refit_arguments <- function(x){
   assert_pop(x)
-  # Extract the arguments for poll_of_polls() from the pop object
-  args <- list()
 
-  # Extract relevant information from the pop object
-  args <- pop$input_args
-  args$polls_data <- x$polls_data
-  args$known_state <- x$known_state
+  input_args <- x$input_args
+  if(is.null(input_args)) input_args <- list()
 
-  class(args) <- c("poll_of_polls_input_arguments", "list")
+  args <- list(
+    y = pop_input_argument_or_default(input_args, "y", x$y),
+    model = pop_input_argument_or_default(input_args, "model", x$model),
+    polls_data = x$polls_data,
+    time_scale = pop_input_argument_or_default(input_args, "time_scale", x$time_scale),
+    time_scale_overrides = pop_input_argument_or_default(input_args, "time_scale_overrides", x$time_scale_overrides),
+    known_state = x$known_state,
+    # Refit should inherit the resolved model ranges and hyper parameters from
+    # the fitted object, not the raw input values, so the Stan data is rebuilt
+    # exactly as in `x` unless the caller overrides it explicitly.
+    model_time_range = x$model_time_range,
+    # `poll_of_polls()` expects the constructor-style latent time range input,
+    # not the fully resolved internal `x$latent_time_range` representation.
+    latent_time_ranges = pop_input_argument_or_default(input_args, "latent_time_ranges", NULL),
+    hyper_parameters = pop_refit_hyper_parameters(x),
+    slow_scales = if(!is.null(x$time_line) && "slow_scales" %in% names(x$time_line)) {
+      x$time_line$slow_scales
+    } else {
+      pop_input_argument_or_default(input_args, "slow_scales", NULL)
+    },
+    backend = pop_input_argument_or_default(input_args, "backend", x$backend),
+    compile_args = pop_input_argument_or_default(input_args, "compile_args", x$compile_arguments),
+    cache_dir = pop_input_argument_or_default(input_args, "cache_dir", x$cache_dir)
+  )
 
-  return(args)
+  args <- args[setdiff(names(formals(poll_of_polls)), "...")]
+  class(args) <- c("poll_of_polls_refit_arguments", "poll_of_polls_input_arguments", "list")
+  args
+}
+
+# Internal helper for reconstructing constructor arguments from a stored
+# poll_of_polls object. We prefer values recorded in x$input_args when present,
+# and fall back to the supplied default for older objects or derived fields that
+# were not stored explicitly.
+pop_input_argument_or_default <- function(input_args, name, default = NULL){
+  checkmate::assert_list(input_args)
+  checkmate::assert_string(name)
+  if(name %in% names(input_args)) {
+    return(input_args[[name]])
+  }
+  default
+}
+
+pop_refit_hyper_parameters <- function(x) {
+  assert_pop(x)
+  if(!is.null(x$stan_data) &&
+     "stan_data" %in% names(x$stan_data) &&
+     is.list(x$stan_data$stan_data)) {
+    return(get_model_model_arguments(x, all = TRUE))
+  }
+  x$model_arguments
+}
+
+#' @rdname extract_poll_of_polls_refit_arguments
+#' @export
+extract_poll_of_polls_input_arguments <- function(x){
+  extract_poll_of_polls_refit_arguments(x)
+}
+
+#' @rdname extract_poll_of_polls_refit_arguments
+#' @export
+extract_poll_of_polls_sample_arguments <- function(x){
+  assert_pop(x)
+
+  sample_args <- NULL
+  if("stan_arguments" %in% names(x)) sample_args <- x$stan_arguments
+  if(is.null(sample_args) && !is.null(x$input_args) && "stan_arguments" %in% names(x$input_args)) {
+    sample_args <- x$input_args$stan_arguments
+  }
+  if(is.null(sample_args)) sample_args <- list()
+
+  checkmate::assert_list(sample_args)
+  class(sample_args) <- c("poll_of_polls_sample_arguments", "list")
+  sample_args
 }

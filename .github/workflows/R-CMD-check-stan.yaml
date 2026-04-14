@@ -8,6 +8,10 @@ on:
 
 name: R-CMD-check-stan.yaml
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 permissions: read-all
 
 jobs:
@@ -26,6 +30,9 @@ jobs:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
       R_KEEP_PKG_SOURCE: yes
       STANPOP_RUN_STAN_TESTS: "true"
+      STANPOP_RUN_CMDSTANR_TESTS: "false"
+      STANPOP_RUN_RSTAN_TESTS: "true"
+      STANPOP_RUN_8K_RSTAN_TESTS: "false"
 
     steps:
       - uses: actions/checkout@v4
@@ -38,10 +45,26 @@ jobs:
           http-user-agent: ${{ matrix.config.http-user-agent }}
           use-public-rspm: true
 
+      - name: Add Stan R package repository
+        run: |
+          echo 'options(repos = c(stan = "https://mc-stan.org/r-packages/", getOption("repos")))' >> ~/.Rprofile
+          echo "RENV_CONFIG_REPOS_OVERRIDE=STAN=https://mc-stan.org/r-packages/;CRAN=${RSPM:-https://cloud.r-project.org}" >> "$GITHUB_ENV"
+          Rscript -e 'print(getOption("repos")); cat(Sys.getenv("RENV_CONFIG_REPOS_OVERRIDE"), "\n")'
+        shell: bash
+
       - uses: r-lib/actions/setup-r-dependencies@v2
         with:
-          extra-packages: any::rcmdcheck
+          extra-packages: any::rcmdcheck, any::posterior
           needs: check
+
+      - name: Install CmdStan
+        run: |
+          cat("cmdstanr:", as.character(utils::packageVersion("cmdstanr")), "\n")
+          cmdstan_dir <- cmdstanr::install_cmdstan(cores = 2, overwrite = FALSE)
+          cmdstanr::set_cmdstan_path(cmdstan_dir)
+          cat("CmdStan path:", cmdstanr::cmdstan_path(), "\n")
+          cat("CmdStan version:", cmdstanr::cmdstan_version(), "\n")
+        shell: Rscript {0}
 
       - uses: r-lib/actions/check-r-package@v2
         with:

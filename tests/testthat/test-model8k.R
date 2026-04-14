@@ -11,6 +11,7 @@ if(FALSE){ # For debugging
 }
 
 test_that("Test model 8k1 data parsing", {
+  skip_if_no_8k_rstan_tests()
 
 
   data("x_test")
@@ -121,6 +122,7 @@ test_that("Test model 8k1 data parsing", {
 
 
 test_that("Test sum to zero constraint for kappa", {
+  skip_if_no_8k_rstan_tests()
 
   data("x_test")
   txdf <- as.data.frame(x_test[3:4])
@@ -185,6 +187,7 @@ test_that("Test sum to zero constraint for kappa", {
 
   # Takes 80 seconds
   skip_if_no_stan_tests()
+  skip_if_no_rstan_tests()
   expect_silent(pop8k1_out <-
                   capture.output(
                     suppressWarnings(
@@ -240,6 +243,7 @@ test_that("Test sum to zero constraint for kappa", {
 
 
 test_that("Test simple prediction with known obs_x", {
+  skip_if_no_8k_rstan_tests()
 
   data("x_test")
   txdf <- as.data.frame(x_test[3:4])
@@ -279,6 +283,7 @@ test_that("Test simple prediction with known obs_x", {
   # plot(spd2, "x4")
 
   skip_if_no_stan_tests()
+  skip_if_no_rstan_tests()
   expect_silent(pop8k1_out <-
                   capture.output(
                     suppressWarnings(
@@ -306,6 +311,7 @@ test_that("Test simple prediction with known obs_x", {
 
 
 test_that("Test multiplicative industry bias for kappa", {
+  skip_if_no_8k_rstan_tests()
 
   data("x_test")
   txdf <- as.data.frame(x_test[3:4])
@@ -370,6 +376,7 @@ test_that("Test multiplicative industry bias for kappa", {
   spd$y[is_s3,"x4"] <-  spd$y[is_s3,"x4"] * exp(sd$stan_data$g_i[is_s3] * kappa_x4_s3)
 
   skip_if_no_stan_tests()
+  skip_if_no_rstan_tests()
   # Takes 120 seconds
   expect_silent(pop8k1_out <-
                   capture.output(
@@ -412,5 +419,3 @@ test_that("Test multiplicative industry bias for kappa", {
   expect_equal(kpa22, kappa_x4_s2, tol = 0.15)
 
 })
-
-

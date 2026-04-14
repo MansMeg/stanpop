@@ -1,0 +1,66 @@
+on:
+  push:
+    branches: [main, master, development]
+  pull_request:
+    branches: [main, master, development]
+
+name: R-CMD-check-cmdstanr.yaml
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions: read-all
+
+jobs:
+  cmdstanr-tests:
+    runs-on: ubuntu-latest
+
+    name: ubuntu-latest (cmdstanr tests)
+
+    env:
+      GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
+      R_KEEP_PKG_SOURCE: yes
+      STANPOP_RUN_STAN_TESTS: "true"
+      STANPOP_RUN_CMDSTANR_TESTS: "true"
+      STANPOP_RUN_RSTAN_TESTS: "false"
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: r-lib/actions/setup-pandoc@v2
+
+      - uses: r-lib/actions/setup-r@v2
+        with:
+          r-version: release
+          use-public-rspm: true
+
+      - name: Add Stan R package repository
+        run: |
+          echo 'options(repos = c(stan = "https://mc-stan.org/r-packages/", getOption("repos")))' >> ~/.Rprofile
+          echo "RENV_CONFIG_REPOS_OVERRIDE=STAN=https://mc-stan.org/r-packages/;CRAN=${RSPM:-https://cloud.r-project.org}" >> "$GITHUB_ENV"
+          Rscript -e 'print(getOption("repos")); cat(Sys.getenv("RENV_CONFIG_REPOS_OVERRIDE"), "\n")'
+        shell: bash
+
+      - uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          extra-packages: any::rcmdcheck, any::posterior
+          needs: check
+
+      - name: Install CmdStan
+        run: |
+          cat("cmdstanr:", as.character(utils::packageVersion("cmdstanr")), "\n")
+          cmdstan_dir <- cmdstanr::install_cmdstan(cores = 2, overwrite = FALSE)
+          cmdstanr::set_cmdstan_path(cmdstan_dir)
+          cmdstanr::cmdstan_make_local(cpp_options = list(STAN_THREADS = TRUE))
+          cmdstanr::rebuild_cmdstan()
+          cat("CmdStan path:", cmdstanr::cmdstan_path(), "\n")
+          cat("CmdStan version:", cmdstanr::cmdstan_version(), "\n")
+          cat("make/local:\n")
+          cat(cmdstanr::cmdstan_make_local(), sep = "\n")
+        shell: Rscript {0}
+
+      - uses: r-lib/actions/check-r-package@v2
+        with:
+          upload-snapshots: true
+          build_args: 'c("--no-manual","--compact-vignettes=gs+qpdf")'

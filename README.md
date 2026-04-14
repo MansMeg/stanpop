@@ -54,7 +54,7 @@ devtools::test()
 Run integration tests as well:
 
 ```bash
-ADA2_RUN_STAN_TESTS=true R -q -e 'devtools::test()'
+STANPOP_RUN_STAN_TESTS=true R -q -e 'devtools::test()'
 ```
 
 ## Versioning & reproducibility
@@ -65,7 +65,6 @@ Every fit records:
 * model identifier / Stan file hash
 * data hash
 * run timestamp and sampling config
-
 
 
 
