@@ -51,6 +51,9 @@ test_that("prepare_pop_for_save is a no-op for rstan", {
 })
 
 test_that("prepare_cmdstanr_pop_for_save materializes the stored fit", {
+  skip_if_no_cmdstanr_tests()
+  skip_if_no_cmdstanr()
+
   materialized_fit <- list(materialized = TRUE, draws = 42)
   pop_cmdstanr <- make_mock_pop_for_io(
     "cmdstanr",
@@ -64,6 +67,9 @@ test_that("prepare_cmdstanr_pop_for_save materializes the stored fit", {
 })
 
 test_that("save_pop stores the materialized cmdstanr-backed pop", {
+  skip_if_no_cmdstanr_tests()
+  skip_if_no_cmdstanr()
+
   pop <- make_mock_pop_for_io("cmdstanr")
   tmp <- tempfile(fileext = ".rds")
   on.exit(unlink(tmp), add = TRUE)
