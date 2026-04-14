@@ -4,7 +4,7 @@
 \alias{assert_poll_data_in_time_line_using_time_scale}
 \alias{assert_poll_data_in_time_line_using_time_range}
 \title{Assert that the poll_data object dates are available
-within the time_line using time_scale}
+within the [time_line] using time_scale}
 \usage{
 assert_poll_data_in_time_line_using_time_scale(pd, ts)
 

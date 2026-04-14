@@ -20,6 +20,7 @@ stan_polls_data(
   y_name,
   model,
   time_scale = "week",
+  time_scale_overrides = NULL,
   known_state = NULL,
   model_time_range = NULL,
   latent_time_ranges = NULL,
@@ -128,6 +129,10 @@ stan_polls_data_model8d(
 
 \item{time_scale}{to use.}
 
+\item{time_scale_overrides}{a [data.frame] with columns [from], [to], and [time_scale]
+that override the default [time_scale] for inclusive date ranges in the latent state.
+The [from] and [to] bounds are inclusive and override ranges must not overlap.}
+
 \item{known_state}{known time points in the latent state}
 
 \item{model_time_range}{the time range to model (for example for extrapolation)}
@@ -142,4 +147,10 @@ Example: If only 2010-01-15 is used, all dates up to and including 2010-01-15, w
 }
 \description{
 Generate Stan Data from [polls_data] objects
+}
+\details{
+The returned object keeps the existing [stan_data] and [time_line] fields
+unchanged for current models. A parallel future path is attached in
+[stan_data_with_overrides] and [time_line_with_overrides], built using
+[time_line_with_overrides()].
 }

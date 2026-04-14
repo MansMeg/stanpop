@@ -7,7 +7,7 @@
 get_time_line(x, time_range, time_scale)
 }
 \arguments{
-\item{x}{a polls data object}
+\item{x}{a [polls_data] object}
 
 \item{time_range}{a time range object}
 

@@ -43,9 +43,9 @@ a [polls_data] object, or a [time_range] object.}
 }
 \value{
 a [time_line] object. A list with two data
-frames, one for a [daily] time_line and one with the
+frames, one for a [daily] [time_line] and one with the
 [time_line] for the chosen [time_scale].
-Both data.frames consist of a date variable and
+Both [data.frames] consist of a [date] variable and
 a [t] index column.
 }
 \description{
@@ -53,13 +53,13 @@ Construct a timeline to use based on
 the [time_scale] of interest.
 }
 \details{
-The timeline is created based on full months and week.
+The timeline is created based on full months, week or days.
 If a [start_date] is supplied, length(x) no of days/weeks/months
 units are added, including the day/week/month of [start_date].
 Hence, the number of total days of the [time_line] will change,
 based on the weekday of [start_date].
 
-If [time_range] is supplied, the [time_line] will include all
-days/weeks/months that is included, fully or partial, by the
-[time_range].
+If [time_range] is supplied, the [time_line] will include every
+day/week/month that overlaps the closed interval defined by
+[time_range], including partial periods at both boundaries.
 }

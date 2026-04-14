@@ -9,6 +9,7 @@ poll_of_polls(
   model,
   polls_data,
   time_scale,
+  time_scale_overrides = NULL,
   known_state = NULL,
   model_time_range = NULL,
   latent_time_ranges = NULL,
@@ -26,6 +27,10 @@ poll_of_polls(
 \item{polls_data}{a [polls_data] object}
 
 \item{time_scale}{the time scale to use, [day], [week], or [month].}
+
+\item{time_scale_overrides}{a [data.frame] with columns [from], [to], and [time_scale]
+that override the default [time_scale] for inclusive date ranges in the latent state.
+The [from] and [to] bounds are inclusive and override ranges must not overlap.}
 
 \item{known_state}{a [data.frame] with variables [date] and [x] indicating the known states for certain dates.}
 

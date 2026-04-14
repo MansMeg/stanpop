@@ -4,6 +4,9 @@
 #' @param model poll of polls model to use (or a path to a stan model)
 #' @param polls_data a [polls_data] object
 #' @param time_scale the time scale to use, [day], [week], or [month].
+#' @param time_scale_overrides a [data.frame] with columns [from], [to], and [time_scale]
+#'   that override the default [time_scale] for inclusive date ranges in the latent state.
+#'   The [from] and [to] bounds are inclusive and override ranges must not overlap.
 #' @param model_time_range a [time_range] object that describe the period used for the latent state. Default is the [time_range] of the [polls_data] object.
 #' @param known_state a [data.frame] with variables [date] and [x] indicating the known states for certain dates.
 #' @param latent_time_ranges time ranges of the latent state of individual [y]s
@@ -22,6 +25,7 @@ poll_of_polls <- function(y,
                           model,
                           polls_data,
                           time_scale,
+                          time_scale_overrides = NULL,
                           known_state = NULL,
                           model_time_range = NULL,
                           latent_time_ranges = NULL,
@@ -49,6 +53,19 @@ poll_of_polls <- function(y,
     mtr <- time_range(model_time_range)
   }
   assert_poll_data_in_time_line_using_time_range(polls_data, time_scale, mtr)
+  assert_time_scale_overrides(
+    x = time_scale_overrides,
+    dates = tibble::tibble(date = seq(from = mtr["from"], to = mtr["to"], by = 1))
+  )
+  if(!is.null(time_scale_overrides) && nrow(time_scale_overrides) > 0 &&
+     !model_supports_time_scale_overrides(model)) {
+    # Only models with step_scale_t in Stan can safely fit on a mixed latent grid.
+    stop(
+      "'time_scale_overrides' requires a model that uses 'step_scale_t'. ",
+      "Model '", model, "' does not support time scale overrides in fitting.",
+      call. = FALSE
+    )
+  }
   assert_latent_time_range_list(latent_time_ranges)
   ltr <- setup_latent_time_ranges(x = latent_time_ranges, y, mtr)
   assert_poll_data_and_latent_time_range_list_agree(polls_data, ltr)
@@ -56,6 +73,7 @@ poll_of_polls <- function(y,
 
   sd <- stan_polls_data(x = polls_data,
                         time_scale = time_scale,
+                        time_scale_overrides = time_scale_overrides,
                         y_name = y,
                         model = model,
                         known_state = known_state,
@@ -76,6 +94,7 @@ poll_of_polls <- function(y,
                        model = readLines(smfp),
                        polls_data = polls_data,
                        time_scale = time_scale,
+                       time_scale_overrides = time_scale_overrides,
                        known_state = known_state,
                        model_time_range = mtr,
                        latent_time_ranges = ltr,
@@ -115,6 +134,7 @@ poll_of_polls <- function(y,
                model = model,
                polls_data = polls_data,
                time_scale = time_scale,
+               time_scale_overrides = time_scale_overrides,
                known_state = known_state,
                model_time_range = mtr,
                latent_time_range = ltr,
@@ -123,6 +143,7 @@ poll_of_polls <- function(y,
                input_args = list(y = y,
                                  model = model,
                                  time_scale = time_scale,
+                                 time_scale_overrides = time_scale_overrides,
                                  model_time_range = model_time_range,
                                  latent_time_ranges = latent_time_ranges,
                                  hyper_parameters = hyper_parameters,

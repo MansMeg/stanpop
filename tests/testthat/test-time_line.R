@@ -66,6 +66,73 @@ test_that("get time_range from time_line", {
 })
 
 
+test_that("time_scale_overrides are validated as inclusive non-overlapping ranges", {
+  assert_time_scale_overrides <- get_internal("assert_time_scale_overrides")
+  dates <- tibble::tibble(date = seq(as.Date("2020-01-01"), as.Date("2020-01-31"), by = 1))
+
+  expect_silent(assert_time_scale_overrides(NULL, dates))
+
+  expect_silent(
+    assert_time_scale_overrides(
+      data.frame(
+        from = as.Date(c("2020-01-01", "2020-01-11")),
+        to = as.Date(c("2020-01-10", "2020-01-20")),
+        time_scale = c("day", "day")
+      ),
+      dates
+    )
+  )
+
+  expect_error(
+    assert_time_scale_overrides(
+      tibble::tibble(
+        from = as.Date(c("2020-01-01", "2020-01-10")),
+        to = as.Date(c("2020-01-10", "2020-01-20")),
+        time_scale = c("day", "day")
+      ),
+      dates
+    ),
+    regexp = "inclusive|overlapping"
+  )
+
+  expect_error(
+    assert_time_scale_overrides(
+      tibble::tibble(
+        from = as.Date("2019-12-31"),
+        to = as.Date("2020-01-10"),
+        time_scale = "day"
+      ),
+      dates
+    ),
+    regexp = "fully contained|inclusive"
+  )
+
+  expect_error(
+    assert_time_scale_overrides(
+      tibble::tibble(
+        from = as.Date("2020-01-01"),
+        to = as.Date("2020-01-10"),
+        time_scale = "days"
+      ),
+      dates
+    ),
+    regexp = "subset"
+  )
+
+  expect_error(
+    assert_time_scale_overrides(
+      tibble::tibble(
+        from = as.Date("2020-01-01"),
+        to = as.Date("2020-01-10"),
+        time_scale = "week"
+      ),
+      dates
+    ),
+    regexp = "only supports|time_scale.+day"
+  )
+})
+
+
 test_that("time line expand", {
   x <- 1:10
   expect_silent(tl1 <- time_line(x, time_scale = "day", start_date = "2010-01-04"))
@@ -136,4 +203,3 @@ test_that("time_line_add_slow_scale", {
   expect_length(ts, nrow(tls$time_line))
 
 })
-
