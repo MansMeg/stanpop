@@ -609,6 +609,43 @@ stan_argument_init_is_per_chain_list_for_print <- function(init) {
     all(vapply(init, is.list, logical(1)))
 }
 
+#' Detect unnamed list values for print summaries
+#'
+#' @description
+#' Test whether a Stan argument value is an unnamed list, which is how
+#' chain-specific warm-start payloads such as `inv_metric` are stored in
+#' `stan_arguments`.
+#'
+#' @param x Candidate Stan argument value.
+#'
+#' @return Logical scalar.
+#'
+#' @keywords internal
+stan_argument_value_is_unnamed_list_for_print <- function(x) {
+  is.list(x) &&
+    length(x) > 0L &&
+    (is.null(names(x)) || all(names(x) == ""))
+}
+
+#' Summarize object shape for compact print output
+#'
+#' @description
+#' Return a short human-readable descriptor for the size of an object. Vectors
+#' are reported by length, while arrays and matrices are reported by their
+#' dimensions.
+#'
+#' @param x Object whose shape should be summarized.
+#'
+#' @return Character scalar describing the shape of `x`.
+#'
+#' @keywords internal
+summarize_stan_argument_shape_for_print <- function(x) {
+  if(is.null(dim(x))) {
+    return(paste("length", length(x)))
+  }
+  paste(dim(x), collapse = " x ")
+}
+
 #' Truncate long name lists for compact print summaries
 #'
 #' @description
