@@ -396,10 +396,10 @@ print.poll_of_polls <- function(x, ...){
 #' Compact Stan arguments for printing
 #'
 #' @description
-#' Copy a `stan_arguments` list and replace large materialized `init` payloads
-#' with a compact human-readable summary before rendering the list as YAML in
-#' [print.poll_of_polls()]. Scalar `init` values such as `"random"` are left
-#' unchanged.
+#' Copy a `stan_arguments` list and replace large materialized warm-start
+#' payloads such as `init` and `inv_metric` with compact human-readable
+#' summaries before rendering the list as YAML in [print.poll_of_polls()].
+#' Small scalar values such as `init = "random"` are left unchanged.
 #'
 #' @param stan_arguments A list of stored backend sampling arguments.
 #'
@@ -412,26 +412,84 @@ compact_stan_arguments_for_print <- function(stan_arguments) {
   }
 
   checkmate::assert_list(stan_arguments)
-  if(!"init" %in% names(stan_arguments)) {
+  stan_arguments <- compact_stan_argument_field_for_print(
+    stan_arguments = stan_arguments,
+    field = "init",
+    summarize_value = summarize_stan_argument_init_for_print,
+    keep_value = stan_argument_value_is_scalar_for_print
+  )
+  stan_arguments <- compact_stan_argument_field_for_print(
+    stan_arguments = stan_arguments,
+    field = "inv_metric",
+    summarize_value = summarize_stan_argument_inv_metric_for_print,
+    keep_value = stan_argument_value_is_scalar_for_print
+  )
+
+  stan_arguments
+}
+
+#' Compact one Stan argument field for printing
+#'
+#' @description
+#' Replace one named `stan_arguments` entry with a compact summary while
+#' preserving the surrounding field order. The summary fields are inserted
+#' immediately after the compacted field in the returned list.
+#'
+#' @param stan_arguments A list of stored backend sampling arguments.
+#' @param field Character scalar giving the field name to compact.
+#' @param summarize_value Function that converts the original field value into
+#'   a named summary list.
+#' @param keep_value Optional predicate function. When it returns `TRUE`, the
+#'   original value is kept unchanged.
+#'
+#' @return A list of Stan arguments with the selected field compacted when
+#'   needed.
+#'
+#' @keywords internal
+compact_stan_argument_field_for_print <- function(stan_arguments,
+                                                  field,
+                                                  summarize_value,
+                                                  keep_value = NULL) {
+  checkmate::assert_list(stan_arguments)
+  checkmate::assert_string(field)
+  checkmate::assert_function(summarize_value)
+  checkmate::assert_function(keep_value, null.ok = TRUE)
+
+  if(!field %in% names(stan_arguments)) {
     return(stan_arguments)
   }
 
-  init <- stan_arguments$init
-  if(is.null(init) || stan_argument_init_is_scalar_for_print(init)) {
+  value <- stan_arguments[[field]]
+  if(is.null(value) || (!is.null(keep_value) && isTRUE(keep_value(value)))) {
     return(stan_arguments)
   }
 
-  init_summary <- summarize_stan_argument_init_for_print(init)
-  init_idx <- match("init", names(stan_arguments))
-  before <- stan_arguments[seq_len(init_idx)]
-  before$init <- init_summary$init
+  value_summary <- summarize_value(value)
+  field_idx <- match(field, names(stan_arguments))
+  before <- stan_arguments[seq_len(field_idx)]
+  before[[field]] <- value_summary[[field]]
 
-  summary_fields <- init_summary[setdiff(names(init_summary), "init")]
+  summary_fields <- value_summary[setdiff(names(value_summary), field)]
   after <- list()
-  if(init_idx < length(stan_arguments)) {
-    after <- stan_arguments[seq.int(init_idx + 1L, length(stan_arguments))]
+  if(field_idx < length(stan_arguments)) {
+    after <- stan_arguments[seq.int(field_idx + 1L, length(stan_arguments))]
   }
   c(before, summary_fields, after)
+}
+
+#' Detect scalar Stan argument values that are safe to print verbatim
+#'
+#' @description
+#' Return whether a Stan argument value is already a small scalar atomic value
+#' that should remain unchanged in the printed Stan argument summary.
+#'
+#' @param value Candidate Stan argument value.
+#'
+#' @return Logical scalar.
+#'
+#' @keywords internal
+stan_argument_value_is_scalar_for_print <- function(value) {
+  is.atomic(value) && is.null(dim(value)) && length(value) <= 1L
 }
 
 #' Detect scalar init values that are safe to print verbatim
@@ -447,7 +505,7 @@ compact_stan_arguments_for_print <- function(stan_arguments) {
 #'
 #' @keywords internal
 stan_argument_init_is_scalar_for_print <- function(init) {
-  is.atomic(init) && is.null(dim(init)) && length(init) <= 1L
+  stan_argument_value_is_scalar_for_print(init)
 }
 
 #' Summarize materialized init values for printing
