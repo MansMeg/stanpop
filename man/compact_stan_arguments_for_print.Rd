@@ -13,9 +13,9 @@ compact_stan_arguments_for_print(stan_arguments)
 A list suitable for compact human-readable printing.
 }
 \description{
-Copy a `stan_arguments` list and replace large materialized `init` payloads
-with a compact human-readable summary before rendering the list as YAML in
-[print.poll_of_polls()]. Scalar `init` values such as `"random"` are left
-unchanged.
+Copy a `stan_arguments` list and replace large materialized warm-start
+payloads such as `init` and `inv_metric` with compact human-readable
+summaries before rendering the list as YAML in [print.poll_of_polls()].
+Small scalar values such as `init = "random"` are left unchanged.
 }
 \keyword{internal}

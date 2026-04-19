@@ -75,3 +75,49 @@ test_that("materialized named init lists are compacted for printing", {
   expect_identical(compact$init_type, "materialized_named_list")
   expect_true(any(grepl("... ", yaml_lines)))
 })
+
+test_that("materialized per-chain inv_metric values are compacted for printing", {
+  compact_stan_arguments_for_print <- get_internal("compact_stan_arguments_for_print")
+
+  args <- list(
+    metric = "diag_e",
+    inv_metric = list(
+      c(0.0035591, 1.12629, 0.810012, 0.821878),
+      c(0.795252, 0.826787, 0.859769, 0.825241)
+    ),
+    seed = 4711
+  )
+
+  compact <- compact_stan_arguments_for_print(args)
+  yaml_lines <- capture.output(cat(yaml::as.yaml(compact)))
+
+  expect_identical(compact$metric, "diag_e")
+  expect_identical(compact$seed, 4711)
+  expect_identical(compact$inv_metric, "materialized inv_metric values omitted")
+  expect_identical(compact$inv_metric_type, "materialized_per_chain_list")
+  expect_identical(compact$inv_metric_chains, 2L)
+  expect_identical(compact$inv_metric_shape, "length 4")
+  expect_false(any(grepl("0\\.0035591|1\\.12629|0\\.859769|0\\.825241", yaml_lines)))
+})
+
+test_that("materialized dense inv_metric values are compacted for printing", {
+  compact_stan_arguments_for_print <- get_internal("compact_stan_arguments_for_print")
+
+  args <- list(
+    metric = "dense_e",
+    inv_metric = list(
+      matrix(c(1.1, 0.2, 0.2, 2.3), nrow = 2),
+      matrix(c(3.4, 0.5, 0.5, 4.6), nrow = 2)
+    ),
+    seed = 4711
+  )
+
+  compact <- compact_stan_arguments_for_print(args)
+  yaml_lines <- capture.output(cat(yaml::as.yaml(compact)))
+
+  expect_identical(compact$inv_metric, "materialized inv_metric values omitted")
+  expect_identical(compact$inv_metric_type, "materialized_per_chain_list")
+  expect_identical(compact$inv_metric_chains, 2L)
+  expect_identical(compact$inv_metric_shape, "2 x 2")
+  expect_false(any(grepl("1\\.1|2\\.3|3\\.4|4\\.6", yaml_lines)))
+})

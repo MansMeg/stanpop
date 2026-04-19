@@ -396,10 +396,10 @@ print.poll_of_polls <- function(x, ...){
 #' Compact Stan arguments for printing
 #'
 #' @description
-#' Copy a `stan_arguments` list and replace large materialized `init` payloads
-#' with a compact human-readable summary before rendering the list as YAML in
-#' [print.poll_of_polls()]. Scalar `init` values such as `"random"` are left
-#' unchanged.
+#' Copy a `stan_arguments` list and replace large materialized warm-start
+#' payloads such as `init` and `inv_metric` with compact human-readable
+#' summaries before rendering the list as YAML in [print.poll_of_polls()].
+#' Small scalar values such as `init = "random"` are left unchanged.
 #'
 #' @param stan_arguments A list of stored backend sampling arguments.
 #'
@@ -412,26 +412,84 @@ compact_stan_arguments_for_print <- function(stan_arguments) {
   }
 
   checkmate::assert_list(stan_arguments)
-  if(!"init" %in% names(stan_arguments)) {
+  stan_arguments <- compact_stan_argument_field_for_print(
+    stan_arguments = stan_arguments,
+    field = "init",
+    summarize_value = summarize_stan_argument_init_for_print,
+    keep_value = stan_argument_value_is_scalar_for_print
+  )
+  stan_arguments <- compact_stan_argument_field_for_print(
+    stan_arguments = stan_arguments,
+    field = "inv_metric",
+    summarize_value = summarize_stan_argument_inv_metric_for_print,
+    keep_value = stan_argument_value_is_scalar_for_print
+  )
+
+  stan_arguments
+}
+
+#' Compact one Stan argument field for printing
+#'
+#' @description
+#' Replace one named `stan_arguments` entry with a compact summary while
+#' preserving the surrounding field order. The summary fields are inserted
+#' immediately after the compacted field in the returned list.
+#'
+#' @param stan_arguments A list of stored backend sampling arguments.
+#' @param field Character scalar giving the field name to compact.
+#' @param summarize_value Function that converts the original field value into
+#'   a named summary list.
+#' @param keep_value Optional predicate function. When it returns `TRUE`, the
+#'   original value is kept unchanged.
+#'
+#' @return A list of Stan arguments with the selected field compacted when
+#'   needed.
+#'
+#' @keywords internal
+compact_stan_argument_field_for_print <- function(stan_arguments,
+                                                  field,
+                                                  summarize_value,
+                                                  keep_value = NULL) {
+  checkmate::assert_list(stan_arguments)
+  checkmate::assert_string(field)
+  checkmate::assert_function(summarize_value)
+  checkmate::assert_function(keep_value, null.ok = TRUE)
+
+  if(!field %in% names(stan_arguments)) {
     return(stan_arguments)
   }
 
-  init <- stan_arguments$init
-  if(is.null(init) || stan_argument_init_is_scalar_for_print(init)) {
+  value <- stan_arguments[[field]]
+  if(is.null(value) || (!is.null(keep_value) && isTRUE(keep_value(value)))) {
     return(stan_arguments)
   }
 
-  init_summary <- summarize_stan_argument_init_for_print(init)
-  init_idx <- match("init", names(stan_arguments))
-  before <- stan_arguments[seq_len(init_idx)]
-  before$init <- init_summary$init
+  value_summary <- summarize_value(value)
+  field_idx <- match(field, names(stan_arguments))
+  before <- stan_arguments[seq_len(field_idx)]
+  before[[field]] <- value_summary[[field]]
 
-  summary_fields <- init_summary[setdiff(names(init_summary), "init")]
+  summary_fields <- value_summary[setdiff(names(value_summary), field)]
   after <- list()
-  if(init_idx < length(stan_arguments)) {
-    after <- stan_arguments[seq.int(init_idx + 1L, length(stan_arguments))]
+  if(field_idx < length(stan_arguments)) {
+    after <- stan_arguments[seq.int(field_idx + 1L, length(stan_arguments))]
   }
   c(before, summary_fields, after)
+}
+
+#' Detect scalar Stan argument values that are safe to print verbatim
+#'
+#' @description
+#' Return whether a Stan argument value is already a small scalar atomic value
+#' that should remain unchanged in the printed Stan argument summary.
+#'
+#' @param value Candidate Stan argument value.
+#'
+#' @return Logical scalar.
+#'
+#' @keywords internal
+stan_argument_value_is_scalar_for_print <- function(value) {
+  is.atomic(value) && is.null(dim(value)) && length(value) <= 1L
 }
 
 #' Detect scalar init values that are safe to print verbatim
@@ -447,7 +505,7 @@ compact_stan_arguments_for_print <- function(stan_arguments) {
 #'
 #' @keywords internal
 stan_argument_init_is_scalar_for_print <- function(init) {
-  is.atomic(init) && is.null(dim(init)) && length(init) <= 1L
+  stan_argument_value_is_scalar_for_print(init)
 }
 
 #' Summarize materialized init values for printing
@@ -492,6 +550,46 @@ summarize_stan_argument_init_for_print <- function(init) {
   summary
 }
 
+#' Summarize materialized inverse metrics for printing
+#'
+#' @description
+#' Build a compact description of a materialized `inv_metric` payload so
+#' [print.poll_of_polls()] can indicate that a warm-start inverse metric was
+#' supplied without printing the full numeric contents.
+#'
+#' @param inv_metric Materialized inverse metric value to summarize.
+#'
+#' @return A named list with compact fields suitable for YAML printing.
+#'
+#' @keywords internal
+summarize_stan_argument_inv_metric_for_print <- function(inv_metric) {
+  summary <- list(
+    inv_metric = "materialized inv_metric values omitted"
+  )
+
+  if(stan_argument_value_is_unnamed_list_for_print(inv_metric)) {
+    chain_shapes <- unique(vapply(inv_metric, summarize_stan_argument_shape_for_print, character(1)))
+    summary$inv_metric_type <- "materialized_per_chain_list"
+    summary$inv_metric_chains <- length(inv_metric)
+    if(length(chain_shapes) == 1L) {
+      summary$inv_metric_shape <- chain_shapes[[1]]
+    } else {
+      summary$inv_metric_shapes <- chain_shapes
+    }
+    return(summary)
+  }
+
+  if(!is.null(dim(inv_metric)) || is.atomic(inv_metric)) {
+    summary$inv_metric_type <- "materialized_object"
+    summary$inv_metric_shape <- summarize_stan_argument_shape_for_print(inv_metric)
+    return(summary)
+  }
+
+  summary$inv_metric_type <- "materialized_list"
+  summary$inv_metric_length <- length(inv_metric)
+  summary
+}
+
 #' Detect per-chain init lists for print summaries
 #'
 #' @description
@@ -509,6 +607,43 @@ stan_argument_init_is_per_chain_list_for_print <- function(init) {
     length(init) > 0L &&
     (is.null(names(init)) || all(names(init) == "")) &&
     all(vapply(init, is.list, logical(1)))
+}
+
+#' Detect unnamed list values for print summaries
+#'
+#' @description
+#' Test whether a Stan argument value is an unnamed list, which is how
+#' chain-specific warm-start payloads such as `inv_metric` are stored in
+#' `stan_arguments`.
+#'
+#' @param x Candidate Stan argument value.
+#'
+#' @return Logical scalar.
+#'
+#' @keywords internal
+stan_argument_value_is_unnamed_list_for_print <- function(x) {
+  is.list(x) &&
+    length(x) > 0L &&
+    (is.null(names(x)) || all(names(x) == ""))
+}
+
+#' Summarize object shape for compact print output
+#'
+#' @description
+#' Return a short human-readable descriptor for the size of an object. Vectors
+#' are reported by length, while arrays and matrices are reported by their
+#' dimensions.
+#'
+#' @param x Object whose shape should be summarized.
+#'
+#' @return Character scalar describing the shape of `x`.
+#'
+#' @keywords internal
+summarize_stan_argument_shape_for_print <- function(x) {
+  if(is.null(dim(x))) {
+    return(paste("length", length(x)))
+  }
+  paste(dim(x), collapse = " x ")
 }
 
 #' Truncate long name lists for compact print summaries
