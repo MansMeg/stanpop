@@ -550,6 +550,46 @@ summarize_stan_argument_init_for_print <- function(init) {
   summary
 }
 
+#' Summarize materialized inverse metrics for printing
+#'
+#' @description
+#' Build a compact description of a materialized `inv_metric` payload so
+#' [print.poll_of_polls()] can indicate that a warm-start inverse metric was
+#' supplied without printing the full numeric contents.
+#'
+#' @param inv_metric Materialized inverse metric value to summarize.
+#'
+#' @return A named list with compact fields suitable for YAML printing.
+#'
+#' @keywords internal
+summarize_stan_argument_inv_metric_for_print <- function(inv_metric) {
+  summary <- list(
+    inv_metric = "materialized inv_metric values omitted"
+  )
+
+  if(stan_argument_value_is_unnamed_list_for_print(inv_metric)) {
+    chain_shapes <- unique(vapply(inv_metric, summarize_stan_argument_shape_for_print, character(1)))
+    summary$inv_metric_type <- "materialized_per_chain_list"
+    summary$inv_metric_chains <- length(inv_metric)
+    if(length(chain_shapes) == 1L) {
+      summary$inv_metric_shape <- chain_shapes[[1]]
+    } else {
+      summary$inv_metric_shapes <- chain_shapes
+    }
+    return(summary)
+  }
+
+  if(!is.null(dim(inv_metric)) || is.atomic(inv_metric)) {
+    summary$inv_metric_type <- "materialized_object"
+    summary$inv_metric_shape <- summarize_stan_argument_shape_for_print(inv_metric)
+    return(summary)
+  }
+
+  summary$inv_metric_type <- "materialized_list"
+  summary$inv_metric_length <- length(inv_metric)
+  summary
+}
+
 #' Detect per-chain init lists for print summaries
 #'
 #' @description
