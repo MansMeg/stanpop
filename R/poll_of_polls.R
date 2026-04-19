@@ -359,7 +359,7 @@ print.poll_of_polls <- function(x, ...){
   known_state_summary(x$known_state)
 
   cat("\n== Stan arguments == \n")
-  cat(yaml::as.yaml(x$stan_arguments))
+  cat(yaml::as.yaml(compact_stan_arguments_for_print(x$stan_arguments)))
 
   cat("\n== Model arguments == \n")
   x$model_arguments$election_period <- format_election_period_to_string(x, period_marker = "--")
@@ -391,6 +391,149 @@ print.poll_of_polls <- function(x, ...){
     cat("cache directory:", x$cache_dir, "\n")
   }
 
+}
+
+#' Compact Stan arguments for printing
+#'
+#' @description
+#' Copy a `stan_arguments` list and replace large materialized `init` payloads
+#' with a compact human-readable summary before rendering the list as YAML in
+#' [print.poll_of_polls()]. Scalar `init` values such as `"random"` are left
+#' unchanged.
+#'
+#' @param stan_arguments A list of stored backend sampling arguments.
+#'
+#' @return A list suitable for compact human-readable printing.
+#'
+#' @keywords internal
+compact_stan_arguments_for_print <- function(stan_arguments) {
+  if(is.null(stan_arguments)) {
+    return(stan_arguments)
+  }
+
+  checkmate::assert_list(stan_arguments)
+  if(!"init" %in% names(stan_arguments)) {
+    return(stan_arguments)
+  }
+
+  init <- stan_arguments$init
+  if(is.null(init) || stan_argument_init_is_scalar_for_print(init)) {
+    return(stan_arguments)
+  }
+
+  init_summary <- summarize_stan_argument_init_for_print(init)
+  init_idx <- match("init", names(stan_arguments))
+  before <- stan_arguments[seq_len(init_idx)]
+  before$init <- init_summary$init
+
+  summary_fields <- init_summary[setdiff(names(init_summary), "init")]
+  after <- list()
+  if(init_idx < length(stan_arguments)) {
+    after <- stan_arguments[seq.int(init_idx + 1L, length(stan_arguments))]
+  }
+  c(before, summary_fields, after)
+}
+
+#' Detect scalar init values that are safe to print verbatim
+#'
+#' @description
+#' Return whether an `init` value is already a small scalar atomic value, such
+#' as `"random"`, that should remain unchanged in the printed Stan argument
+#' summary.
+#'
+#' @param init Candidate `init` value.
+#'
+#' @return Logical scalar.
+#'
+#' @keywords internal
+stan_argument_init_is_scalar_for_print <- function(init) {
+  is.atomic(init) && is.null(dim(init)) && length(init) <= 1L
+}
+
+#' Summarize materialized init values for printing
+#'
+#' @description
+#' Build a compact description of a materialized `init` payload so
+#' [print.poll_of_polls()] can indicate that warm-start values were used
+#' without printing the full nested numeric contents.
+#'
+#' @param init Materialized `init` value to summarize.
+#'
+#' @return A named list with compact fields suitable for YAML printing.
+#'
+#' @keywords internal
+summarize_stan_argument_init_for_print <- function(init) {
+  summary <- list(
+    init = "materialized init values omitted"
+  )
+
+  if(stan_argument_init_is_per_chain_list_for_print(init)) {
+    chain_names <- unique(unlist(lapply(init, names), use.names = FALSE))
+    summary$init_type <- "materialized_per_chain_list"
+    summary$init_chains <- length(init)
+    summary$init_parameter_roots <- summarize_print_names(chain_names)
+    return(summary)
+  }
+
+  if(is.list(init) && !is.null(names(init)) && all(names(init) != "")) {
+    summary$init_type <- "materialized_named_list"
+    summary$init_parameter_roots <- summarize_print_names(names(init))
+    return(summary)
+  }
+
+  if(!is.null(dim(init))) {
+    summary$init_type <- "materialized_array"
+    summary$init_dim <- as.integer(dim(init))
+    return(summary)
+  }
+
+  summary$init_type <- "materialized_object"
+  summary$init_length <- length(init)
+  summary
+}
+
+#' Detect per-chain init lists for print summaries
+#'
+#' @description
+#' Test whether an `init` value is already expressed as one list per chain, so
+#' the print helper can summarize chain counts and parameter-root names without
+#' traversing the full numeric payload.
+#'
+#' @param init Candidate `init` value.
+#'
+#' @return Logical scalar.
+#'
+#' @keywords internal
+stan_argument_init_is_per_chain_list_for_print <- function(init) {
+  is.list(init) &&
+    length(init) > 0L &&
+    (is.null(names(init)) || all(names(init) == "")) &&
+    all(vapply(init, is.list, logical(1)))
+}
+
+#' Truncate long name lists for compact print summaries
+#'
+#' @description
+#' Return a character vector unchanged when it is already short, or replace the
+#' tail with a final `" ... (n more)"` marker once the requested limit is
+#' exceeded. This keeps YAML print summaries readable in logs.
+#'
+#' @param x Character vector of names to summarize.
+#' @param limit Integer scalar giving the maximum number of explicit names to
+#'   keep before truncating the tail.
+#'
+#' @return A character vector suitable for compact printing.
+#'
+#' @keywords internal
+summarize_print_names <- function(x, limit = 5L) {
+  checkmate::assert_character(x, any.missing = FALSE)
+  checkmate::assert_integerish(limit, len = 1L, lower = 1L, any.missing = FALSE)
+
+  if(length(x) <= limit) {
+    return(x)
+  }
+
+  c(x[seq_len(limit)], paste0("... (", length(x) - limit, " more)"))
 }
 
 #' Format election period lists to string for printout
