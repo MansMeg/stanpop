@@ -4,7 +4,7 @@
 \alias{summarize_print_names}
 \title{Truncate long name lists for compact print summaries}
 \usage{
-summarize_print_names(x, limit = 8L)
+summarize_print_names(x, limit = 5L)
 }
 \arguments{
 \item{x}{Character vector of names to summarize.}

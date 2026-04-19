@@ -525,7 +525,7 @@ stan_argument_init_is_per_chain_list_for_print <- function(init) {
 #' @return A character vector suitable for compact printing.
 #'
 #' @keywords internal
-summarize_print_names <- function(x, limit = 8L) {
+summarize_print_names <- function(x, limit = 5L) {
   checkmate::assert_character(x, any.missing = FALSE)
   checkmate::assert_integerish(limit, len = 1L, lower = 1L, any.missing = FALSE)
 
