@@ -204,3 +204,82 @@ test_that("refit_poll_of_polls with cmdstanr can use init_mode random when chain
     original_state = original_state
   )
 })
+
+test_that("refit_poll_of_polls with cmdstanr uses seed-reproducible init_mode random selection", {
+  skip_if_no_stan_tests()
+  skip_if_no_cmdstanr_tests()
+  skip_if_no_cmdstanr()
+
+  backend_get_sampler_state <- get_internal("backend_get_sampler_state")
+
+  fixture <- make_model8k5_cmdstanr_refit_fixture(
+    original_chains = 2L,
+    original_iter_warmup = 10L,
+    original_iter_sampling = 10L
+  )
+  original_state <- backend_get_sampler_state("cmdstanr", fixture$pop$stan_fit)
+  first_selected <- find_random_init_selection_for_seed_candidates(
+    pop = fixture$pop,
+    chains = 3L,
+    seed_candidates = 6001:6100
+  )
+  second_selected <- find_random_init_selection_for_seed_candidates(
+    pop = fixture$pop,
+    chains = 3L,
+    seed_candidates = seq.int(first_selected$seed + 1L, 6200L),
+    predicate = function(selection, seed) {
+      !identical(
+        lapply(selection$init, unlist, use.names = TRUE),
+        lapply(first_selected$selection$init, unlist, use.names = TRUE)
+      )
+    }
+  )
+
+  refit_a <- run_model8k5_random_init_refit(
+    x = fixture$pop,
+    polls_data = fixture$new_polls_data,
+    chains = 3L,
+    seed = first_selected$seed
+  )
+  refit_b <- run_model8k5_random_init_refit(
+    x = fixture$pop,
+    polls_data = fixture$new_polls_data,
+    chains = 3L,
+    seed = first_selected$seed
+  )
+  refit_c <- run_model8k5_random_init_refit(
+    x = fixture$pop,
+    polls_data = fixture$new_polls_data,
+    chains = 3L,
+    seed = second_selected$seed
+  )
+
+  expect_refit_random_warm_start_matches(
+    refit = refit_a,
+    expected_random = first_selected$selection,
+    original_state = original_state
+  )
+  expect_refit_random_warm_start_matches(
+    refit = refit_b,
+    expected_random = first_selected$selection,
+    original_state = original_state
+  )
+  expect_refit_random_warm_start_matches(
+    refit = refit_c,
+    expected_random = second_selected$selection,
+    original_state = original_state
+  )
+  expect_equal(
+    lapply(refit_a$stan_arguments$init, unlist, use.names = TRUE),
+    lapply(refit_b$stan_arguments$init, unlist, use.names = TRUE),
+    tolerance = 1e-12
+  )
+  expect_identical(refit_a$stan_arguments$metric, refit_b$stan_arguments$metric)
+  expect_equal(refit_a$stan_arguments$inv_metric, refit_b$stan_arguments$inv_metric, tolerance = 1e-12)
+  expect_equal(as.numeric(refit_a$stan_arguments$step_size), as.numeric(refit_b$stan_arguments$step_size), tolerance = 1e-12)
+  expect_false(isTRUE(all.equal(
+    lapply(refit_a$stan_arguments$init, unlist, use.names = TRUE),
+    lapply(refit_c$stan_arguments$init, unlist, use.names = TRUE),
+    tolerance = 1e-12
+  )))
+})
