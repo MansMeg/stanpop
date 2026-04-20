@@ -71,13 +71,13 @@ data {
   int H_cond;
   array[use_conditional_model ? H: 0] int houses_key;
   row_vector[use_conditional_model? P : 1] eta_1_mu_hyper;
-  row_vector[use_conditional_model? P : 1] eta_1_sigma_hyper;
-  vector[use_conditional_model? P: 1]  kappa_1_mu_hyper;
-  array[use_conditional_model? P: 1]  real<lower=0> kappa_1_sigma_hyper;
-  vector[use_conditional_model ? H: 1] beta_sigma_1_mu_hyper;
-  array[use_conditional_model ? H: 1] real<lower=0> beta_sigma_1_sigma_hyper;
-  array[use_conditional_model ? H_cond : 1, use_conditional_model ? P : 1] real beta_mu_1_mu_hyper;
-  array[use_conditional_model ? H_cond : 1, use_conditional_model ? P : 1] real<lower=0> beta_mu_1_sigma_hyper;
+   row_vector[use_conditional_model? P : 1] eta_1_sigma_hyper;
+   vector[use_conditional_model? P: 1]  kappa_1_mu_hyper;
+   array[use_conditional_model? P: 1]  real<lower=0> kappa_1_sigma_hyper;
+   vector[use_conditional_model ? H: 1] beta_sigma_1_mu_hyper;
+   array[use_conditional_model ? H: 1] real<lower=0> beta_sigma_1_sigma_hyper;
+   array[use_conditional_model ? H_cond : 1, use_conditional_model ? P : 1] real beta_mu_1_mu_hyper;
+   array[use_conditional_model ? H_cond : 1, use_conditional_model ? P : 1] real<lower=0> beta_mu_1_sigma_hyper;
 
   // use a prop latent state
   // in the reparametrized model only the standard latent state is implemented
@@ -85,61 +85,61 @@ data {
 
   // missing values
   matrix<lower=0, upper=1>[N,P] y_missing; // indicator of missing values
-  int<lower=1, upper=T> t_start[P]; // starting point for latent state
-  int<lower=1, upper=T> t_end[P]; // end point of latent state
+  array[P] int<lower=1, upper=T> t_start; // starting point for latent state
+  array[P] int<lower=1, upper=T> t_end; // end point of latent state
 
   // time weights
-  real<lower=0, upper=1> tw[L];
-  int<lower=1> tw_t[L]; // time point (t) of time weights
-  int<lower=1> tw_i[L]; // poll idx of tw
+  array[L] real<lower=0, upper=1> tw;
+  array[L] int<lower=1> tw_t; // time point (t) of time weights
+  array[L] int<lower=1> tw_i; // poll idx of tw
 
   // Time scale length (month = 30, week = 7, day = 1)
   real time_scale_length;
 
   // known states
   int<lower=0, upper=T> T_known; // no of known latent states
-  int<lower=1> x_known_t[T_known]; // time points where x is known
-  int<lower=1> x_unknown_t[T - T_known]; // time points where x is known
-  matrix<lower=0, upper=1>[T_known, P] x_known; // known x
+ array[T_known] int<lower=1> x_known_t; // time points where x is known
+ array[T - T_known] int<lower=1> x_unknown_t; // time points where x is known
+ matrix[T_known, P] x_known; // known x
 
   // Add (prior) t-dist direct observations of x
   // Used for predictions or other direct observations of x without polls
   int<lower=0, upper=1> use_obs_of_x;
   int<lower=0> R;
-  int<lower=1, upper=T> obs_of_x_t[R]; // Time point of the observation
-  int<lower=1, upper=P> obs_of_x_p[R]; // Category of the observation
-  real obs_of_x_mu[R]; // mu in student_t_lpdf of observation
-  real<lower=0> obs_of_x_sigma[R]; // sigma in student_t_lpdf of observation
-  real<lower=2> obs_of_x_nu[R]; // nu in student_t_lpdf of observation
+  array[R] int<lower=1, upper=T> obs_of_x_t; // Time point of the observation
+  array[R] int<lower=1, upper=P> obs_of_x_p; // Category of the observation
+  array[R] real obs_of_x_mu; // mu in student_t_lpdf of observation
+  array[R] real<lower=0> obs_of_x_sigma; // sigma in student_t_lpdf of observation
+  array[R] real<lower=2> obs_of_x_nu; // nu in student_t_lpdf of observation
 
   // Industry bias
-  real<lower=0> g_t[T]; // years since last election
-  real<lower=0> g_i[N]; // g for each poll
-  int<lower=1, upper=T_known + 1> next_known_state_poll_index[N]; // The index of the next known state
-  int<lower=1, upper=T_known + 1> next_known_state_t_index[T]; // The index of the next known state
+  array[T] real<lower=0> g_t; // years since last election
+  array[N] real<lower=0> g_i; // g for each poll
+  array[N] int<lower=1, upper=T_known + 1> next_known_state_poll_index; // The index of the next known state
+  array[T] int<lower=1, upper=T_known + 1> next_known_state_t_index; // The index of the next known state
 
 
   // House bias and design effects
   // slower time s and house of polls
-  int<lower=1, upper=S> s_i[N];
-  int<lower=1, upper=H> h_i[N];
+  array[N] int<lower=1, upper=S> s_i;
+  array[N] int<lower=1, upper=H> h_i;
 
   // slower time s by time point
-  int<lower=1, upper=S> s_t[T];
+  array[T] int<lower=1, upper=S> s_t;
 
   // The industry bias sigma_kappa prior
   // It depends on the length between known states
   real<lower=0> sigma_beta_mu_sigma_hyper;
   int<lower=0, upper=1> estimate_alpha_beta_mu;
-  real<lower=-1,upper=1> alpha_beta_mu_known[1];
+  array[1] real<lower=-1,upper=1> alpha_beta_mu_known;
 
   real<lower=0> sigma_beta_sigma_sigma_hyper;
   int<lower=0, upper=1> estimate_alpha_beta_sigma;
-  real<lower=-1,upper=1> alpha_beta_sigma_known[1];
+  array[1] real<lower=-1,upper=1> alpha_beta_sigma_known;
 
   real<lower=0> sigma_kappa_hyper;
   int<lower=0, upper=1> estimate_alpha_kappa;
-  real<lower=-1,upper=1> alpha_kappa_known[1];
+  array[1] real<lower=-1,upper=1> alpha_kappa_known;
 
   real<lower=0> psi_sigma_hyper;
 
@@ -164,7 +164,7 @@ data {
   real<lower=0> nu_lkj;
 
   // x_{t=1} prior (Dirichlet(x1_prior_p, x1_prior_alpha0))
-  real<lower=0, upper = 1> x1_prior_p[P + 1];
+ array[P+1] real<lower=0, upper = 1> x1_prior_p;
   real<lower=0> x1_prior_alpha0;
 
   // use multivariate prior (0 is univariate, 1 is just one corr matrix, 2 is one per s, 3 use cov_reg_to_chol)
@@ -184,23 +184,23 @@ transformed data {
   // Compute hyperparameter based on time_scale_length
   real<lower=0, upper=1> sigma_x_hyper = 0.25 * sqrt(time_scale_length / 30);
   int<lower=0, upper=P> no_sigma_xc = 0;
-  real<lower=0> gs_t[T];
-  real<lower=0> gs_i[N];
+  array[T] real<lower=0> gs_t;
+  array[N] real<lower=0> gs_i;
   int Px = P;
   int no_unknown_kappa = 0;
   int use_jump_process = 0;
   int t_start_all = min(t_start); // starting point for latent state
   int t_end_all = max(t_end); // end point of latent state
   int no_Omega = 1;
-  int s_t_Omega[T] = rep_array(1, T); // map between time point and corr matrix
+  array[T] int s_t_Omega = rep_array(1, T); // map between time point and corr matrix
   matrix[P,P] Omega_identity = diag_matrix(rep_vector(1.0, P));
   int use_multivariate_model = 0;
   int use_cholesky_factor_corr = 0;
   int use_cov_reg = 0;
   int use_sigma_psi = 0;
   matrix[T_known, P] eta_known = rep_matrix(0.0, T_known, P);
-  real x_known_other[T_known] =  rep_array(0.0, T_known);
-  int x_t_is_known[T] =  rep_array(0, T);
+  array[T_known] real x_known_other =  rep_array(0.0, T_known);
+ array[T] int x_t_is_known =  rep_array(0, T);
   row_vector[P] t1_prior_mu;
   row_vector[P] t1_prior_sigma;
   vector[P]  kappa_1_mean_hyper;
@@ -290,6 +290,7 @@ transformed data {
     for(p in 1:P){
       t1_prior_mu[p] = digamma(x1_prior_p[p] * x1_prior_alpha0) - digamma(x1_prior_p[Px] * x1_prior_alpha0);
       t1_prior_sigma[p] = sqrt(trigamma(x1_prior_p[p] * x1_prior_alpha0) + trigamma(x1_prior_p[Px] * x1_prior_alpha0));
+      }
     }
   } else {
     for(p in 1:P){
@@ -307,25 +308,25 @@ parameters {
   matrix<lower=0, upper=1>[use_softmax ? 0 : T - T_known, use_softmax ? 0 : Px] x_unknown; // unknown states (proportions)
   matrix[use_softmax ? T - T_known : 0, use_softmax ? P : 0] eta_z_unknown; // unknown states (proportions)
   vector<lower=0>[P] sigma_x; // dynamic movement
-  real<lower=0> sigma_xc[no_sigma_xc];
+  array[no_sigma_xc] real<lower=0> sigma_xc;
   matrix[use_industry_bias ? no_unknown_kappa : 0, use_industry_bias ? P : 0] kappa_raw; // Industry bias
   vector<lower=0>[use_industry_bias ? P : 0] sigma_kappa; // Industry bias effect
-  real beta_mu[use_house_bias ? S : 0, use_house_bias ? H_max : 0, use_house_bias ? P : 0];
-  real<lower=0> sigma_beta_mu[use_house_bias ? 1 : 0];
-  real beta_sigma[use_design_effects ? S : 0, use_design_effects ? H : 0];
-  real<lower=0> sigma_beta_sigma[use_design_effects ? 1 : 0];
-  real<lower=-1,upper=1> alpha_kappa_unknown[estimate_alpha_kappa ? 1 : 0];
-  real<lower=-1,upper=1> alpha_beta_mu_unknown[estimate_alpha_beta_mu ? 1 : 0];
-  real<lower=-1,upper=1> alpha_beta_sigma_unknown[estimate_alpha_beta_sigma ? 1 : 0];
+  array[use_house_bias ? S : 0, use_house_bias ? H_max : 0, use_house_bias ? P : 0] real beta_mu;
+  array[use_house_bias ? 1 : 0] real<lower=0> sigma_beta_mu;
+  array[use_design_effects ? S : 0, use_design_effects ? H : 0] real beta_sigma;
+  array[use_design_effects ? 1 : 0] real<lower=0> sigma_beta_sigma;
+  array[estimate_alpha_kappa ? 1 : 0] real<lower=-1,upper=1> alpha_kappa_unknown;
+ array[estimate_alpha_beta_mu ? 1 : 0] real<lower=-1,upper=1> alpha_beta_mu_unknown;
+  array[estimate_alpha_beta_sigma ? 1 : 0] real<lower=-1,upper=1> alpha_beta_sigma_unknown;
   vector<lower=0>[use_t_dist_industry_bias ? 1 : 0] nu_kappa_raw;
   vector<lower=0>[use_t_dist_industry_bias ? 1 : 0] v_kappa;
   matrix<lower=0>[use_jump_process ? T : 0, use_jump_process ? P : 0] V_noise;
   vector<lower=2,upper=4>[use_jump_process ? P : 0] alpha_V; //shape of jumps
   vector<lower=0,upper=1>[use_jump_process ? P : 0] ar_V; // AR component for jump
   vector<lower=0,upper=1>[use_jump_process ? P : 0] theta_x; // proportion of jump vs Gauss
-  cholesky_factor_corr [use_cholesky_factor_corr ? P : 0] L_Omega_x[use_cholesky_factor_corr ? no_Omega : 0]; // correlation matrix
+  array[use_cholesky_factor_corr ? no_Omega : 0] cholesky_factor_corr[use_cholesky_factor_corr ? P : 0] L_Omega_x; // correlation matrix
   matrix[use_cov_reg ? no_Omega : 0, use_cov_reg ? Pp : 0] psi; // psi params for constructing covariance
-  real<lower=0> sigma_psi[use_sigma_psi ? 1 : 0];
+  array[use_sigma_psi ? 1 : 0] real<lower=0> sigma_psi;
 }
 
 transformed parameters {
@@ -340,12 +341,12 @@ transformed parameters {
   matrix[use_constrained_party_house_bias ? S : 0, use_constrained_party_house_bias ? H_max : 0] beta_mu_sum_H = rep_matrix(0, use_constrained_party_house_bias ? S : 0, use_constrained_party_house_bias ? H_max : 0);
   matrix[use_constrained_house_house_bias ? S : 0, use_constrained_house_house_bias ? P : 0] beta_mu_sum_P = rep_matrix(0, use_constrained_house_house_bias ? S : 0, use_constrained_house_house_bias ? P : 0);
   matrix[use_industry_bias ? (T_known + 1) : 0, use_industry_bias ? P : 0] kappa; // Industry bias
-  real<lower=-1,upper=1> alpha_kappa[1] = alpha_kappa_known;
-  real<lower=-1,upper=1> alpha_beta_mu[1] = alpha_beta_mu_known;
-  real<lower=-1,upper=1> alpha_beta_sigma[1] = alpha_beta_sigma_known;
+  array[1] real<lower=-1,upper=1> alpha_kappa = alpha_kappa_known;
+  array[1] real<lower=-1,upper=1> alpha_beta_mu = alpha_beta_mu_known;
+  array[1] real<lower=-1,upper=1> alpha_beta_sigma = alpha_beta_sigma_known;
   vector<lower=1>[use_t_dist_industry_bias ? 1 : 0] nu_kappa = rep_vector(2, use_t_dist_industry_bias ? 1 : 0);
   matrix<lower=0>[use_jump_process ? T : 0, use_jump_process ? P : 0] V;
-  cholesky_factor_cov[use_multivariate_model ? P : 0] L_Sigma[no_Omega];
+  array[no_Omega] cholesky_factor_cov[use_multivariate_model ? P : 0] L_Sigma;
 
   // setup multivariate L_Sigma
   for(i in 1:no_Omega){
@@ -634,7 +635,7 @@ generated quantities{
   matrix[use_industry_bias ? (T_known + 1) : 0, use_industry_bias ? P : 0] kappa_pred;
   matrix[T, Px] x_pred; // Note that we do not limit draws with x_pred too low or too high
   matrix[T, Px] x_pred_reject; // Used in rejection sampling
-  real min_x_pred[P]; // Minimal x_pred to use for rejection sampling
+  array[P] real min_x_pred; // Minimal x_pred to use for rejection sampling
   real min_x_pred_all; // Minimal x_pred to use for rejection sampling
   int max_it = 50; // Maximum iterations to try rejection sampling
   real sum_kappa_pred_party = 0.0; // Used for constraining kappa_pred to sum to zero
