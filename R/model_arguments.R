@@ -15,7 +15,6 @@ model_config <- function(model, x = NULL, stan_data = NULL){
   checkmate::assert_choice(model, supported_pop_models())
   if (is.null(x)) x <- list()
   checkmate::assert_list(x, null.ok = FALSE)
- 
   mp <- model_arguments(model)
   mc <- as.character(names(x))
   checkmate::assert_subset(mc, mp)
@@ -33,7 +32,7 @@ model_config <- function(model, x = NULL, stan_data = NULL){
   }
   # Assert model config
   for(i in seq_along(mp)){
-    assert_model_argument_value(model,mp[i], value = x[[mp[i]]], x, stan_data)
+    assert_model_argument_value(model, mp[i], value = x[[mp[i]]], x, stan_data)
   }
   x <- x[mp]
   class(x) <- c("pop_model_config", "list")
@@ -435,7 +434,7 @@ supported_model_arguments <- function(){
 }
 
 
-set_default_model_argument_value <- function(model,arg, x = NULL, stan_data = NULL){
+set_default_model_argument_value <- function(model, arg, x = NULL, stan_data = NULL){
   checkmate::assert_choice(arg, supported_model_arguments())
   checkmate::assert_list(x)
   if(length(x) > 0){
@@ -495,7 +494,7 @@ set_default_model_argument_value <- function(model,arg, x = NULL, stan_data = NU
       message("Using default value for g_scale = 1, as stan_data is not provided.")
       res <- 1.0
     } else {
-    res <- compute_g_scale_default(stan_data)
+      res <- compute_g_scale_default(stan_data)
     }
     return(res)
   } else if (arg %in% c("use_ar_kappa")) {
@@ -527,7 +526,7 @@ set_default_model_argument_value <- function(model,arg, x = NULL, stan_data = NU
       message("Using default value for prior_p = 1, as stan_data is not provided.")
       prior_p <- 1.0
     } else {
-    prior_p <- get_first_poll_as_simplex(stan_data)
+      prior_p <- get_first_poll_as_simplex(stan_data)
     }
     return(prior_p)
   } else if (arg %in% c("psi_sigma_hyper")) {
@@ -555,14 +554,15 @@ set_default_model_argument_value <- function(model,arg, x = NULL, stan_data = NU
       message("Using default value for P = 1 (in sigma_ep_mean_vector), as stan_data is not provided.")
       return(rep(1.0, 1L))
     } else {
-    return(rep(1.0, stan_data$P))
+      return(rep(1.0, stan_data$P))
     }
   } else if (arg %in% c("sigma_ep_sd_vector")) {
     if(is.null(stan_data)){
       message("Using default value for P = 1 (in sigma_ep_sd_vector), as stan_data is not provided.")
       return(rep(1.0, 1L))
     } else {
-    return(rep(1.0, stan_data$P))
+      return(rep(1.0, stan_data$P))
+    }
   } else if (arg %in% c("EP")) {
     return(0L)
   } else if (arg %in% c("ep_inv_x")) {
@@ -598,7 +598,7 @@ set_default_model_argument_value <- function(model,arg, x = NULL, stan_data = NU
   stop(arg, " is not implemented.")
 }
 
-assert_model_argument_value <- function(model,arg, value, x, stan_data){
+assert_model_argument_value <- function(model, arg, value, x, stan_data){
   checkmate::assert_choice(arg, supported_model_arguments())
   if(arg %in% c("sigma_kappa_hyper", "sigma_kappa_hyper_sd", "sigma_kappa_hyper_mean",
                 "sigma_beta_mu_sigma_hyper",
