@@ -1225,13 +1225,51 @@ refit_recycle_init_skeleton <- function(expected, chains) {
   if(length(expected) == chains) {
     return(expected)
   }
-  if(length(expected) == 1L) {
-    return(rep(expected, chains))
+  if(length(expected) == 1L || refit_init_skeletons_are_equivalent(expected)) {
+    return(rep(list(expected[[1]]), chains))
   }
   stop(
     "Expected init skeleton for ", chains, " chain(s), but found ", length(expected), ".",
     call. = FALSE
   )
+}
+
+#' Test whether per-chain init skeletons are shape-equivalent
+#'
+#' @description
+#' Check whether each chain-specific init skeleton encodes the same parameter
+#' roots and array shapes. When they do, one representative skeleton can be
+#' recycled across a different requested chain count during warm-start
+#' validation.
+#'
+#' @param expected Per-chain init skeleton list.
+#'
+#' @return Logical scalar.
+#'
+#' @keywords internal
+refit_init_skeletons_are_equivalent <- function(expected) {
+  checkmate::assert_list(expected)
+  if(length(expected) <= 1L) {
+    return(TRUE)
+  }
+
+  # Any chain can serve as the template because we only compare declared
+  # parameter roots and shapes, not concrete init values.
+  reference <- expected[[1]]
+  all(vapply(expected[-1], function(chain_expected) {
+    if(!is.list(chain_expected) || is.null(names(chain_expected)) ||
+       is.null(names(reference)) || !setequal(names(chain_expected), names(reference))) {
+      return(FALSE)
+    }
+    # Treat skeletons as equivalent only when every shared parameter root has
+    # the same constrained shape in each chain-specific skeleton.
+    all(vapply(names(reference), function(root) {
+      identical(
+        refit_object_shape(chain_expected[[root]]),
+        refit_object_shape(reference[[root]])
+      )
+    }, logical(1)))
+  }, logical(1)))
 }
 
 #' Assert that warm-start init values match expected parameter dimensions
