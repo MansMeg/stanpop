@@ -470,6 +470,49 @@ backend_get_last_draws_for_init_cmdstanr <- function(fit, ...) {
   })
 }
 
+#' Sample init-ready posterior draws from a CmdStanR fit
+#'
+#' @description
+#' Sample post-warmup draws from a CmdStanR fit object, relist each sampled
+#' draw into the constrained structure expected by Stan's `init` argument, and
+#' record which source chain each sampled draw came from.
+#'
+#' @inheritParams backend_get_random_draws_for_init
+#'
+#' @return A named list with elements `init` and `source_chain_ids`.
+#'
+#' @keywords internal
+backend_get_random_draws_for_init_cmdstanr <- function(fit, chains, seed = NULL, ...) {
+  draws <- as.array(fit$draws(inc_warmup = FALSE, format = "draws_array"))
+  if(dim(draws)[1] < 1L) {
+    stop("CmdStanR fit does not contain post-warmup draws.", call. = FALSE)
+  }
+
+  variable_names <- dimnames(draws)[[3]]
+  skeleton <- backend_build_init_skeleton_from_variable_names(
+    variable_names,
+    parameter_roots = backend_get_cmdstanr_parameter_roots(fit, variable_names = variable_names)
+  )
+  selected <- backend_sample_draw_positions(
+    n_iter = dim(draws)[1],
+    n_chains = dim(draws)[2],
+    size = chains,
+    seed = seed
+  )
+  init <- lapply(seq_along(selected$chain_ids), function(i) {
+    chain_id <- selected$chain_ids[[i]]
+    iter_id <- selected$iter_ids[[i]]
+    chain_draw <- as.numeric(draws[iter_id, chain_id, ])
+    names(chain_draw) <- variable_names
+    backend_relist_flat_draw_to_init(chain_draw, skeleton)
+  })
+
+  list(
+    init = init,
+    source_chain_ids = as.integer(selected$chain_ids)
+  )
+}
+
 #' Build a CmdStanR init skeleton from draw names
 #'
 #' @description
