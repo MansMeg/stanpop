@@ -524,6 +524,61 @@ test_that("refit_poll_of_polls with init_mode last requires matching chain count
   )
 })
 
+test_that("refit_poll_of_polls with init_mode random reuses sampler state from sampled source chains", {
+  pop <- make_mock_pop_for_refit_helpers("rstan")
+  pop$warm_start_state <- list(
+    init = NULL,
+    init_complete = FALSE,
+    sampler_state = list(
+      list(step_size = 0.12, inv_metric = c(1, 2), metric_type = "diag_e"),
+      list(step_size = 0.34, inv_metric = c(3, 4), metric_type = "diag_e")
+    ),
+    init_skeleton = list(
+      list(x = numeric(2)),
+      list(x = numeric(2))
+    ),
+    num_upars = 2L
+  )
+  sampled_init <- list(
+    list(x = c(10.1, 10.2)),
+    list(x = c(20.1, 20.2)),
+    list(x = c(30.1, 30.2))
+  )
+
+  testthat::local_mocked_bindings(
+    backend_get_random_draws_for_init = function(...) {
+      list(
+        init = sampled_init,
+        source_chain_ids = c(2L, 1L, 2L)
+      )
+    },
+    backend_get_last_draws_for_init = function(...) {
+      stop("random init reuse should not request last draws")
+    },
+    backend_get_sampler_state = function(...) {
+      stop("cached sampler state should be used")
+    },
+    poll_of_polls = function(...) {
+      list(args = list(...))
+    },
+    .package = "stanpop"
+  )
+
+  res <- refit_poll_of_polls(
+    pop,
+    chains = 3,
+    warm_start = list(init_mode = "random")
+  )
+
+  expect_identical(res$args$init, sampled_init)
+  expect_identical(
+    res$args$inv_metric,
+    list(c(3, 4), c(1, 2), c(3, 4))
+  )
+  expect_identical(res$args$metric, "diag_e")
+  expect_equal(res$args$step_size, c(0.34, 0.12, 0.34))
+})
+
 test_that("refit_poll_of_polls skips automatic init reuse when cached init is incomplete", {
   pop <- make_mock_pop_for_refit_helpers("rstan")
   pop$warm_start_state <- list(
