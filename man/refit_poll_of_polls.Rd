@@ -48,6 +48,11 @@ Supported elements are `init`, `init_mode`, `inv_metric`,
 Omitted elements use the automatic defaults extracted from `x`.
 Set an element to `NULL` to disable that default warm-start component.
 When supplied, `init_mode` must be one of `"last"` or `"random"`.
+The default is `"last"`, which reuses the final draw from each stored
+chain and therefore requires the refit to use the same number of chains.
+`"random"` samples one post-warmup posterior draw per refit chain from
+`x$stan_fit` and reuses the `inv_metric` and `step_size` from the sampled
+source chain.
 For example, `warm_start = list(inv_metric = NULL)` reuses the last draw
 but does not reuse the inverse metric.}
 

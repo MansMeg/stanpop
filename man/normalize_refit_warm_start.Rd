@@ -10,7 +10,7 @@ normalize_refit_warm_start(warm_start)
 \item{warm_start}{A named list of explicit warm-start overrides. Supported
 elements are `init`, `init_mode`, `inv_metric`, `metric_type`, and
 `step_size`. When supplied, `init_mode` must be one of `"last"` or
-`"random"`.}
+`"random"`. The default is `"last"`.}
 }
 \value{
 The validated `warm_start` list, preserving any named `NULL`
