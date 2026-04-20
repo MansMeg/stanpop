@@ -15,7 +15,7 @@ model_config <- function(model, x = NULL, stan_data = NULL){
   checkmate::assert_choice(model, supported_pop_models())
   if (is.null(x)) x <- list()
   checkmate::assert_list(x, null.ok = FALSE)
-
+ 
   mp <- model_arguments(model)
   mc <- as.character(names(x))
   checkmate::assert_subset(mc, mp)
@@ -27,13 +27,13 @@ model_config <- function(model, x = NULL, stan_data = NULL){
   }
   for(i in seq_along(mp)){
     if(is_missing[i]){
-      x[[mp[i]]] <- set_default_model_argument_value(mp[i], x, stan_data)
+      x[[mp[i]]] <- set_default_model_argument_value(model, mp[i], x, stan_data)
       message(mp[i], " = ", paste(x[[mp[i]]], collapse = ", "))
     }
   }
   # Assert model config
   for(i in seq_along(mp)){
-    assert_model_argument_value(mp[i], value = x[[mp[i]]], x, stan_data)
+    assert_model_argument_value(model,mp[i], value = x[[mp[i]]], x, stan_data)
   }
   x <- x[mp]
   class(x) <- c("pop_model_config", "list")
@@ -281,7 +281,14 @@ model_arguments <- function(model){
              "x1_prior_p", "x1_prior_alpha0",
              "psi_sigma_hyper",
              "use_constrained_party_kappa_pred",
-             "use_obs_of_x", "R", "obs_of_x_t", "obs_of_x_p", "obs_of_x_mu", "obs_of_x_sigma", "obs_of_x_nu"
+             "use_obs_of_x", "R", "obs_of_x_t", "obs_of_x_p", "obs_of_x_mu", "obs_of_x_sigma", "obs_of_x_nu",
+             "eta_1_mu_hyper", "eta_1_sigma_hyper",
+             "use_conditional_model",
+             "H_cond",
+             "houses_key",
+             "kappa_1_mu_hyper", 
+             "beta_sigma_1_mu_hyper",
+             "beta_mu_1_mu_hyper" 
              ))
   } else if(grepl(model, pattern = "^model8l[0-9]+$")) {
     return(c("sigma_kappa_hyper", "kappa_1_sigma_hyper",
@@ -428,7 +435,7 @@ supported_model_arguments <- function(){
 }
 
 
-set_default_model_argument_value <- function(arg, x = NULL, stan_data = NULL){
+set_default_model_argument_value <- function(model,arg, x = NULL, stan_data = NULL){
   checkmate::assert_choice(arg, supported_model_arguments())
   checkmate::assert_list(x)
   if(length(x) > 0){
@@ -456,18 +463,26 @@ set_default_model_argument_value <- function(arg, x = NULL, stan_data = NULL){
                         "use_sigma_kappa_gamma_prior")) {
     return(0L)
   } else if (arg %in% c("beta_mu_1_sigma_hyper")) {
+    if (model %in% c("model8k6")){
+      return(matrix(0.02, nrow = 1, ncol = 1))
+    } else {
     return(0.02)
+    } 
   } else if (arg %in% c("kappa_1_sigma_hyper")) {
-    return(0.02)
-  } else if (arg %in% c("nu_lkj")) {
+     if (model %in% c("model8k6")){
+      return(c(0.02))
+     } else {
+        return(0.02)
+     }  
+  } 
+    else if (arg %in% c("nu_lkj")) {
     return(1.0)
   } else if (arg %in% c("sigma_beta_mu_sigma_hyper")) {
     return(0.01)
   } else if (arg %in% c("kappa_sum_sigma_hyper", "beta_mu_sum_party_sigma_hyper", "beta_mu_sum_house_sigma_hyper")) {
     return(0.01)
   } else if (arg %in% c("sigma_beta_sigma_sigma_hyper",
-                        "beta_sigma_sigma_hyper",
-                        "beta_sigma_1_sigma_hyper")) {
+                        "beta_sigma_sigma_hyper")) {
     return(1.0)
   } else if (arg %in% c("sigma_kappa_gamma_a_hyper")) {
     res <- compute_gamma_parameters(x$sigma_kappa_hyper)
@@ -480,7 +495,7 @@ set_default_model_argument_value <- function(arg, x = NULL, stan_data = NULL){
       message("Using default value for g_scale = 1, as stan_data is not provided.")
       res <- 1.0
     } else {
-      res <- compute_g_scale_default(stan_data)
+    res <- compute_g_scale_default(stan_data)
     }
     return(res)
   } else if (arg %in% c("use_ar_kappa")) {
@@ -512,7 +527,7 @@ set_default_model_argument_value <- function(arg, x = NULL, stan_data = NULL){
       message("Using default value for prior_p = 1, as stan_data is not provided.")
       prior_p <- 1.0
     } else {
-      prior_p <- get_first_poll_as_simplex(stan_data)
+    prior_p <- get_first_poll_as_simplex(stan_data)
     }
     return(prior_p)
   } else if (arg %in% c("psi_sigma_hyper")) {
@@ -540,32 +555,55 @@ set_default_model_argument_value <- function(arg, x = NULL, stan_data = NULL){
       message("Using default value for P = 1 (in sigma_ep_mean_vector), as stan_data is not provided.")
       return(rep(1.0, 1L))
     } else {
-      return(rep(1.0, stan_data$P))
+    return(rep(1.0, stan_data$P))
     }
   } else if (arg %in% c("sigma_ep_sd_vector")) {
     if(is.null(stan_data)){
       message("Using default value for P = 1 (in sigma_ep_sd_vector), as stan_data is not provided.")
       return(rep(1.0, 1L))
     } else {
-      return(rep(1.0, stan_data$P))
-    }
+    return(rep(1.0, stan_data$P))
   } else if (arg %in% c("EP")) {
     return(0L)
   } else if (arg %in% c("ep_inv_x")) {
     return(list())
-  } else
+  }
+    else if (arg %in% c("use_conditional_model")) {
+    return(0L)
+  }
+    else if (arg %in% c("eta_1_mu_hyper", "kappa_1_mu_hyper", "beta_sigma_1_mu_hyper" )){
+      return(c(0.0))
+  } else if (arg %in% c("beta_mu_1_mu_hyper")){
+       if (model %in% c("model8k6")){
+        return(matrix(0.0, nrow = 1, ncol = 1))
+      } else {
+        return(0.0)
+      }
+  } else if (arg %in% c("beta_sigma_1_sigma_hyper")) {
+     if (model %in% c("model8k6")){
+        return(c(1.0))
+      } else {
+        return(1.0)
+      }
+  }
+    else if (arg %in% c("eta_1_sigma_hyper")){
+      return(c(0.01))
+  }
+    else if (arg %in% c("H_cond")){
+       return(1L)
+  } else if (arg %in% c("houses_key")){
+       return(integer(0))
+  }
+   else
   stop(arg, " is not implemented.")
 }
 
-assert_model_argument_value <- function(arg, value, x, stan_data){
+assert_model_argument_value <- function(model,arg, value, x, stan_data){
   checkmate::assert_choice(arg, supported_model_arguments())
   if(arg %in% c("sigma_kappa_hyper", "sigma_kappa_hyper_sd", "sigma_kappa_hyper_mean",
-                "beta_mu_1_sigma_hyper",
                 "sigma_beta_mu_sigma_hyper",
                 "sigma_beta_sigma_sigma_hyper",
                 "beta_sigma_sigma_hyper",
-                "beta_sigma_1_sigma_hyper",
-                "kappa_1_sigma_hyper",
                 "g_scale")){
     checkmate::assert_number(value, lower = 0, .var.name = arg)
   } else if (arg %in% c("kappa_sum_sigma_hyper", "beta_mu_sum_party_sigma_hyper", "beta_mu_sum_house_sigma_hyper")) {
@@ -684,7 +722,66 @@ assert_model_argument_value <- function(arg, value, x, stan_data){
     for(i in seq_along(value)){
       checkmate::assert_numeric(value[[i]], lower = 0, .var.name = arg, len = x$P)
     }
-  } else {
+  } else if (arg %in% c("use_conditional_model")) {
+    checkmate::assert_integerish(value, lower = 0, upper = 1, .var.name = arg)
+  }
+  else if (arg %in% c("H_cond")) {
+    checkmate::assert_int(value, lower = 0, .var.name = arg)
+  }
+    else if (arg %in% c("eta_1_mu_hyper", "kappa_1_mu_hyper")){
+      if (x$use_conditional_model == 1){
+      checkmate::assert_numeric(value, len = stan_data$P, .var.name = arg)
+      } else {
+        checkmate::assert_numeric(value, len = 1, .var.name = arg)
+      }
+  } 
+    else if (arg %in% c("eta_1_sigma_hyper", "kappa_1_sigma_hyper")){
+      if (x$use_conditional_model == 1){
+        checkmate::assert_numeric(value, lower = 0, len = stan_data$P, .var.name = arg)
+      } else {
+         checkmate::assert_numeric(value, lower = 0, len = 1, .var.name = arg)
+      }
+  }
+    else if (arg %in% c("beta_sigma_1_mu_hyper")){
+      if (x$use_conditional_model == 1){
+        checkmate::assert_numeric(value, len = stan_data$H, .var.name = arg)
+      } else {
+        checkmate::assert_numeric(value, len = 1, .var.name = arg)
+      }
+  } else if (arg %in% c("beta_sigma_1_sigma_hyper")){
+    if (x$use_conditional_model == 1){
+        checkmate::assert_numeric(value, lower = 0, len = stan_data$H, .var.name = arg)
+      } else {
+        checkmate::assert_numeric(value, lower = 0, len = 1, .var.name = arg)
+      }
+     
+  } else if (arg %in% c("beta_mu_1_mu_hyper")) {
+      if (model %in% c("model8k6")){
+        if (x$use_conditional_model == 1){
+          checkmate::assertMatrix(value, nrows = stan_data$H_cond, ncols = stan_data$P, mode = "numeric") 
+        } else {
+       checkmate::assertMatrix(value, nrows = 1, ncols = 1, mode = "numeric") 
+        }
+      }
+  } else if (arg %in% c("beta_mu_1_sigma_hyper")) {
+      if (model %in% c("model8k6")){
+        if (x$use_conditional_model == 1){
+       checkmate::assertMatrix(value, nrows = stan_data$H_cond, ncols = stan_data$P, mode = "numeric") }
+       else{
+          checkmate::assertMatrix(value, nrows = 1, ncols = 1, mode = "numeric")
+       }
+      } else {
+      checkmate::assert_number(value, lower = 0, .var.name = arg)
+      }
+  } else if (arg %in% c("houses_key")) {
+    if (x$use_conditional_model ==1){
+      checkmate::assert_integerish(value, .var.name = arg)
+    } else {
+       checkmate::assert_list(value,  .var.name = arg, len = 0)
+    }
+    
+  }
+    else {
     stop(arg, " is not implemented.")
   }
 }
