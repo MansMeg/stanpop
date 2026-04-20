@@ -33,16 +33,17 @@
 #'   `x$compile_arguments`.
 #' @param cache_dir directory to cache model. Defaults to `x$cache_dir`.
 #' @param warm_start A named list controlling warm-start initialization.
-#'   Supported elements are `init`, `inv_metric`, `metric_type`, and
-#'   `step_size`.
+#'   Supported elements are `init`, `init_mode`, `inv_metric`,
+#'   `metric_type`, and `step_size`.
 #'   Omitted elements use the automatic defaults extracted from `x`.
 #'   Set an element to `NULL` to disable that default warm-start component.
+#'   When supplied, `init_mode` must be one of `"last"` or `"random"`.
 #'   For example, `warm_start = list(inv_metric = NULL)` reuses the last draw
 #'   but does not reuse the inverse metric.
 #' @param ... Named backend sampler arguments supplied to
-#'   `CmdStanModel$sample()`. Warm-start controls such as `init`, `inv_metric`,
-#'   `metric_type`, and `step_size` must be supplied through `warm_start`, not
-#'   `...`.
+#'   `CmdStanModel$sample()`. Warm-start controls such as `init`, `init_mode`,
+#'   `inv_metric`, `metric_type`, and `step_size` must be supplied through
+#'   `warm_start`, not `...`.
 #'
 #' @return A refitted [poll_of_polls] object.
 #' @export
