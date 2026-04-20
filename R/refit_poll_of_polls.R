@@ -417,30 +417,28 @@ refit_materialize_warm_start_arguments <- function(x,
   assert_pop_backend(backend)
   checkmate::assert_list(sample_args, names = "named")
   warm_start <- normalize_refit_warm_start(warm_start)
+  init_mode <- refit_default_init_mode(warm_start)
+  auto_init <- NULL
+  auto_init_source_chain_ids <- NULL
 
-  need_last_draws <- !("init" %in% names(warm_start)) &&
-    !identical(refit_cached_init_is_complete(x), FALSE)
-  last_draws <- NULL
-  if(need_last_draws) {
-    last_draws <- refit_stored_warm_start_field(x, "init")
-    if(is.null(last_draws)) {
-      if(is.null(x$stan_fit)) {
-        stop("The stored fit is missing, so init values cannot be reused.", call. = FALSE)
-      }
-      last_draws <- backend_get_last_draws_for_init(x$backend, x$stan_fit)
-    }
+  if(!("init" %in% names(warm_start))) {
+    refit_chains <- refit_resolve_chain_count(x, sample_args)
+    auto_init_payload <- refit_materialize_automatic_init(
+      x = x,
+      chains = refit_chains,
+      init_mode = init_mode,
+      sample_args = sample_args
+    )
+    auto_init <- auto_init_payload$init
+    auto_init_source_chain_ids <- auto_init_payload$source_chain_ids
   }
 
   # Handle init
   if("init" %in% names(warm_start)) {
     sample_args <- refit_set_named_argument(sample_args, "init", warm_start$init)
   } else {
-    if(!is.null(last_draws)) {
-      assert_refit_last_draws_complete_for_init(
-        x = x,
-        init = last_draws
-      )
-      sample_args <- refit_set_named_argument(sample_args, "init", last_draws)
+    if(!is.null(auto_init)) {
+      sample_args <- refit_set_named_argument(sample_args, "init", auto_init)
     }
   }
 
@@ -455,6 +453,12 @@ refit_materialize_warm_start_arguments <- function(x,
         stop("The stored fit is missing, so sampler state cannot be reused.", call. = FALSE)
       }
       state <- backend_get_sampler_state(x$backend, x$stan_fit)
+    }
+    if(!is.null(auto_init_source_chain_ids)) {
+      state <- refit_subset_sampler_state(
+        state = state,
+        chain_ids = auto_init_source_chain_ids
+      )
     }
   }
 
