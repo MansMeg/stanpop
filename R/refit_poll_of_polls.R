@@ -511,6 +511,80 @@ refit_materialize_warm_start_arguments <- function(x,
   sample_args
 }
 
+#' Materialize automatic init reuse for a refit
+#'
+#' @description
+#' Build the automatic `init` payload used by [refit_poll_of_polls()] when the
+#' caller does not provide an explicit `warm_start$init`. In `"last"` mode the
+#' helper reuses the final draw from each stored chain and requires the refit
+#' chain count to match the stored fit. In `"random"` mode it samples one
+#' post-warmup posterior draw per refit chain and records which source chain
+#' each sampled draw came from.
+#'
+#' @param x Existing [poll_of_polls] object being refit.
+#' @param chains Integer scalar giving the refit chain count.
+#' @param init_mode Automatic init mode, either `"last"` or `"random"`.
+#' @param sample_args Named sampler argument list for the refit call.
+#'
+#' @return A named list with elements `init` and `source_chain_ids`.
+#'
+#' @keywords internal
+refit_materialize_automatic_init <- function(x,
+                                             chains,
+                                             init_mode,
+                                             sample_args) {
+  assert_pop(x)
+  checkmate::assert_integerish(chains, len = 1L, lower = 1L, any.missing = FALSE)
+  checkmate::assert_choice(init_mode, choices = refit_init_mode_choices())
+  checkmate::assert_list(sample_args, names = "named")
+
+  chains <- as.integer(chains)[[1]]
+  if(identical(init_mode, "last")) {
+    if(identical(refit_cached_init_is_complete(x), FALSE)) {
+      return(list(init = NULL, source_chain_ids = NULL))
+    }
+
+    last_draws <- refit_stored_warm_start_field(x, "init")
+    if(is.null(last_draws)) {
+      if(is.null(x$stan_fit)) {
+        stop("The stored fit is missing, so init values cannot be reused.", call. = FALSE)
+      }
+      last_draws <- backend_get_last_draws_for_init(x$backend, x$stan_fit)
+    }
+
+    assert_refit_last_draws_complete_for_init(
+      x = x,
+      init = last_draws
+    )
+    if(length(last_draws) != chains) {
+      stop(
+        "Automatic init reuse with warm_start = list(init_mode = 'last') requires matching chain counts. ",
+        "The stored fit has ", length(last_draws), " chain(s), but the refit uses ", chains, ". ",
+        "Use warm_start = list(init_mode = 'random') or disable init reuse with warm_start = list(init = NULL).",
+        call. = FALSE
+      )
+    }
+
+    return(list(
+      init = last_draws,
+      source_chain_ids = seq_len(length(last_draws))
+    ))
+  }
+
+  if(is.null(x$stan_fit)) {
+    stop(
+      "The stored fit is missing, so warm_start = list(init_mode = 'random') cannot draw posterior init values.",
+      call. = FALSE
+    )
+  }
+  backend_get_random_draws_for_init(
+    backend = x$backend,
+    fit = x$stan_fit,
+    chains = chains,
+    seed = refit_random_init_seed(sample_args)
+  )
+}
+
 #' Translate stored sample arguments between backends
 #'
 #' @keywords internal
