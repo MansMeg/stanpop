@@ -208,7 +208,12 @@ refit_inherited_constructor_argument_names <- function() {
 
 #' @keywords internal
 refit_warm_start_argument_names <- function() {
-  c("init", "inv_metric", "metric_type", "step_size")
+  c("init", "init_mode", "inv_metric", "metric_type", "step_size")
+}
+
+#' @keywords internal
+refit_init_mode_choices <- function() {
+  c("last", "random")
 }
 
 #' Normalize explicit warm-start overrides for a refit
@@ -216,8 +221,8 @@ refit_warm_start_argument_names <- function() {
 #' @description
 #' Validate and normalize the `warm_start` list supplied to
 #' [refit_poll_of_polls()]. The helper requires a named list, rejects duplicate
-#' or unsupported element names, and enforces the public `metric_type` name
-#' rather than the backend sampler argument name `metric`.
+#' or unsupported element names, validates `init_mode`, and enforces the public
+#' `metric_type` name rather than the backend sampler argument name `metric`.
 #'
 #' An empty list means that `refit_poll_of_polls()` should fall back to its
 #' automatic warm-start defaults. Named `NULL` entries are preserved so callers
@@ -225,7 +230,9 @@ refit_warm_start_argument_names <- function() {
 #' pipeline.
 #'
 #' @param warm_start A named list of explicit warm-start overrides. Supported
-#'   elements are `init`, `inv_metric`, `metric_type`, and `step_size`.
+#'   elements are `init`, `init_mode`, `inv_metric`, `metric_type`, and
+#'   `step_size`. When supplied, `init_mode` must be one of `"last"` or
+#'   `"random"`.
 #'
 #' @return The validated `warm_start` list, preserving any named `NULL`
 #'   elements.
@@ -257,6 +264,12 @@ normalize_refit_warm_start <- function(warm_start) {
       paste0(refit_warm_start_argument_names(), collapse = ", "),
       ".",
       call. = FALSE
+    )
+  }
+  if("init_mode" %in% names(warm_start) && !is.null(warm_start$init_mode)) {
+    checkmate::assert_choice(
+      warm_start$init_mode,
+      choices = refit_init_mode_choices()
     )
   }
   warm_start
@@ -331,8 +344,8 @@ refit_cached_init_is_complete <- function(x) {
 #' @param sample_args A named list of backend sampling arguments after ordinary
 #'   sampler overrides have been merged.
 #' @param warm_start A validated named list of explicit warm-start overrides.
-#'   Supported elements are `init`, `inv_metric`, `metric_type`, and
-#'   `step_size`.
+#'   Supported elements are `init`, `init_mode`, `inv_metric`,
+#'   `metric_type`, and `step_size`.
 #'
 #' @return A named list of sampling arguments with warm-start fields
 #'   materialized.
