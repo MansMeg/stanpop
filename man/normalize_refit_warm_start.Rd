@@ -8,7 +8,9 @@ normalize_refit_warm_start(warm_start)
 }
 \arguments{
 \item{warm_start}{A named list of explicit warm-start overrides. Supported
-elements are `init`, `inv_metric`, `metric_type`, and `step_size`.}
+elements are `init`, `init_mode`, `inv_metric`, `metric_type`, and
+`step_size`. When supplied, `init_mode` must be one of `"last"` or
+`"random"`.}
 }
 \value{
 The validated `warm_start` list, preserving any named `NULL`
@@ -17,8 +19,8 @@ The validated `warm_start` list, preserving any named `NULL`
 \description{
 Validate and normalize the `warm_start` list supplied to
 [refit_poll_of_polls()]. The helper requires a named list, rejects duplicate
-or unsupported element names, and enforces the public `metric_type` name
-rather than the backend sampler argument name `metric`.
+or unsupported element names, validates `init_mode`, and enforces the public
+`metric_type` name rather than the backend sampler argument name `metric`.
 
 An empty list means that `refit_poll_of_polls()` should fall back to its
 automatic warm-start defaults. Named `NULL` entries are preserved so callers

@@ -21,8 +21,8 @@ sampler state for automatic warm-start defaults.}
 sampler overrides have been merged.}
 
 \item{warm_start}{A validated named list of explicit warm-start overrides.
-Supported elements are `init`, `inv_metric`, `metric_type`, and
-`step_size`.}
+Supported elements are `init`, `init_mode`, `inv_metric`,
+`metric_type`, and `step_size`.}
 }
 \value{
 A named list of sampling arguments with warm-start fields
