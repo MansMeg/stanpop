@@ -843,6 +843,37 @@ refit_sampler_state_field <- function(state, field, simplify = FALSE) {
   unlist(values, use.names = FALSE)
 }
 
+#' Subset per-chain sampler state by source chain id
+#'
+#' @description
+#' Reorder or duplicate a stored per-chain sampler-state list so it matches the
+#' source chains selected for automatic init reuse. This is used to carry
+#' forward the `inv_metric` and `step_size` corresponding to the sampled init
+#' draw for each refit chain.
+#'
+#' @param state Per-chain sampler state list.
+#' @param chain_ids Integer vector of source-chain ids to keep, in output
+#'   order.
+#'
+#' @return Per-chain sampler-state list aligned with `chain_ids`.
+#'
+#' @keywords internal
+refit_subset_sampler_state <- function(state, chain_ids) {
+  checkmate::assert_list(state)
+  checkmate::assert_integerish(chain_ids, lower = 1L, any.missing = FALSE, null.ok = FALSE)
+
+  chain_ids <- as.integer(chain_ids)
+  if(any(chain_ids > length(state))) {
+    stop(
+      "Cannot reuse sampler state for source chain(s) ",
+      paste0(unique(chain_ids[chain_ids > length(state)]), collapse = ", "),
+      " because the stored fit only has ", length(state), " chain(s).",
+      call. = FALSE
+    )
+  }
+  state[chain_ids]
+}
+
 #' Assert warm-start compatibility before sampling
 #'
 #' @description
