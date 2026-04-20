@@ -230,6 +230,46 @@ refit_init_mode_choices <- function() {
   c("last", "random")
 }
 
+#' Resolve the automatic init-reuse mode for a refit
+#'
+#' @description
+#' Return the effective automatic init mode implied by a validated
+#' `warm_start` list. When `init_mode` is omitted, the helper falls back to the
+#' backward-compatible default `"last"`.
+#'
+#' @param warm_start A validated warm-start list.
+#'
+#' @return Character scalar, either `"last"` or `"random"`.
+#'
+#' @keywords internal
+refit_default_init_mode <- function(warm_start) {
+  checkmate::assert_list(warm_start, null.ok = FALSE)
+  if(is.null(warm_start$init_mode)) {
+    return("last")
+  }
+  warm_start$init_mode
+}
+
+#' Extract a reproducible seed for random init reuse
+#'
+#' @description
+#' Pull the refit sampling seed from `sample_args` when it is available so
+#' automatic `init_mode = "random"` selection can be reproducible.
+#'
+#' @param sample_args Named sampler argument list for the refit call.
+#'
+#' @return Integer scalar seed, or `NULL` when the refit does not specify one.
+#'
+#' @keywords internal
+refit_random_init_seed <- function(sample_args) {
+  checkmate::assert_list(sample_args, names = "named")
+  if(is.null(sample_args$seed)) {
+    return(NULL)
+  }
+  checkmate::assert_integerish(sample_args$seed, len = 1L, lower = 1L, any.missing = FALSE)
+  as.integer(sample_args$seed)[[1]]
+}
+
 #' Normalize explicit warm-start overrides for a refit
 #'
 #' @description
@@ -246,7 +286,7 @@ refit_init_mode_choices <- function() {
 #' @param warm_start A named list of explicit warm-start overrides. Supported
 #'   elements are `init`, `init_mode`, `inv_metric`, `metric_type`, and
 #'   `step_size`. When supplied, `init_mode` must be one of `"last"` or
-#'   `"random"`.
+#'   `"random"`. The default is `"last"`.
 #'
 #' @return The validated `warm_start` list, preserving any named `NULL`
 #'   elements.
