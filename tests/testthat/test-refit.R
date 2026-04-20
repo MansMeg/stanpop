@@ -496,6 +496,34 @@ test_that("refit_poll_of_polls prefers cached warm-start state on x", {
   expect_equal(res$args$step_size, c(0.12, 0.34))
 })
 
+test_that("refit_poll_of_polls with init_mode last requires matching chain counts", {
+  pop <- make_mock_pop_for_refit_helpers("cmdstanr")
+
+  testthat::local_mocked_bindings(
+    backend_get_last_draws_for_init = function(...) {
+      list(
+        list(x = c(0.11, 0.22)),
+        list(x = c(0.33, 0.44))
+      )
+    },
+    backend_get_init_skeleton = function(...) {
+      list(
+        list(x = numeric(2)),
+        list(x = numeric(2))
+      )
+    },
+    .package = "stanpop"
+  )
+
+  expect_error(
+    refit_poll_of_polls(
+      pop,
+      chains = 1
+    ),
+    "init_mode = 'last'\\) requires matching chain counts"
+  )
+})
+
 test_that("refit_poll_of_polls skips automatic init reuse when cached init is incomplete", {
   pop <- make_mock_pop_for_refit_helpers("rstan")
   pop$warm_start_state <- list(
