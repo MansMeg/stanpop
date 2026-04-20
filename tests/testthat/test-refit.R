@@ -875,6 +875,44 @@ test_that("refit_poll_of_polls validates warm_start names", {
   )
 })
 
+test_that("normalize_refit_warm_start accepts supported init_mode values", {
+  normalize_refit_warm_start <- get_internal("normalize_refit_warm_start")
+
+  expect_identical(
+    normalize_refit_warm_start(list(init_mode = "last")),
+    list(init_mode = "last")
+  )
+  expect_identical(
+    normalize_refit_warm_start(list(init_mode = "random")),
+    list(init_mode = "random")
+  )
+})
+
+test_that("normalize_refit_warm_start validates init_mode values", {
+  normalize_refit_warm_start <- get_internal("normalize_refit_warm_start")
+
+  expect_error(
+    normalize_refit_warm_start(list(init_mode = "foo")),
+    "Must be element of set"
+  )
+})
+
+test_that("refit_poll_of_polls accepts init_mode in warm_start", {
+  pop <- make_mock_pop_for_refit_helpers("cmdstanr")
+
+  expect_silent(
+    resolve_refit_arguments_for_test(
+      pop,
+      warm_start = list(
+        init = NULL,
+        init_mode = "random",
+        inv_metric = NULL,
+        step_size = NULL
+      )
+    )
+  )
+})
+
 test_that("refit_poll_of_polls errors when automatic init reuse is incomplete", {
   pop <- make_mock_pop_for_refit_helpers("cmdstanr")
 
