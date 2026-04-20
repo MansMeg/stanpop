@@ -272,6 +272,45 @@ backend_get_random_draws_for_init <- function(backend, fit, chains, seed = NULL,
   }
   stop("Unknown backend '", backend, "'.", call. = FALSE)
 }
+
+#' Sample draw positions from an iteration-by-chain grid
+#'
+#' @description
+#' Convert a flat sample over the post-warmup draws in a fit into paired
+#' iteration and chain indices that can be used to extract selected draws from
+#' a draw array with dimensions `(iteration, chain, variable)`. Sampling is
+#' over the `(iteration, chain)` positions only; the variable dimension is
+#' retained when extracting each full draw.
+#'
+#' @param n_iter Number of post-warmup iterations per chain.
+#' @param n_chains Number of chains in the stored fit.
+#' @param size Number of draw positions to sample.
+#' @param seed Optional integer scalar used to sample reproducibly.
+#'
+#' @return A named list with integer vectors `iter_ids` and `chain_ids`.
+#'
+#' @keywords internal
+backend_sample_draw_positions <- function(n_iter, n_chains, size, seed = NULL) {
+  checkmate::assert_integerish(n_iter, len = 1L, lower = 1L, any.missing = FALSE)
+  checkmate::assert_integerish(n_chains, len = 1L, lower = 1L, any.missing = FALSE)
+  checkmate::assert_integerish(size, len = 1L, lower = 1L, any.missing = FALSE)
+  checkmate::assert_integerish(seed, len = 1L, lower = 1L, any.missing = FALSE, null.ok = TRUE)
+
+  n_iter <- as.integer(n_iter)[[1]]
+  n_chains <- as.integer(n_chains)[[1]]
+  size <- as.integer(size)[[1]]
+  total_draws <- n_iter * n_chains
+  draw_ids <- backend_sample_indices(
+    total = total_draws,
+    size = size,
+    seed = seed
+  )
+
+  list(
+    iter_ids = ((draw_ids - 1L) %% n_iter) + 1L,
+    chain_ids = ((draw_ids - 1L) %/% n_iter) + 1L
+  )
+}
 #' @keywords internal
 backend_get_last_draws_for_init_rstan <- function(fit, ...) {
   skeleton <- backend_get_rstan_init_skeleton(fit)
