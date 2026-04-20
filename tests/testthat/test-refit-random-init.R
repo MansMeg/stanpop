@@ -162,3 +162,45 @@ test_that("refit_poll_of_polls with cmdstanr can change chains and use init_mode
     original_state = original_state
   )
 })
+
+test_that("refit_poll_of_polls with cmdstanr can use init_mode random when chains match", {
+  skip_if_no_stan_tests()
+  skip_if_no_cmdstanr_tests()
+  skip_if_no_cmdstanr()
+
+  backend_get_last_draws_for_init <- get_internal("backend_get_last_draws_for_init")
+  backend_get_sampler_state <- get_internal("backend_get_sampler_state")
+
+  fixture <- make_model8k5_cmdstanr_refit_fixture(
+    original_chains = 2L,
+    original_iter_warmup = 10L,
+    original_iter_sampling = 10L
+  )
+  original_state <- backend_get_sampler_state("cmdstanr", fixture$pop$stan_fit)
+  last_draws <- backend_get_last_draws_for_init("cmdstanr", fixture$pop$stan_fit)
+  selected <- find_random_init_selection_for_seed_candidates(
+    pop = fixture$pop,
+    chains = 2L,
+    seed_candidates = 5801:5900,
+    predicate = function(selection, seed) {
+      !isTRUE(all.equal(
+        lapply(selection$init, unlist, use.names = TRUE),
+        lapply(last_draws, unlist, use.names = TRUE),
+        tolerance = 1e-12
+      ))
+    }
+  )
+
+  refit <- run_model8k5_random_init_refit(
+    x = fixture$pop,
+    polls_data = fixture$new_polls_data,
+    chains = 2L,
+    seed = selected$seed
+  )
+
+  expect_refit_random_warm_start_matches(
+    refit = refit,
+    expected_random = selected$selection,
+    original_state = original_state
+  )
+})
