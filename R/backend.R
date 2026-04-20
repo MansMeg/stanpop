@@ -230,6 +230,48 @@ backend_get_last_draws_for_init <- function(backend, fit, ...) {
   stop("Unknown backend '", backend, "'.", call. = FALSE)
 }
 
+#' Backend random posterior draws formatted for init
+#'
+#' @description
+#' Sample one or more post-warmup posterior draws from an existing fit and
+#' return them in the constrained structure expected by Stan's `init`
+#' argument. In addition to the relisted init values, the helper records which
+#' source chain each sampled draw came from so callers can reuse chain-specific
+#' sampler state such as inverse metrics and step sizes.
+#'
+#' @param backend Stan backend used by `fit`.
+#' @param fit A fitted backend object.
+#' @param chains Integer scalar giving the number of init draws to return.
+#' @param seed Optional integer scalar used to sample reproducibly without
+#'   permanently changing the caller's `.Random.seed`.
+#' @param ... Reserved for backend-specific extensions.
+#'
+#' @return A named list with elements `init` and `source_chain_ids`.
+#'
+#' @keywords internal
+backend_get_random_draws_for_init <- function(backend, fit, chains, seed = NULL, ...) {
+  assert_pop_backend(backend)
+  checkmate::assert_integerish(chains, len = 1L, lower = 1L, any.missing = FALSE)
+  checkmate::assert_integerish(seed, len = 1L, lower = 1L, any.missing = FALSE, null.ok = TRUE)
+
+  if(backend == "rstan") {
+    return(backend_get_random_draws_for_init_rstan(
+      fit = fit,
+      chains = as.integer(chains)[[1]],
+      seed = seed,
+      ...
+    ))
+  }
+  if(backend == "cmdstanr") {
+    return(backend_get_random_draws_for_init_cmdstanr(
+      fit = fit,
+      chains = as.integer(chains)[[1]],
+      seed = seed,
+      ...
+    ))
+  }
+  stop("Unknown backend '", backend, "'.", call. = FALSE)
+}
 #' @keywords internal
 backend_get_last_draws_for_init_rstan <- function(fit, ...) {
   skeleton <- backend_get_rstan_init_skeleton(fit)
