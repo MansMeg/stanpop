@@ -311,6 +311,50 @@ backend_sample_draw_positions <- function(n_iter, n_chains, size, seed = NULL) {
     chain_ids = ((draw_ids - 1L) %/% n_iter) + 1L
   )
 }
+
+#' Sample integer indices with optional reproducible seeding
+#'
+#' @description
+#' Draw integer indices from `1:total`, sampling with replacement only when the
+#' requested `size` exceeds the available total. When `seed` is supplied, the
+#' helper restores the caller's RNG state after sampling so reproducible
+#' selection does not leak into later random-number generation.
+#'
+#' @param total Number of available indices.
+#' @param size Number of indices to sample.
+#' @param seed Optional integer scalar used to sample reproducibly.
+#'
+#' @return Integer vector of sampled indices.
+#'
+#' @keywords internal
+backend_sample_indices <- function(total, size, seed = NULL) {
+  checkmate::assert_integerish(total, len = 1L, lower = 1L, any.missing = FALSE)
+  checkmate::assert_integerish(size, len = 1L, lower = 1L, any.missing = FALSE)
+  checkmate::assert_integerish(seed, len = 1L, lower = 1L, any.missing = FALSE, null.ok = TRUE)
+
+  total <- as.integer(total)[[1]]
+  size <- as.integer(size)[[1]]
+  replace <- size > total
+
+  if(is.null(seed)) {
+    return(sample.int(total, size = size, replace = replace))
+  }
+
+  had_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+  if(had_seed) {
+    old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+  }
+  on.exit({
+    if(had_seed) {
+      assign(".Random.seed", old_seed, envir = .GlobalEnv)
+    } else if(exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
+      rm(list = ".Random.seed", envir = .GlobalEnv)
+    }
+  }, add = TRUE)
+
+  set.seed(as.integer(seed)[[1]])
+  sample.int(total, size = size, replace = replace)
+}
 #' @keywords internal
 backend_get_last_draws_for_init_rstan <- function(fit, ...) {
   skeleton <- backend_get_rstan_init_skeleton(fit)
