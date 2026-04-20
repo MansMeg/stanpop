@@ -216,6 +216,15 @@ refit_warm_start_argument_names <- function() {
   c("init", "init_mode", "inv_metric", "metric_type", "step_size")
 }
 
+#' Supported automatic init-reuse modes for refits
+#'
+#' @description
+#' Return the allowed values for `warm_start$init_mode` in
+#' [refit_poll_of_polls()]. These modes control how automatic init reuse is
+#' materialized when the caller does not supply an explicit `warm_start$init`.
+#'
+#' @return Character vector of allowed init modes.
+#'
 #' @keywords internal
 refit_init_mode_choices <- function() {
   c("last", "random")
