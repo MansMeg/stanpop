@@ -13,7 +13,7 @@ extract_pop_empirical_posterior_mean_x_change <- function(pop, type){
   checkmate::assert_class(pop, "poll_of_polls")
   checkmate::assert_choice(type, choices = c("diff", "ratio"))
 
-  x <- rstan::extract(pop$stan_fit, "x_pred")$x_pred
+  x <- extract(pop, pars = "x_pred")$x_pred
   dims <- dim(x)
   n <- 1
   if(type == "diff"){

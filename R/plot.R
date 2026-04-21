@@ -269,11 +269,9 @@ plot_parameters_bayesplot <- function(x, bayeplot_FUN, params, params_plot_name 
 
   if(is.null(params_plot_name)) params_plot_name <- params
 
-  post <- rstan::extract(x$stan_fit, par = params[1])[[1]]
-  post_matrix <- matrix(0.0, ncol = length(params), nrow = length(post), dimnames = list(NULL, params_plot_name))
-  for(i in seq_along(params)){
-    post_matrix[,i] <- rstan::extract(x$stan_fit, par = params[i])[[1]]
-  }
+  post_array <- pop_draws_array(x, variables = params)
+  post_matrix <- as.matrix(posterior::as_draws_matrix(post_array))
+  colnames(post_matrix) <- params_plot_name
   plt <- suppressWarnings(
     bayeplot_FUN(post_matrix, ...))
   plt
@@ -295,8 +293,17 @@ traceplot <- function(x, ...){
 
 #' @rdname plot_parameters_areas
 #' @export
-traceplot.poll_of_polls <- function(x, ...){
-  rstan::traceplot(x$stan_fit, ...)
-}
+traceplot.poll_of_polls <- function(x, pars = NULL, inc_warmup = FALSE, ...){
+  checkmate::assert_class(x, "poll_of_polls")
+  checkmate::assert_character(pars, any.missing = FALSE, unique = TRUE, null.ok = TRUE)
+  checkmate::assert_flag(inc_warmup)
+  if(!is.null(pars)) {
+    checkmate::assert_subset(pars, parameter_names(x))
+  }
 
+  bayesplot::mcmc_trace(
+    pop_draws_array(x, variables = pars, inc_warmup = inc_warmup),
+    ...
+  )
+}
 
