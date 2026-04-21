@@ -21,8 +21,8 @@ sampler state for automatic warm-start defaults.}
 sampler overrides have been merged.}
 
 \item{warm_start}{A validated named list of explicit warm-start overrides.
-Supported elements are `init`, `inv_metric`, `metric_type`, and
-`step_size`.}
+Supported elements are `init`, `init_mode`, `inv_metric`,
+`metric_type`, and `step_size`.}
 }
 \value{
 A named list of sampling arguments with warm-start fields
@@ -35,11 +35,15 @@ removes `init`, `inv_metric`, `metric_type`, and `step_size` according to
 the explicit `warm_start` list.
 
 Omitted warm-start elements are filled automatically from the stored fit in
-`x`: the final constrained draw is reused for `init`, while the sampler
-state supplies `inv_metric` and `step_size`. When an inverse metric is
-present and no explicit `metric_type` is supplied, the metric type is
-inferred from the shape of that inverse metric. Named `NULL` entries in
-`warm_start` explicitly disable the corresponding warm-start component.
+`x`. By default (`init_mode = "last"`), the final constrained draw from
+each stored chain is reused for `init`, which requires the refit to use the
+same number of chains. With `init_mode = "random"`, one post-warmup
+posterior draw is sampled per refit chain from `x$stan_fit`; the sampler
+state for `inv_metric` and `step_size` is then taken from the sampled source
+chain. When an inverse metric is present and no explicit `metric_type` is
+supplied, the metric type is inferred from the shape of that inverse
+metric. Named `NULL` entries in `warm_start` explicitly disable the
+corresponding warm-start component.
 
 This helper only materializes warm-start related sampler arguments. It does
 not rebuild the model inputs or merge ordinary sampler overrides.

@@ -33,16 +33,22 @@
 #'   `x$compile_arguments`.
 #' @param cache_dir directory to cache model. Defaults to `x$cache_dir`.
 #' @param warm_start A named list controlling warm-start initialization.
-#'   Supported elements are `init`, `inv_metric`, `metric_type`, and
-#'   `step_size`.
+#'   Supported elements are `init`, `init_mode`, `inv_metric`,
+#'   `metric_type`, and `step_size`.
 #'   Omitted elements use the automatic defaults extracted from `x`.
 #'   Set an element to `NULL` to disable that default warm-start component.
+#'   When supplied, `init_mode` must be one of `"last"` or `"random"`.
+#'   The default is `"last"`, which reuses the final draw from each stored
+#'   chain and therefore requires the refit to use the same number of chains
+#'   as the stored fit.
 #'   For example, `warm_start = list(inv_metric = NULL)` reuses the last draw
 #'   but does not reuse the inverse metric.
 #' @param ... Named backend sampler arguments supplied to
-#'   `CmdStanModel$sample()`. Warm-start controls such as `init`, `inv_metric`,
-#'   `metric_type`, and `step_size` must be supplied through `warm_start`, not
-#'   `...`.
+#'   `CmdStanModel$sample()`. For `backend = "cmdstanr"`, these keep their
+#'   usual CmdStanR meaning. If arguments are omitted, they are inherited from the stored
+#'   arguments in `x`. Warm-start controls such as `init`, `init_mode`,
+#'   `inv_metric`, `metric_type`, and `step_size` must be supplied through
+#'   `warm_start`, not `...`.
 #'
 #' @return A refitted [poll_of_polls] object.
 #' @export
@@ -207,7 +213,61 @@ refit_inherited_constructor_argument_names <- function() {
 
 #' @keywords internal
 refit_warm_start_argument_names <- function() {
-  c("init", "inv_metric", "metric_type", "step_size")
+  c("init", "init_mode", "inv_metric", "metric_type", "step_size")
+}
+
+#' Supported automatic init-reuse modes for refits
+#'
+#' @description
+#' Return the allowed values for `warm_start$init_mode` in
+#' [refit_poll_of_polls()]. These modes control how automatic init reuse is
+#' materialized when the caller does not supply an explicit `warm_start$init`.
+#'
+#' @return Character vector of allowed init modes.
+#'
+#' @keywords internal
+refit_init_mode_choices <- function() {
+  c("last", "random")
+}
+
+#' Resolve the automatic init-reuse mode for a refit
+#'
+#' @description
+#' Return the effective automatic init mode implied by a validated
+#' `warm_start` list. When `init_mode` is omitted, the helper falls back to the
+#' backward-compatible default `"last"`.
+#'
+#' @param warm_start A validated warm-start list.
+#'
+#' @return Character scalar, either `"last"` or `"random"`.
+#'
+#' @keywords internal
+refit_default_init_mode <- function(warm_start) {
+  checkmate::assert_list(warm_start, null.ok = FALSE)
+  if(is.null(warm_start$init_mode)) {
+    return("last")
+  }
+  warm_start$init_mode
+}
+
+#' Extract a reproducible seed for random init reuse
+#'
+#' @description
+#' Pull the refit sampling seed from `sample_args` when it is available so
+#' automatic `init_mode = "random"` selection can be reproducible.
+#'
+#' @param sample_args Named sampler argument list for the refit call.
+#'
+#' @return Integer scalar seed, or `NULL` when the refit does not specify one.
+#'
+#' @keywords internal
+refit_random_init_seed <- function(sample_args) {
+  checkmate::assert_list(sample_args, names = "named")
+  if(is.null(sample_args$seed)) {
+    return(NULL)
+  }
+  checkmate::assert_integerish(sample_args$seed, len = 1L, lower = 1L, any.missing = FALSE)
+  as.integer(sample_args$seed)[[1]]
 }
 
 #' Normalize explicit warm-start overrides for a refit
@@ -215,8 +275,8 @@ refit_warm_start_argument_names <- function() {
 #' @description
 #' Validate and normalize the `warm_start` list supplied to
 #' [refit_poll_of_polls()]. The helper requires a named list, rejects duplicate
-#' or unsupported element names, and enforces the public `metric_type` name
-#' rather than the backend sampler argument name `metric`.
+#' or unsupported element names, validates `init_mode`, and enforces the public
+#' `metric_type` name rather than the backend sampler argument name `metric`.
 #'
 #' An empty list means that `refit_poll_of_polls()` should fall back to its
 #' automatic warm-start defaults. Named `NULL` entries are preserved so callers
@@ -224,7 +284,9 @@ refit_warm_start_argument_names <- function() {
 #' pipeline.
 #'
 #' @param warm_start A named list of explicit warm-start overrides. Supported
-#'   elements are `init`, `inv_metric`, `metric_type`, and `step_size`.
+#'   elements are `init`, `init_mode`, `inv_metric`, `metric_type`, and
+#'   `step_size`. When supplied, `init_mode` must be one of `"last"` or
+#'   `"random"`. The default is `"last"`.
 #'
 #' @return The validated `warm_start` list, preserving any named `NULL`
 #'   elements.
@@ -256,6 +318,12 @@ normalize_refit_warm_start <- function(warm_start) {
       paste0(refit_warm_start_argument_names(), collapse = ", "),
       ".",
       call. = FALSE
+    )
+  }
+  if("init_mode" %in% names(warm_start) && !is.null(warm_start$init_mode)) {
+    checkmate::assert_choice(
+      warm_start$init_mode,
+      choices = refit_init_mode_choices()
     )
   }
   warm_start
@@ -306,6 +374,36 @@ refit_cached_init_is_complete <- function(x) {
   isTRUE(state$init_complete)
 }
 
+#' Resolve the chain count of the stored fit
+#'
+#' @description
+#' Return the number of chains in the fitted object `x`. This helper is used
+#' to distinguish the stored fit's chain count from the refit's requested
+#' chain count when automatic warm-start values are materialized or validated.
+#'
+#' @param x A fitted `poll_of_polls` object.
+#'
+#' @return Integer scalar giving the number of chains in the stored fit.
+#'
+#' @keywords internal
+refit_fitted_chain_count <- function(x) {
+  assert_pop(x)
+
+  sampler_state <- refit_stored_warm_start_field(x, "sampler_state")
+  if(!is.null(sampler_state)) {
+    return(as.integer(length(sampler_state)))
+  }
+
+  if(is.null(x$stan_fit)) {
+    stop(
+      "The stored fit is missing, so the fitted chain count cannot be recovered.",
+      call. = FALSE
+    )
+  }
+
+  as.integer(length(backend_get_sampler_state(x$backend, x$stan_fit)))
+}
+
 #' Materialize warm-start arguments for a refit call
 #'
 #' @description
@@ -315,11 +413,15 @@ refit_cached_init_is_complete <- function(x) {
 #' the explicit `warm_start` list.
 #'
 #' Omitted warm-start elements are filled automatically from the stored fit in
-#' `x`: the final constrained draw is reused for `init`, while the sampler
-#' state supplies `inv_metric` and `step_size`. When an inverse metric is
-#' present and no explicit `metric_type` is supplied, the metric type is
-#' inferred from the shape of that inverse metric. Named `NULL` entries in
-#' `warm_start` explicitly disable the corresponding warm-start component.
+#' `x`. By default (`init_mode = "last"`), the final constrained draw from
+#' each stored chain is reused for `init`, which requires the refit to use the
+#' same number of chains. With `init_mode = "random"`, one post-warmup
+#' posterior draw is sampled per refit chain from `x$stan_fit`; the sampler
+#' state for `inv_metric` and `step_size` is then taken from the sampled source
+#' chain. When an inverse metric is present and no explicit `metric_type` is
+#' supplied, the metric type is inferred from the shape of that inverse
+#' metric. Named `NULL` entries in `warm_start` explicitly disable the
+#' corresponding warm-start component.
 #'
 #' This helper only materializes warm-start related sampler arguments. It does
 #' not rebuild the model inputs or merge ordinary sampler overrides.
@@ -330,8 +432,8 @@ refit_cached_init_is_complete <- function(x) {
 #' @param sample_args A named list of backend sampling arguments after ordinary
 #'   sampler overrides have been merged.
 #' @param warm_start A validated named list of explicit warm-start overrides.
-#'   Supported elements are `init`, `inv_metric`, `metric_type`, and
-#'   `step_size`.
+#'   Supported elements are `init`, `init_mode`, `inv_metric`,
+#'   `metric_type`, and `step_size`.
 #'
 #' @return A named list of sampling arguments with warm-start fields
 #'   materialized.
@@ -345,30 +447,28 @@ refit_materialize_warm_start_arguments <- function(x,
   assert_pop_backend(backend)
   checkmate::assert_list(sample_args, names = "named")
   warm_start <- normalize_refit_warm_start(warm_start)
+  init_mode <- refit_default_init_mode(warm_start)
+  auto_init <- NULL
+  auto_init_source_chain_ids <- NULL
 
-  need_last_draws <- !("init" %in% names(warm_start)) &&
-    !identical(refit_cached_init_is_complete(x), FALSE)
-  last_draws <- NULL
-  if(need_last_draws) {
-    last_draws <- refit_stored_warm_start_field(x, "init")
-    if(is.null(last_draws)) {
-      if(is.null(x$stan_fit)) {
-        stop("The stored fit is missing, so init values cannot be reused.", call. = FALSE)
-      }
-      last_draws <- backend_get_last_draws_for_init(x$backend, x$stan_fit)
-    }
+  if(!("init" %in% names(warm_start))) {
+    refit_chains <- refit_resolve_chain_count(x, sample_args)
+    auto_init_payload <- refit_materialize_automatic_init(
+      x = x,
+      chains = refit_chains,
+      init_mode = init_mode,
+      sample_args = sample_args
+    )
+    auto_init <- auto_init_payload$init
+    auto_init_source_chain_ids <- auto_init_payload$source_chain_ids
   }
 
   # Handle init
   if("init" %in% names(warm_start)) {
     sample_args <- refit_set_named_argument(sample_args, "init", warm_start$init)
   } else {
-    if(!is.null(last_draws)) {
-      assert_refit_last_draws_complete_for_init(
-        x = x,
-        init = last_draws
-      )
-      sample_args <- refit_set_named_argument(sample_args, "init", last_draws)
+    if(!is.null(auto_init)) {
+      sample_args <- refit_set_named_argument(sample_args, "init", auto_init)
     }
   }
 
@@ -383,6 +483,12 @@ refit_materialize_warm_start_arguments <- function(x,
         stop("The stored fit is missing, so sampler state cannot be reused.", call. = FALSE)
       }
       state <- backend_get_sampler_state(x$backend, x$stan_fit)
+    }
+    if(!is.null(auto_init_source_chain_ids)) {
+      state <- refit_subset_sampler_state(
+        state = state,
+        chain_ids = auto_init_source_chain_ids
+      )
     }
   }
 
@@ -433,6 +539,82 @@ refit_materialize_warm_start_arguments <- function(x,
     )
   }
   sample_args
+}
+
+#' Materialize automatic init reuse for a refit
+#'
+#' @description
+#' Build the automatic `init` payload used by [refit_poll_of_polls()] when the
+#' caller does not provide an explicit `warm_start$init`. In `"last"` mode the
+#' helper reuses the final draw from each stored chain and requires the refit
+#' chain count to match the stored fit's chain count (`fitted_chains`). In
+#' `"random"` mode it samples one post-warmup posterior draw per refit chain
+#' and records which source chain each sampled draw came from.
+#'
+#' @param x Existing [poll_of_polls] object being refit.
+#' @param chains Integer scalar giving the refit chain count.
+#' @param init_mode Automatic init mode, either `"last"` or `"random"`.
+#' @param sample_args Named sampler argument list for the refit call.
+#'
+#' @return A named list with elements `init` and `source_chain_ids`.
+#'
+#' @keywords internal
+refit_materialize_automatic_init <- function(x,
+                                             chains,
+                                             init_mode,
+                                             sample_args) {
+  assert_pop(x)
+  checkmate::assert_integerish(chains, len = 1L, lower = 1L, any.missing = FALSE)
+  checkmate::assert_choice(init_mode, choices = refit_init_mode_choices())
+  checkmate::assert_list(sample_args, names = "named")
+
+  chains <- as.integer(chains)[[1]]
+  if(identical(init_mode, "last")) {
+    if(identical(refit_cached_init_is_complete(x), FALSE)) {
+      return(list(init = NULL, source_chain_ids = NULL))
+    }
+
+    last_draws <- refit_stored_warm_start_field(x, "init")
+    if(is.null(last_draws)) {
+      if(is.null(x$stan_fit)) {
+        stop("The stored fit is missing, so init values cannot be reused.", call. = FALSE)
+      }
+      last_draws <- backend_get_last_draws_for_init(x$backend, x$stan_fit)
+    }
+
+    assert_refit_last_draws_complete_for_init(
+      x = x,
+      init = last_draws
+    )
+    fitted_chains <- as.integer(length(last_draws))
+    if(fitted_chains != chains) {
+      stop(
+        "Automatic init reuse with warm_start = list(init_mode = 'last') requires matching chain counts. ",
+        "The stored fit has fitted_chains = ", fitted_chains,
+        ", but the refit uses chains = ", chains, ". ",
+        "Use warm_start = list(init_mode = 'random') or disable init reuse with warm_start = list(init = NULL).",
+        call. = FALSE
+      )
+    }
+
+    return(list(
+      init = last_draws,
+      source_chain_ids = seq_len(length(last_draws))
+    ))
+  }
+
+  if(is.null(x$stan_fit)) {
+    stop(
+      "The stored fit is missing, so warm_start = list(init_mode = 'random') cannot draw posterior init values.",
+      call. = FALSE
+    )
+  }
+  backend_get_random_draws_for_init(
+    backend = x$backend,
+    fit = x$stan_fit,
+    chains = chains,
+    seed = refit_random_init_seed(sample_args)
+  )
 }
 
 #' Translate stored sample arguments between backends
@@ -693,6 +875,37 @@ refit_sampler_state_field <- function(state, field, simplify = FALSE) {
   unlist(values, use.names = FALSE)
 }
 
+#' Subset per-chain sampler state by source chain id
+#'
+#' @description
+#' Reorder or duplicate a stored per-chain sampler-state list so it matches the
+#' source chains selected for automatic init reuse. This is used to carry
+#' forward the `inv_metric` and `step_size` corresponding to the sampled init
+#' draw for each refit chain.
+#'
+#' @param state Per-chain sampler state list.
+#' @param chain_ids Integer vector of source-chain ids to keep, in output
+#'   order.
+#'
+#' @return Per-chain sampler-state list aligned with `chain_ids`.
+#'
+#' @keywords internal
+refit_subset_sampler_state <- function(state, chain_ids) {
+  checkmate::assert_list(state)
+  checkmate::assert_integerish(chain_ids, lower = 1L, any.missing = FALSE, null.ok = FALSE)
+
+  chain_ids <- as.integer(chain_ids)
+  if(any(chain_ids > length(state))) {
+    stop(
+      "Cannot reuse sampler state for source chain(s) ",
+      paste0(unique(chain_ids[chain_ids > length(state)]), collapse = ", "),
+      " because the stored fit only has ", length(state), " chain(s).",
+      call. = FALSE
+    )
+  }
+  state[chain_ids]
+}
+
 #' Assert warm-start compatibility before sampling
 #'
 #' @description
@@ -796,7 +1009,9 @@ assert_warm_start_is_compatible <- function(x, constructor_args, sample_args) {
 #' inputs. The helper prefers an explicit `chains` sampler argument, otherwise
 #' it infers the chain count from chain-specific warm-start values such as
 #' `init`, `inv_metric`, or `step_size`, and finally falls back to the number
-#' of chains stored in `x`.
+#' of chains stored in `x`. For `backend = "cmdstanr"`, this means
+#' `parallel_chains` affects execution parallelism only and does not change the
+#' refit chain count.
 #'
 #' @param x Existing [poll_of_polls] object being refit.
 #' @param sample_args Named sampler argument list for the refit.
@@ -832,12 +1047,7 @@ refit_resolve_chain_count <- function(x, sample_args) {
     return(unique_lengths[[1]])
   }
 
-  sampler_state <- refit_stored_warm_start_field(x, "sampler_state")
-  if(!is.null(sampler_state)) {
-    return(length(sampler_state))
-  }
-
-  length(backend_get_sampler_state(x$backend, x$stan_fit))
+  refit_fitted_chain_count(x)
 }
 
 #' Detect chain-specific warm-start lengths
@@ -1044,13 +1254,51 @@ refit_recycle_init_skeleton <- function(expected, chains) {
   if(length(expected) == chains) {
     return(expected)
   }
-  if(length(expected) == 1L) {
-    return(rep(expected, chains))
+  if(length(expected) == 1L || refit_init_skeletons_are_equivalent(expected)) {
+    return(rep(list(expected[[1]]), chains))
   }
   stop(
     "Expected init skeleton for ", chains, " chain(s), but found ", length(expected), ".",
     call. = FALSE
   )
+}
+
+#' Test whether per-chain init skeletons are shape-equivalent
+#'
+#' @description
+#' Check whether each chain-specific init skeleton encodes the same parameter
+#' roots and array shapes. When they do, one representative skeleton can be
+#' recycled across a different requested chain count during warm-start
+#' validation.
+#'
+#' @param expected Per-chain init skeleton list.
+#'
+#' @return Logical scalar.
+#'
+#' @keywords internal
+refit_init_skeletons_are_equivalent <- function(expected) {
+  checkmate::assert_list(expected)
+  if(length(expected) <= 1L) {
+    return(TRUE)
+  }
+
+  # Any chain can serve as the template because we only compare declared
+  # parameter roots and shapes, not concrete init values.
+  reference <- expected[[1]]
+  all(vapply(expected[-1], function(chain_expected) {
+    if(!is.list(chain_expected) || is.null(names(chain_expected)) ||
+       is.null(names(reference)) || !setequal(names(chain_expected), names(reference))) {
+      return(FALSE)
+    }
+    # Treat skeletons as equivalent only when every shared parameter root has
+    # the same constrained shape in each chain-specific skeleton.
+    all(vapply(names(reference), function(root) {
+      identical(
+        refit_object_shape(chain_expected[[root]]),
+        refit_object_shape(reference[[root]])
+      )
+    }, logical(1)))
+  }, logical(1)))
 }
 
 #' Assert that warm-start init values match expected parameter dimensions

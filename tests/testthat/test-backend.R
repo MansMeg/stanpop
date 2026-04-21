@@ -666,6 +666,62 @@ test_that("backend_get_last_draws_for_init with cmdstanr returns init-ready last
   expect_equal(as.numeric(res[[1]]$y), as.numeric(draws[dim(draws)[1], 1, ]), tolerance = 0)
 })
 
+test_that("backend_get_random_draws_for_init with cmdstanr-like fits returns init values and source chains", {
+  backend_get_random_draws_for_init <- get_internal("backend_get_random_draws_for_init")
+
+  draws_array <- array(
+    c(
+      11, 12,
+      21, 22,
+      31, 32,
+      41, 42
+    ),
+    dim = c(2, 2, 2),
+    dimnames = list(
+      NULL,
+      NULL,
+      c("y[1]", "y[2]")
+    )
+  )
+  mock_fit <- list(
+    draws = function(inc_warmup = FALSE, format = "draws_array") {
+      draws_array
+    },
+    runset = list(
+      stan_code = function() stop("stan code unavailable")
+    ),
+    metadata = function() {
+      list(
+        model_params = c("y[1]", "y[2]"),
+        sampler_diagnostics = c("accept_stat__", "stepsize__")
+      )
+    }
+  )
+
+  res <- backend_get_random_draws_for_init(
+    backend = "cmdstanr",
+    fit = mock_fit,
+    chains = 3,
+    seed = 123
+  )
+
+  set.seed(123)
+  expected_draw_ids <- sample.int(4, size = 3, replace = FALSE)
+  expected_iter_ids <- ((expected_draw_ids - 1L) %% 2L) + 1L
+  expected_chain_ids <- ((expected_draw_ids - 1L) %/% 2L) + 1L
+  expected_init <- lapply(seq_along(expected_draw_ids), function(i) {
+    list(y = as.numeric(draws_array[expected_iter_ids[[i]], expected_chain_ids[[i]], ]))
+  })
+
+  expect_length(res$init, 3)
+  expect_equal(res$source_chain_ids, expected_chain_ids, tolerance = 0)
+  expect_equal(
+    lapply(res$init, unlist, use.names = TRUE),
+    lapply(expected_init, unlist, use.names = TRUE),
+    tolerance = 0
+  )
+})
+
 test_that("backend_get_last_draws_for_init output can be passed back to cmdstanr as init", {
   skip_if_no_stan_tests()
   skip_if_no_cmdstanr_tests()
