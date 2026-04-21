@@ -49,15 +49,15 @@ Omitted elements use the automatic defaults extracted from `x`.
 Set an element to `NULL` to disable that default warm-start component.
 When supplied, `init_mode` must be one of `"last"` or `"random"`.
 The default is `"last"`, which reuses the final draw from each stored
-chain and therefore requires the refit to use the same number of chains.
-`"random"` samples one post-warmup posterior draw per refit chain from
-`x$stan_fit` and reuses the `inv_metric` and `step_size` from the sampled
-source chain.
+chain and therefore requires the refit to use the same number of chains
+as the stored fit.
 For example, `warm_start = list(inv_metric = NULL)` reuses the last draw
 but does not reuse the inverse metric.}
 
 \item{...}{Named backend sampler arguments supplied to
-`CmdStanModel$sample()`. Warm-start controls such as `init`, `init_mode`,
+`CmdStanModel$sample()`. For `backend = "cmdstanr"`, these keep their
+usual CmdStanR meaning. If arguments are omitted, they are inherited from the stored
+arguments in `x`. Warm-start controls such as `init`, `init_mode`,
 `inv_metric`, `metric_type`, and `step_size` must be supplied through
 `warm_start`, not `...`.}
 }

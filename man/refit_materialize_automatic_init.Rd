@@ -22,8 +22,8 @@ A named list with elements `init` and `source_chain_ids`.
 Build the automatic `init` payload used by [refit_poll_of_polls()] when the
 caller does not provide an explicit `warm_start$init`. In `"last"` mode the
 helper reuses the final draw from each stored chain and requires the refit
-chain count to match the stored fit. In `"random"` mode it samples one
-post-warmup posterior draw per refit chain and records which source chain
-each sampled draw came from.
+chain count to match the stored fit's chain count (`fitted_chains`). In
+`"random"` mode it samples one post-warmup posterior draw per refit chain
+and records which source chain each sampled draw came from.
 }
 \keyword{internal}

@@ -39,14 +39,14 @@
 #'   Set an element to `NULL` to disable that default warm-start component.
 #'   When supplied, `init_mode` must be one of `"last"` or `"random"`.
 #'   The default is `"last"`, which reuses the final draw from each stored
-#'   chain and therefore requires the refit to use the same number of chains.
-#'   `"random"` samples one post-warmup posterior draw per refit chain from
-#'   `x$stan_fit` and reuses the `inv_metric` and `step_size` from the sampled
-#'   source chain.
+#'   chain and therefore requires the refit to use the same number of chains
+#'   as the stored fit.
 #'   For example, `warm_start = list(inv_metric = NULL)` reuses the last draw
 #'   but does not reuse the inverse metric.
 #' @param ... Named backend sampler arguments supplied to
-#'   `CmdStanModel$sample()`. Warm-start controls such as `init`, `init_mode`,
+#'   `CmdStanModel$sample()`. For `backend = "cmdstanr"`, these keep their
+#'   usual CmdStanR meaning. If arguments are omitted, they are inherited from the stored
+#'   arguments in `x`. Warm-start controls such as `init`, `init_mode`,
 #'   `inv_metric`, `metric_type`, and `step_size` must be supplied through
 #'   `warm_start`, not `...`.
 #'
@@ -547,9 +547,9 @@ refit_materialize_warm_start_arguments <- function(x,
 #' Build the automatic `init` payload used by [refit_poll_of_polls()] when the
 #' caller does not provide an explicit `warm_start$init`. In `"last"` mode the
 #' helper reuses the final draw from each stored chain and requires the refit
-#' chain count to match the stored fit. In `"random"` mode it samples one
-#' post-warmup posterior draw per refit chain and records which source chain
-#' each sampled draw came from.
+#' chain count to match the stored fit's chain count (`fitted_chains`). In
+#' `"random"` mode it samples one post-warmup posterior draw per refit chain
+#' and records which source chain each sampled draw came from.
 #'
 #' @param x Existing [poll_of_polls] object being refit.
 #' @param chains Integer scalar giving the refit chain count.
@@ -1009,7 +1009,9 @@ assert_warm_start_is_compatible <- function(x, constructor_args, sample_args) {
 #' inputs. The helper prefers an explicit `chains` sampler argument, otherwise
 #' it infers the chain count from chain-specific warm-start values such as
 #' `init`, `inv_metric`, or `step_size`, and finally falls back to the number
-#' of chains stored in `x`.
+#' of chains stored in `x`. For `backend = "cmdstanr"`, this means
+#' `parallel_chains` affects execution parallelism only and does not change the
+#' refit chain count.
 #'
 #' @param x Existing [poll_of_polls] object being refit.
 #' @param sample_args Named sampler argument list for the refit.
