@@ -24,19 +24,12 @@ Imports:
   tibble,  
   yaml
 Suggests: 
-  BH,
   abind,
   bayesplot,
   cmdstanr,
   matrixStats,
   git2r,
-  jsonlite,  
-  knitr,
   posterior,
-  plyr,
-  RcppEigen,  
-  rmarkdown,  
-  stringr,
   testthat (>= 2.1.0)
 Remotes:
   stan-dev/cmdstanr
