@@ -9,6 +9,7 @@
 #' @param time_scale The [time_scale] used for the latent state.
 #' @param weight The way the collection period is weighted. See code for details.
 #'
+#' @keywords internal
 reweight_and_resample <- function(x, true_ls, time_scale, weight = "none"){
   checkmate::assert_class(x, "polls_data")
   tl <- time_line(x$time_range, time_scale)
@@ -42,6 +43,7 @@ reweight_and_resample <- function(x, true_ls, time_scale, weight = "none"){
 #' @param x a [polls_data] object
 #' @param type type of collection period to set.
 #'
+#' @keywords internal
 set_collection_period <- function(x, type = "interval"){
   checkmate::assert_class(x, "polls_data")
   checkmate::assert_choice(type, c("interval", "publish_date", "mid_collection"))

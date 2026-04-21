@@ -18,3 +18,4 @@ Set the collection period to test different approaches
 * [publish_date]: Set all dates to publish date
 * [interval]: Use the collection period interval (Default)
 }
+\keyword{internal}

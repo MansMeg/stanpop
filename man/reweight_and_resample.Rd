@@ -19,3 +19,4 @@ reweight_and_resample(x, true_ls, time_scale, weight = "none")
 The functions reweights and resamples a data_polls object.
 This is used to simulated polls with different [time_weights].
 }
+\keyword{internal}
