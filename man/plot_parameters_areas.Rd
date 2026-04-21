@@ -46,7 +46,7 @@ plot_parameters_mcmc_intervals(
 
 traceplot(x, ...)
 
-\method{traceplot}{poll_of_polls}(x, ...)
+\method{traceplot}{poll_of_polls}(x, pars = NULL, inc_warmup = FALSE, ...)
 }
 \arguments{
 \item{x}{a [poll_of_polls] object}
