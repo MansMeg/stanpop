@@ -31,15 +31,28 @@ plot.polls_data <- function(x, y = NULL, publish_date = TRUE, collection_period 
 #' @rdname plot.polls_data
 #' @export
 geom_publish_date <- function(x, y, ...){
-  ggplot2::geom_point(data = as.data.frame(x),
-                      ggplot2::aes_string(x = ".publish_date", y = y), ...)
+  ggplot2::geom_point(
+    data = as.data.frame(x),
+    mapping = ggplot2::aes(
+      x = .data[[".publish_date"]],
+      y = .data[[y]]
+    ),
+    ...
+  )
 }
 
 #' @rdname plot.polls_data
 #' @export
 geom_collection_period <- function(x, y, ...){
-  ggplot2::geom_segment(data = as.data.frame(x),
-                        ggplot2::aes_string(x = ".start_date", xend = ".end_date", y = y, yend = y))
+  ggplot2::geom_segment(
+    data = as.data.frame(x),
+    mapping = ggplot2::aes(
+      x = .data[[".start_date"]],
+      xend = .data[[".end_date"]],
+      y = .data[[y]],
+      yend = .data[[y]]
+    )
+  )
 }
 
 #' Add a [latent_state] geom to a ggplot
@@ -70,10 +83,28 @@ geom_latent_state <- function(x, median = TRUE, intervals = c(0.90, 0.75, 0.5), 
   P <- length(psn)
   geom <- list()
   for (i in seq_along(intervals)){
-    geom[[i]] <- ggplot2::geom_ribbon(data = lsp, ggplot2::aes_string(x = "date", ymin = psn[i], ymax = psn[P - i + 1]), alpha = interval_alpha, fill = latent_state_colour, ...)
+    geom[[i]] <- ggplot2::geom_ribbon(
+      data = lsp,
+      mapping = ggplot2::aes(
+        x = .data[["date"]],
+        ymin = .data[[psn[i]]],
+        ymax = .data[[psn[P - i + 1L]]]
+      ),
+      alpha = interval_alpha,
+      fill = latent_state_colour,
+      ...
+    )
   }
   if(median){
-    geom[[length(geom) + 1]] <- ggplot2::geom_line(data = lsp, ggplot2::aes_string(x = "date", y = "X0.5"), colour = latent_state_colour, ...)
+    geom[[length(geom) + 1]] <- ggplot2::geom_line(
+      data = lsp,
+      mapping = ggplot2::aes(
+        x = .data[["date"]],
+        y = .data[["X0.5"]]
+      ),
+      colour = latent_state_colour,
+      ...
+    )
   }
   return(geom)
 }
@@ -94,7 +125,14 @@ geom_known_state.data.frame <- function(x, y, ...){
   geom <- list()
   colnames(x) <- make.names(colnames(x))
   geom[[1]] <- ggplot2::geom_vline(xintercept = x$date, lty = "dashed", ...)
-  geom[[2]] <- ggplot2::geom_point(data = x, ggplot2::aes_string(x = "date", y = make.names(y)), ...)
+  geom[[2]] <- ggplot2::geom_point(
+    data = x,
+    mapping = ggplot2::aes(
+      x = .data[["date"]],
+      y = .data[[make.names(y)]]
+    ),
+    ...
+  )
   geom
 }
 
@@ -250,7 +288,15 @@ plot_house_differences <- function(x, y, house, publish_date = FALSE, standard_e
     ggplot2::geom_hline(yintercept = 0, lty = "dotted")
   if(standard_errors){
     plt <- plt +
-      ggplot2::geom_segment(data = df, ggplot2::aes_string(x = "date", xend = "date", y = "st_low", yend = "st_high")) +
+      ggplot2::geom_segment(
+        data = df,
+        mapping = ggplot2::aes(
+          x = .data[["date"]],
+          xend = .data[["date"]],
+          y = .data[["st_low"]],
+          yend = .data[["st_high"]]
+        )
+      ) +
       ggplot2::geom_label(ggplot2::aes(x = as.Date(ypd$date[which.max(ypd$date)]), y = l, label = label), vjust = "inward", hjust = "inward", size = 3)
   }
   plt
