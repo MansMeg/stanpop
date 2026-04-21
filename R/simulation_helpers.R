@@ -29,3 +29,36 @@ reweight_and_resample <- function(x, true_ls, time_scale, weight = "none"){
   y(x) <- ydat
   x
 }
+
+#' Set collection period
+#'
+#' @description
+#' Set the collection period to test different approaches
+#'
+#' * [mid_collection]: Set all dates to mid of collection period
+#' * [publish_date]: Set all dates to publish date
+#' * [interval]: Use the collection period interval (Default)
+#'
+#' @param x a [polls_data] object
+#' @param type type of collection period to set.
+#'
+set_collection_period <- function(x, type = "interval"){
+  checkmate::assert_class(x, "polls_data")
+  checkmate::assert_choice(type, c("interval", "publish_date", "mid_collection"))
+  if(type == "interval") {
+    return(x)
+  } else if(type == "publish_date"){
+    end_dates(x) <- publish_dates(x)
+    start_dates(x) <- publish_dates(x)
+    polls_time_weights(x) <- NULL
+    return(x)
+  } else if(type == "mid_collection"){
+    mid_dates <- collection_midpoint_dates(x)
+    end_dates(x) <- mid_dates
+    start_dates(x) <- mid_dates
+    polls_time_weights(x) <- NULL
+    return(x)
+  } else {
+    stop("Not implemented")
+  }
+}
