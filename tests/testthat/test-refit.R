@@ -536,7 +536,45 @@ test_that("refit_poll_of_polls prefers cached warm-start state on x", {
   expect_equal(res$args$step_size, c(0.12, 0.34))
 })
 
-test_that("refit_poll_of_polls with init_mode last requires matching chain counts", {
+test_that("refit_poll_of_polls changing only parallel_chains keeps default init_mode last", {
+  pop <- make_mock_pop_for_refit_helpers("cmdstanr")
+  last_draws <- list(
+    list(x = c(0.11, 0.22)),
+    list(x = c(0.33, 0.44))
+  )
+
+  testthat::local_mocked_bindings(
+    backend_get_last_draws_for_init = function(...) {
+      last_draws
+    },
+    backend_get_init_skeleton = function(...) {
+      list(
+        list(x = numeric(2)),
+        list(x = numeric(2))
+      )
+    },
+    backend_get_sampler_state = function(...) {
+      list(
+        list(step_size = 0.12, inv_metric = c(1, 2), metric_type = "diag_e"),
+        list(step_size = 0.34, inv_metric = c(3, 4), metric_type = "diag_e")
+      )
+    },
+    .package = "stanpop"
+  )
+
+  args <- resolve_refit_arguments_for_test(
+    pop,
+    dots = list(
+      parallel_chains = 1L
+    )
+  )
+
+  expect_identical(args$parallel_chains, 1L)
+  expect_equal(args$chains, 2)
+  expect_identical(args$init, last_draws)
+})
+
+test_that("refit_poll_of_polls changing chains with init_mode last requires matching chain counts", {
   pop <- make_mock_pop_for_refit_helpers("cmdstanr")
 
   testthat::local_mocked_bindings(
