@@ -1,3 +1,49 @@
+#' Return the latest evaluation window for a poll_of_polls object
+#'
+#' @description
+#' Return the model end date together with the latest known-state date that can
+#' be used for evaluation.
+#'
+#' @details
+#' This helper exists to extract definition of the "last evaluation window"
+#' instead of recomputing it ad hoc. In practice, reports often need to know:
+#'
+#' 1. when the fitted latent series ends,
+#' 2. what the most recent usable known-state date is, and
+#' 3. how many days separate those two dates.
+#'
+#' @param pop a [poll_of_polls] object
+#'
+#' @return A one-row tibble with `model_time_to`, `evaluation_date`, and
+#'   `gap_days`. When there is no known state on or before the model end date,
+#'   `evaluation_date` and `gap_days` are returned as missing values.
+#' @export
+get_last_evaluation_info <- function(pop) {
+  checkmate::assert_class(pop, "poll_of_polls")
+
+  model_time_to <- unname(time_range(pop$time_line)["to"])
+  evaluation_date <- as.Date(NA)
+  gap_days <- NA_integer_
+
+  if(!is.null(pop$known_state) && nrow(pop$known_state) > 0L) {
+    checkmate::assert_names(names(pop$known_state), must.include = "date")
+
+    known_dates <- pop$known_state$date
+    known_dates <- known_dates[!is.na(known_dates) & known_dates <= model_time_to]
+
+    if(length(known_dates) > 0L) {
+      evaluation_date <- max(known_dates)
+      gap_days <- as.integer(model_time_to - evaluation_date)
+    }
+  }
+
+  tibble::tibble(
+    model_time_to = model_time_to,
+    evaluation_date = evaluation_date,
+    gap_days = gap_days
+  )
+}
+
 #' Compute the elpd, percentiles and rmse for a true [known_state]
 #'
 #' @details
@@ -123,4 +169,3 @@ incorrect_draws <- function(x){
   incorrect_x <- apply(ls$latent_state < 0 | ls$latent_state > 1, 1, any)
   incorrect_x
 }
-
