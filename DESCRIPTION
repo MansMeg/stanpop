@@ -37,7 +37,6 @@ Suggests:
   RcppEigen,  
   rmarkdown,  
   stringr,
-  testthat (>= 2.1.0),  
-  xtable
+  testthat (>= 2.1.0)
 Remotes:
   stan-dev/cmdstanr
