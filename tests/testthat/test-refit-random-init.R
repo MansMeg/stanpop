@@ -61,7 +61,7 @@ run_model8k5_random_init_refit <- function(x, polls_data, chains, seed) {
   suppressMessages(
     suppressWarnings(
       capture.output(
-        refit_poll_of_polls(
+        refit <- refit_poll_of_polls(
           x,
           polls_data = polls_data,
           chains = chains,
@@ -77,6 +77,8 @@ run_model8k5_random_init_refit <- function(x, polls_data, chains, seed) {
       )
     )
   )
+
+  refit
 }
 
 expect_refit_random_warm_start_matches <- function(refit,
