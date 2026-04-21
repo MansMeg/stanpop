@@ -374,6 +374,36 @@ refit_cached_init_is_complete <- function(x) {
   isTRUE(state$init_complete)
 }
 
+#' Resolve the chain count of the stored fit
+#'
+#' @description
+#' Return the number of chains in the fitted object `x`. This helper is used
+#' to distinguish the stored fit's chain count from the refit's requested
+#' chain count when automatic warm-start values are materialized or validated.
+#'
+#' @param x A fitted `poll_of_polls` object.
+#'
+#' @return Integer scalar giving the number of chains in the stored fit.
+#'
+#' @keywords internal
+refit_fitted_chain_count <- function(x) {
+  assert_pop(x)
+
+  sampler_state <- refit_stored_warm_start_field(x, "sampler_state")
+  if(!is.null(sampler_state)) {
+    return(as.integer(length(sampler_state)))
+  }
+
+  if(is.null(x$stan_fit)) {
+    stop(
+      "The stored fit is missing, so the fitted chain count cannot be recovered.",
+      call. = FALSE
+    )
+  }
+
+  as.integer(length(backend_get_sampler_state(x$backend, x$stan_fit)))
+}
+
 #' Materialize warm-start arguments for a refit call
 #'
 #' @description
@@ -556,10 +586,12 @@ refit_materialize_automatic_init <- function(x,
       x = x,
       init = last_draws
     )
-    if(length(last_draws) != chains) {
+    fitted_chains <- as.integer(length(last_draws))
+    if(fitted_chains != chains) {
       stop(
         "Automatic init reuse with warm_start = list(init_mode = 'last') requires matching chain counts. ",
-        "The stored fit has ", length(last_draws), " chain(s), but the refit uses ", chains, ". ",
+        "The stored fit has fitted_chains = ", fitted_chains,
+        ", but the refit uses chains = ", chains, ". ",
         "Use warm_start = list(init_mode = 'random') or disable init reuse with warm_start = list(init = NULL).",
         call. = FALSE
       )
@@ -1013,12 +1045,7 @@ refit_resolve_chain_count <- function(x, sample_args) {
     return(unique_lengths[[1]])
   }
 
-  sampler_state <- refit_stored_warm_start_field(x, "sampler_state")
-  if(!is.null(sampler_state)) {
-    return(length(sampler_state))
-  }
-
-  length(backend_get_sampler_state(x$backend, x$stan_fit))
+  refit_fitted_chain_count(x)
 }
 
 #' Detect chain-specific warm-start lengths

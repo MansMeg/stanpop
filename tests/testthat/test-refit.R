@@ -264,6 +264,46 @@ test_that("extract_poll_of_polls_sample_arguments falls back to nested input arg
   )
 })
 
+test_that("refit_fitted_chain_count prefers cached sampler state", {
+  refit_fitted_chain_count <- get_internal("refit_fitted_chain_count")
+  pop <- make_mock_pop_for_refit_helpers("cmdstanr")
+  pop$warm_start_state <- list(
+    sampler_state = list(
+      list(step_size = 0.1),
+      list(step_size = 0.2),
+      list(step_size = 0.3)
+    )
+  )
+
+  testthat::local_mocked_bindings(
+    backend_get_sampler_state = function(...) {
+      stop("cached sampler state should be used before backend recovery")
+    },
+    .package = "stanpop"
+  )
+
+  expect_identical(refit_fitted_chain_count(pop), 3L)
+})
+
+test_that("refit_fitted_chain_count falls back to backend sampler state", {
+  refit_fitted_chain_count <- get_internal("refit_fitted_chain_count")
+  pop <- make_mock_pop_for_refit_helpers("cmdstanr")
+
+  testthat::local_mocked_bindings(
+    backend_get_sampler_state = function(...) {
+      list(
+        list(step_size = 0.1),
+        list(step_size = 0.2),
+        list(step_size = 0.3),
+        list(step_size = 0.4)
+      )
+    },
+    .package = "stanpop"
+  )
+
+  expect_identical(refit_fitted_chain_count(pop), 4L)
+})
+
 test_that("refit_poll_of_polls has a narrow refit-oriented signature", {
   expect_identical(
     names(formals(refit_poll_of_polls)),
