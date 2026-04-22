@@ -36,6 +36,79 @@ get_last_evaluation_info <- function(pop) {
   )
 }
 
+#' Return known-state evaluation periods for a poll_of_polls object
+#'
+#' @description
+#' Return one general evaluation period per usable known-state date.
+#'
+#' @details
+#' This function extract stable period definition. A usable evaluation date is
+#' a non-missing known-state date on or before the model end date.
+#' Returned dates are sorted and deduplicated before periods are constructed.
+#'
+#' The period semantics are intentionally conservative:
+#'
+#' 1. `period_to` is the current `evaluation_date`,
+#' 2. `period_from` is the previous `evaluation_date`, and
+#' 3. the first period gets `NA` for `previous_evaluation_date` and
+#'    `period_from`.
+#'
+#'
+#' @param pop a [poll_of_polls] object
+#'
+#' @return A tibble with one row per usable known-state date and the columns
+#'   `period_index`, `evaluation_date`, `previous_evaluation_date`,
+#'   `period_from`, `period_to`, and `is_last`.
+#' @export
+get_known_state_periods <- function(pop) {
+  checkmate::assert_class(pop, "poll_of_polls")
+  known_dates <- evaluation_known_state_dates(pop)
+
+  if(length(known_dates) < 1L) {
+    return(tibble::tibble(
+      period_index = integer(),
+      evaluation_date = as.Date(character()),
+      previous_evaluation_date = as.Date(character()),
+      period_from = as.Date(character()),
+      period_to = as.Date(character()),
+      is_last = logical()
+    ))
+  }
+
+  previous_evaluation_date <- c(as.Date(NA), known_dates[-length(known_dates)])
+
+  tibble::tibble(
+    period_index = seq_along(known_dates),
+    evaluation_date = known_dates,
+    previous_evaluation_date = previous_evaluation_date,
+    period_from = previous_evaluation_date,
+    period_to = known_dates,
+    is_last = seq_along(known_dates) == length(known_dates)
+  )
+}
+
+#' @keywords internal
+evaluation_model_time_to <- function(pop) {
+  checkmate::assert_class(pop, "poll_of_polls")
+  unname(time_range(pop$time_line)["to"])
+}
+
+#' @keywords internal
+evaluation_known_state_dates <- function(pop) {
+  checkmate::assert_class(pop, "poll_of_polls")
+  model_time_to <- evaluation_model_time_to(pop)
+
+  if(is.null(pop$known_state) || nrow(pop$known_state) < 1L) {
+    return(as.Date(character()))
+  }
+
+  checkmate::assert_names(names(pop$known_state), must.include = "date")
+
+  known_dates <- pop$known_state$date
+  known_dates <- known_dates[!is.na(known_dates) & known_dates <= model_time_to]
+  sort(unique(known_dates))
+}
+
 #' Compute the elpd, percentiles and rmse for a true [known_state]
 #'
 #' @details
