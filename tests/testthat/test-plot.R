@@ -149,6 +149,18 @@ test_that("extract_pop_empirical_posterior_mean_x_change matches manual ratio co
   expect_x_change_matches_manual("cmdstanr", "ratio")
 })
 
+test_that("extract_pop_election_period warns that the helper is deprecated and still returns an election_period column", {
+  pop <- load_plot_fixture_pop("rstan")
+
+  expect_warning(
+    actual <- extract_pop_election_period(pop),
+    "extract_pop_election_period\\(\\) is deprecated\\."
+  )
+
+  expect_s3_class(actual, "data.frame", exact = FALSE)
+  expect_true("election_period" %in% names(actual))
+})
+
 test_that("geom_known_state builds equivalent layers for poll_of_polls and explicit known-state data on the saved rstan fixture", {
   expect_known_state_overlay_equivalent("rstan")
 })
