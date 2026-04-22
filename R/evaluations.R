@@ -87,7 +87,7 @@ elpd_known_state.pop_model8f1 <- function(x, known_state){
         stop("model not implemented for 'use_latent_state_version' = ",
              x$stan_data$stan_data$use_latent_state_version)
       }
-      results[i, j] <- logMeanExp(dnorm(known_state[[x$y[j]]][i], mean = ls$latent_state[,known_state$t[i],x$y[j]], sd = sigma, log = TRUE))
+      results[i, j] <- logMeanExp(stats::dnorm(known_state[[x$y[j]]][i], mean = ls$latent_state[,known_state$t[i],x$y[j]], sd = sigma, log = TRUE))
     }
     results[i, "ndraws"] <- sum(!id)
   }
