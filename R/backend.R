@@ -25,6 +25,15 @@ assert_cmdstanr_available <- function() {
   }
 }
 
+assert_posterior_available <- function() {
+  if(!requireNamespace("posterior", quietly = TRUE)) {
+    stop(
+      "Package 'posterior' must be installed to process Stan draws.",
+      call. = FALSE
+    )
+  }
+}
+
 #' Run a Stan fit using the selected backend
 #'
 #' @keywords internal
@@ -1088,6 +1097,54 @@ backend_get_ndraws <- function(backend, fit) {
     return(dim(dr)[1] * dim(dr)[2])
   }
   stop("Unknown backend '", backend, "'.", call. = FALSE)
+}
+
+#' Backend posterior draws as a draws_array
+#'
+#' @keywords internal
+backend_draws_array <- function(backend, fit, variables = NULL, inc_warmup = FALSE) {
+  assert_pop_backend(backend)
+  checkmate::assert_character(variables, any.missing = FALSE, unique = TRUE, null.ok = TRUE)
+  checkmate::assert_flag(inc_warmup)
+  assert_posterior_available()
+
+  if(backend == "rstan"){
+    draws <- rstan::extract(fit, permuted = FALSE, inc_warmup = inc_warmup)
+    draws <- backend_subset_draws_array_variables(draws, variables)
+    return(posterior::as_draws_array(draws))
+  }
+  if(backend == "cmdstanr"){
+    draws <- as.array(fit$draws(
+      variables = variables,
+      inc_warmup = inc_warmup,
+      format = "draws_array"
+    ))
+    draws <- backend_subset_draws_array_variables(draws, variables)
+    return(posterior::as_draws_array(draws))
+  }
+  stop("Unknown backend '", backend, "'.", call. = FALSE)
+}
+
+#' @keywords internal
+backend_subset_draws_array_variables <- function(draws, variables = NULL) {
+  if(is.null(variables)) {
+    return(draws)
+  }
+
+  variable_names <- dimnames(draws)[[3]]
+  variable_idx <- match(variables, variable_names)
+  missing_variables <- variables[is.na(variable_idx)]
+
+  if(length(missing_variables) > 0L) {
+    stop(
+      "Unknown variable(s): ",
+      paste(missing_variables, collapse = ", "),
+      ".",
+      call. = FALSE
+    )
+  }
+
+  draws[, , variable_idx, drop = FALSE]
 }
 
 #' Backend draw extraction

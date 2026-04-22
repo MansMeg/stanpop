@@ -46,7 +46,7 @@ plot_parameters_mcmc_intervals(
 
 traceplot(x, ...)
 
-\method{traceplot}{poll_of_polls}(x, ...)
+\method{traceplot}{poll_of_polls}(x, pars = NULL, inc_warmup = FALSE, ...)
 }
 \arguments{
 \item{x}{a [poll_of_polls] object}
@@ -58,6 +58,11 @@ traceplot(x, ...)
 \item{title}{The title of the plot.}
 
 \item{...}{further arguments sent to bayesplot::mcmc_areas, bayesplot::mcmc_hex, etc.}
+
+\item{pars}{optional parameter names to include in the traceplot.}
+
+\item{inc_warmup}{should warmup draws be included when constructing the
+traceplot input?}
 }
 \description{
 Plot posterior distributions of parameters
