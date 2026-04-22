@@ -28,7 +28,7 @@ compute_prediction_error_model5 <- function(x, predict_state, type = "elpd"){
   post <- rstan::extract(x$stan_fit, pars = c(lsv, "sigma_x"))
 
   if(type == "elpd"){
-    res <- log(mean(dnorm(predict_state$x, mean = post[[lsv]], post$sigma_x)))
+    res <- log(mean(stats::dnorm(predict_state$x, mean = post[[lsv]], post$sigma_x)))
   } else if(type == "rmse"){
     res <- sqrt(mean((predict_state$x - post[[lsv]])^2))
   } else if(type == "quantile"){
@@ -52,7 +52,7 @@ compute_prediction_error_model6 <- function(x, predict_state, type = "elpd"){
   names(pe) <- x$y
   for(i in seq_along(pe)){
     if(type == "elpd"){
-      pe[i] <- log(mean(dnorm(predict_state[[x$y[i]]], mean = ls$latent_state[,predict_t,x$y[i]], post$sigma_x[,x$y[i]])))
+      pe[i] <- log(mean(stats::dnorm(predict_state[[x$y[i]]], mean = ls$latent_state[,predict_t,x$y[i]], post$sigma_x[,x$y[i]])))
     } else if(type == "rmse"){
       pe[i] <- sqrt(mean((predict_state[[x$y[i]]] - ls$latent_state[,predict_t,x$y[i]])^2))
     } else if(type == "quantile"){
