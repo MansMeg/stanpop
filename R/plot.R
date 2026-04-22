@@ -89,18 +89,84 @@ geom_known_state <- function(x, y, ...){
 
 #' @export
 geom_known_state.data.frame <- function(x, y, ...){
-  checkmate::assert_data_frame(x)
-  checkmate::assert_names(colnames(x), must.include = c("date", y))
-  geom <- list()
-  colnames(x) <- make.names(colnames(x))
-  geom[[1]] <- ggplot2::geom_vline(xintercept = x$date, lty = "dashed", ...)
-  geom[[2]] <- ggplot2::geom_point(data = x, ggplot2::aes_string(x = "date", y = make.names(y)), ...)
-  geom
+  geom_known_state_layers(known_state_overlay_data(x, y), ...)
 }
 
 #' @export
 geom_known_state.poll_of_polls <- function(x, y, ...){
-  geom_known_state(x$known_state, y, ...)
+  geom_known_state_layers(known_state_overlay_data(x, y), ...)
+}
+
+#' Normalize known-state overlay data
+#'
+#' @param x A [poll_of_polls] object or explicit known-state data frame.
+#' @param y Name of the value column to plot.
+#'
+#' @return A tibble with sorted `date` and `value` columns ready to be passed
+#'   to [geom_known_state_layers()].
+#' @keywords internal
+known_state_overlay_data <- function(x, y) {
+  checkmate::assert_string(y)
+
+  if(inherits(x, "poll_of_polls")) {
+    if(is.null(x$known_state)) {
+      stop("poll_of_polls object does not contain known_state data.", call. = FALSE)
+    }
+    x <- x$known_state
+  }
+
+  checkmate::assert_data_frame(x)
+
+  missing_columns <- setdiff(c("date", y), names(x))
+  if(length(missing_columns) > 0L) {
+    stop(
+      "Known-state overlay data is missing required column(s): ",
+      paste(missing_columns, collapse = ", "),
+      ".",
+      call. = FALSE
+    )
+  }
+
+  checkmate::assert_date(x$date, any.missing = TRUE)
+
+  overlay_data <- tibble::tibble(
+    date = x$date,
+    value = x[[y]]
+  )
+  overlay_data <- overlay_data[!is.na(overlay_data$date), , drop = FALSE]
+  overlay_data <- overlay_data[order(overlay_data$date), , drop = FALSE]
+
+  if(anyDuplicated(overlay_data$date) > 0L) {
+    stop("Known-state overlay data must not contain duplicate dates.", call. = FALSE)
+  }
+
+  overlay_data
+}
+
+#' Build known-state overlay layers
+#'
+#' @param data Normalized overlay data returned by
+#'   [known_state_overlay_data()].
+#' @param ... Further arguments passed on to [ggplot2::geom_vline()] and
+#'   [ggplot2::geom_point()].
+#'
+#' @return A list containing the vline and point layers used by
+#'   [geom_known_state()].
+#' @keywords internal
+geom_known_state_layers <- function(data, ...) {
+  list(
+    ggplot2::geom_vline(
+      data = data,
+      ggplot2::aes(xintercept = date),
+      lty = "dashed",
+      ...
+    ),
+    ggplot2::geom_point(
+      data = data,
+      ggplot2::aes(x = date, y = value),
+      ...
+    )
+  )
 }
 
 #' Visualize a stan_data object

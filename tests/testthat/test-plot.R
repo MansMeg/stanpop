@@ -83,6 +83,25 @@ expect_x_change_matches_manual <- function(backend, type) {
   expect_equal(actual, expected, tolerance = 0)
 }
 
+expect_known_state_overlay_equivalent <- function(backend) {
+  pop <- load_plot_fixture_pop(backend)
+  y <- pop$y[[1]]
+  known_state_df <- pop$known_state[, c("date", y), drop = FALSE]
+
+  pop_build <- suppressWarnings(
+    ggplot2::ggplot_build(
+      ggplot2::ggplot() + geom_known_state(pop, y, size = 0.75)
+    )
+  )
+  df_build <- suppressWarnings(
+    ggplot2::ggplot_build(
+      ggplot2::ggplot() + geom_known_state(known_state_df, y, size = 0.75)
+    )
+  )
+
+  expect_equal(pop_build$data, df_build$data, tolerance = 0)
+}
+
 test_that("plot works for polls data object", {
 
   skip("TODO: Test that there is a warning if not the whole latent state is plotted that also propose how to change time_range to show the whole LS")
@@ -128,4 +147,54 @@ test_that("extract_pop_empirical_posterior_mean_x_change matches manual ratio co
 
 test_that("extract_pop_empirical_posterior_mean_x_change matches manual ratio computation for the saved cmdstanr fixture", {
   expect_x_change_matches_manual("cmdstanr", "ratio")
+})
+
+test_that("geom_known_state builds equivalent layers for poll_of_polls and explicit known-state data on the saved rstan fixture", {
+  expect_known_state_overlay_equivalent("rstan")
+})
+
+test_that("geom_known_state builds equivalent layers for poll_of_polls and explicit known-state data on the saved cmdstanr fixture", {
+  expect_known_state_overlay_equivalent("cmdstanr")
+})
+
+test_that("known_state_overlay_data sorts rows and drops missing dates", {
+  known_state_overlay_data <- get_internal("known_state_overlay_data")
+  pop <- load_plot_fixture_pop("rstan")
+  y <- pop$y[[1]]
+  original <- pop$known_state[, c("date", y), drop = FALSE]
+
+  x <- original[c(3, 1, 2), , drop = FALSE]
+  x$date[[2]] <- as.Date(NA)
+
+  expect_equal(
+    known_state_overlay_data(x, y),
+    tibble::tibble(
+      date = sort(original$date[c(2, 3)]),
+      value = original[[y]][c(2, 3)][order(original$date[c(2, 3)])]
+    ),
+    tolerance = 0
+  )
+})
+
+test_that("known_state_overlay_data errors when required columns are missing", {
+  known_state_overlay_data <- get_internal("known_state_overlay_data")
+  pop <- load_plot_fixture_pop("rstan")
+  y <- pop$y[[1]]
+
+  expect_error(
+    known_state_overlay_data(pop$known_state["date"], y),
+    "Known-state overlay data is missing required column\\(s\\):"
+  )
+})
+
+test_that("known_state_overlay_data errors on duplicate dates", {
+  known_state_overlay_data <- get_internal("known_state_overlay_data")
+  pop <- load_plot_fixture_pop("rstan")
+  y <- pop$y[[1]]
+  x <- pop$known_state[c(1, 1), c("date", y), drop = FALSE]
+
+  expect_error(
+    known_state_overlay_data(x, y),
+    "Known-state overlay data must not contain duplicate dates\\."
+  )
 })
