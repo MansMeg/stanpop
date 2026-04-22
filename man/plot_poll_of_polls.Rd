@@ -4,6 +4,8 @@
 \alias{plot_poll_of_polls}
 \alias{plot.poll_of_polls}
 \alias{geom_pop_line}
+\alias{plot_house_differences}
+\alias{plot_house_predictive_quantile}
 \title{Plot a [poll_of_polls] object}
 \usage{
 plot_poll_of_polls(
@@ -22,6 +24,16 @@ plot_poll_of_polls(
 \method{plot}{poll_of_polls}(x, ...)
 
 geom_pop_line(x, y, ...)
+
+plot_house_differences(
+  x,
+  y,
+  house,
+  publish_date = FALSE,
+  standard_errors = TRUE
+)
+
+plot_house_predictive_quantile(x, y, house)
 }
 \arguments{
 \item{x}{a [poll_of_polls] object}
@@ -38,11 +50,13 @@ geom_pop_line(x, y, ...)
 
 \item{shift_latent_days}{Shift the latent series right, this number of days.}
 
-\item{house}{only plot the following polling houses}
+\item{house}{the house or houses to normalize and plot.}
 
 \item{include_latent_state}{include latent state in plot}
 
 \item{...}{further arguments to [geom_line]}
+
+\item{standard_errors}{logical flag indicating if standard error of polls should be visualized}
 }
 \description{
 Plot a [poll_of_polls] object

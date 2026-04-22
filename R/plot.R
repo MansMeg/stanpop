@@ -298,9 +298,107 @@ geom_pop_line <- function(x, y, ...){
                                        y = y),
                      ggplot2::aes(x=date, y = y), ...)
 }
+#' @rdname plot_poll_of_polls
+#' @param house the house or houses to normalize and plot.
+#' @param standard_errors logical flag indicating if standard error of polls should be visualized
+#' @export
+plot_house_differences <- function(x, y, house, publish_date = FALSE, standard_errors = TRUE){
+  checkmate::assert_class(x, "poll_of_polls")
+  checkmate::assert_choice(y, choices = x$y)
+  checkmate::assert_subset(house, levels(x$polls_data$poll_info$.house))
+  checkmate::assert_flag(publish_date)
+  checkmate::assert_flag(standard_errors)
 
+  pd <- subset(x$polls_data, subset = x$polls_data$poll_info$.house %in% house)
 
+  dts <- collection_midpoint_dates(pd)
+  dts <- latent_state_mean_dates(latent_state(x)[,,y], dts)
 
+  ypd <- y(pd)
+  ypd$date <- dts$date
+  ypd$mean <- dts$mean
+  ypd$st <- (ypd[[y]] - ypd$mean)
+  ypd$se <- standard_error(pd, y)[[y]]
+  ypd$st_low <- ypd$st - ypd$se
+  ypd$st_high <- ypd$st + ypd$se
+  ypd$in_interval <- ypd$st_low < 0 & ypd$st_high > 0
+  y(pd) <- ypd
+
+  pd <- subset(pd, subset = abs(ypd$st) < Inf)
+  df <- as.data.frame(pd)
+
+  ks <- x$known_state
+  ks$x <- 0
+  l <- max(abs(y(pd)$st))
+  if(standard_errors) {
+    l  <- max(abs(c(y(pd)$st_high, y(pd)$st_low)))
+    label <- paste0("P(0 in interval): ", round(mean(y(pd)$in_interval), 3), "")
+  } else {
+#    subtitle <- NULL
+  }
+  ks[[y]] <- 0
+  plt <- plot.polls_data(pd, "st", publish_date = publish_date) +
+    geom_known_state(ks, y) +
+    ggplot2::ylim(c(-l, l)) +
+    ggplot2::ylab(y) +
+    ggplot2::ggtitle(house[1]) +
+    ggplot2::geom_hline(yintercept = 0, lty = "dotted")
+  if(standard_errors){
+    plt <- plt +
+      ggplot2::geom_segment(
+        data = df,
+        mapping = ggplot2::aes(
+          x = .data[["date"]],
+          xend = .data[["date"]],
+          y = .data[["st_low"]],
+          yend = .data[["st_high"]]
+        )
+      ) +
+      ggplot2::geom_label(ggplot2::aes(x = as.Date(ypd$date[which.max(ypd$date)]), y = l, label = label), vjust = "inward", hjust = "inward", size = 3)
+  }
+  plt
+}
+
+#' @rdname plot_poll_of_polls
+#' @export
+plot_house_predictive_quantile <- function(x, y, house){
+  checkmate::assert_class(x, "poll_of_polls")
+  checkmate::assert_choice(y, choices = x$y)
+  checkmate::assert_subset(house, levels(x$polls_data$poll_info$.house))
+
+  polls_bool <- houses(x$polls_data) %in% house
+  pd <- subset(x$polls_data, subset = polls_bool)
+  pids <- poll_ids(pd)
+  ppd <- poll_predictive_distribution(x, y = y, poll_ids = pids)
+  y_value <- y(pd)[, y, drop = TRUE]
+  y_matrix <- matrix(rep(y_value, dim(ppd$pred_y)[1]), nrow = dim(ppd$pred_y)[1], byrow = TRUE)
+  pq <- ppd$pred_y[,,y] < y_matrix
+  pq <- colMeans(pq)
+
+  dts <- collection_midpoint_dates(pd)
+
+  ypd <- y(pd)
+  ypd$date <- dts
+  ypd$pq <- pq
+  y(pd) <- ypd
+  df <- as.data.frame(pd)
+
+  ks <- x$known_state
+  ks$x <- 0
+  ks[[y]] <- 0
+
+  plt <- ggplot2::ggplot(df, ggplot2::aes(y = pq, x = date)) +
+    ggplot2::geom_point() +
+    geom_known_state(ks, y)[[1]] +
+    ggplot2::ylab(paste0("Pred. dist. quantile (", y, ")")) +
+    ggplot2::xlab("") +
+    ggplot2::ylim(0,1) +
+    ggplot2::ggtitle(house[1]) +
+    ggplot2::geom_hline(yintercept = 0.5, lty = "dotted") +
+    ggplot2::geom_smooth(alpha = 0.3, color = "black", size = 0.5, method = 'loess', formula = y ~ x)
+
+  plt
+}
 
 
 #' Plot posterior distributions of parameters
