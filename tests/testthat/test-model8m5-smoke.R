@@ -55,6 +55,12 @@ test_that("model8m5 poll_of_polls runs on a mixed latent grid", {
   expect_true(any(pop$time_line$time_line$date %in% seq(as.Date("2010-05-05"), as.Date("2010-05-10"), by = 1)))
   expect_equal(get_ndraws(pop), 10)
 
+  print_lines <- capture.output(print(pop))
+  expect_true(any(grepl("^== Time scale overrides == ?$", print_lines)))
+  expect_true(any(grepl("from: '2010-05-05'", print_lines, fixed = TRUE)))
+  expect_true(any(grepl("to: '2010-05-10'", print_lines, fixed = TRUE)))
+  expect_true(any(grepl("time_scale: day", print_lines, fixed = TRUE)))
+
   expect_silent(plt <- suppressWarnings(plot_poll_of_polls(pop, y = "x3", collection_period = TRUE)))
   expect_s3_class(plt, "ggplot")
   expect_silent(suppressWarnings(ggplot2::ggplot_build(plt)))

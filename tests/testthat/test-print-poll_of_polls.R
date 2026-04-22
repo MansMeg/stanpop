@@ -121,3 +121,27 @@ test_that("materialized dense inv_metric values are compacted for printing", {
   expect_identical(compact$inv_metric_shape, "2 x 2")
   expect_false(any(grepl("1\\.1|2\\.3|3\\.4|4\\.6", yaml_lines)))
 })
+
+test_that("time scale overrides are formatted row-wise for printing", {
+  format_time_scale_overrides_for_print <- get_internal("format_time_scale_overrides_for_print")
+
+  overrides <- tibble::tibble(
+    from = as.Date(c("2010-05-05", "2010-06-01")),
+    to = as.Date(c("2010-05-10", "2010-06-03")),
+    time_scale = c("day", "day")
+  )
+
+  formatted <- format_time_scale_overrides_for_print(overrides)
+  yaml_lines <- capture.output(cat(yaml::as.yaml(formatted)))
+
+  expect_identical(
+    formatted,
+    list(
+      list(from = "2010-05-05", to = "2010-05-10", time_scale = "day"),
+      list(from = "2010-06-01", to = "2010-06-03", time_scale = "day")
+    )
+  )
+  expect_true(any(grepl("from: '2010-05-05'", yaml_lines, fixed = TRUE)))
+  expect_true(any(grepl("to: '2010-06-03'", yaml_lines, fixed = TRUE)))
+  expect_true(any(grepl("time_scale: day", yaml_lines, fixed = TRUE)))
+})

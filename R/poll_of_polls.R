@@ -351,6 +351,10 @@ print.poll_of_polls <- function(x, ...){
   cat("Number of unconstrained parameters:", get_num_upars(x), "\n")
   cat("Parties:", paste0(x$y, collapse = ", "), "\n")
   cat("Time scale:", x$time_scale, "\n")
+  if(!is.null(x$time_scale_overrides) && nrow(x$time_scale_overrides) > 0L){
+    cat("\n== Time scale overrides == \n")
+    cat(yaml::as.yaml(format_time_scale_overrides_for_print(x$time_scale_overrides)))
+  }
 
 
   cat("\n== Data == \n")
@@ -391,6 +395,20 @@ print.poll_of_polls <- function(x, ...){
     cat("cache directory:", x$cache_dir, "\n")
   }
 
+}
+
+format_time_scale_overrides_for_print <- function(x){
+  if(is.null(x) || nrow(x) == 0L){
+    return(NULL)
+  }
+
+  lapply(seq_len(nrow(x)), function(i) {
+    list(
+      from = as.character(x$from[[i]]),
+      to = as.character(x$to[[i]]),
+      time_scale = as.character(x$time_scale[[i]])
+    )
+  })
 }
 
 #' Compact Stan arguments for printing
