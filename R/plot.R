@@ -188,13 +188,13 @@ geom_known_state_layers <- function(data, ...) {
   list(
     ggplot2::geom_vline(
       data = data,
-      ggplot2::aes(xintercept = date),
+      ggplot2::aes(xintercept = .data[["date"]]),
       lty = "dashed",
       ...
     ),
     ggplot2::geom_point(
       data = data,
-      ggplot2::aes(x = date, y = value),
+      ggplot2::aes(x = .data[["date"]], y = .data[["value"]]),
       ...
     )
   )
