@@ -6,8 +6,6 @@ Authors@R:
            family = "Magnusson",
            role = c("aut", "cre"),
            email = "mons.magnusson@gmail.com")
-Author: Mans Magnusson [aut, cre]
-Maintainer: Mans Magnusson <mons.magnusson@gmail.com>
 Description: Stan Models and code to run Bayesian poll of polls models.
 License: MIT + file LICENSE
 Additional_repositories: https://mc-stan.org/r-packages/
