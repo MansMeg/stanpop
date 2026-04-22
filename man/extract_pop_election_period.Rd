@@ -2,7 +2,7 @@
 % Please edit documentation in R/poll_of_polls_extract.R
 \name{extract_pop_election_period}
 \alias{extract_pop_election_period}
-\title{Extract election periods from a poll_of_polls object}
+\title{Deprecated: extract election periods from a poll_of_polls object}
 \usage{
 extract_pop_election_period(pop, election_period_length = 6)
 }
@@ -12,8 +12,15 @@ extract_pop_election_period(pop, election_period_length = 6)
 \item{election_period_length}{the number of time points that make up the lection period}
 }
 \description{
-Extract election periods from a poll_of_polls object
+Deprecated. This helper encodes an older fixed-length election-period
+marker. New code should instead use [get_known_state_periods()] or
+[get_known_state_lookback_windows()] and apply any report-specific window
+naming or presentation downstream.
 }
 \details{
-Extracts a tibble with the election period as a boolean per time point
+Kept for backward compatibility. It still returns a tibble with the election
+period as a boolean per time point.
+}
+\seealso{
+[get_known_state_periods()], [get_known_state_lookback_windows()]
 }
