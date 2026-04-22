@@ -19,22 +19,14 @@
 #'   `evaluation_date` and `gap_days` are returned as missing values.
 #' @export
 get_last_evaluation_info <- function(pop) {
-  checkmate::assert_class(pop, "poll_of_polls")
-
-  model_time_to <- unname(time_range(pop$time_line)["to"])
+  model_time_to <- evaluation_model_time_to(pop)
+  known_dates <- evaluation_known_state_dates(pop)
   evaluation_date <- as.Date(NA)
   gap_days <- NA_integer_
 
-  if(!is.null(pop$known_state) && nrow(pop$known_state) > 0L) {
-    checkmate::assert_names(names(pop$known_state), must.include = "date")
-
-    known_dates <- pop$known_state$date
-    known_dates <- known_dates[!is.na(known_dates) & known_dates <= model_time_to]
-
-    if(length(known_dates) > 0L) {
-      evaluation_date <- max(known_dates)
-      gap_days <- as.integer(model_time_to - evaluation_date)
-    }
+  if(length(known_dates) > 0L) {
+    evaluation_date <- max(known_dates)
+    gap_days <- as.integer(model_time_to - evaluation_date)
   }
 
   tibble::tibble(
