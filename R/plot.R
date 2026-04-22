@@ -211,6 +211,9 @@ geom_pop_line <- function(x, y, ...){
 #' @param x a [poll_of_polls] object
 #' @param params parameters to plot (see \code{parameter_names()} too see all parameters in model)
 #' @param params_plot_name names to use for parameters in plot
+#' @param pars optional parameter names to include in the traceplot.
+#' @param inc_warmup should warmup draws be included when constructing the
+#'   traceplot input?
 #' @param ... further arguments sent to bayesplot::mcmc_areas, bayesplot::mcmc_hex, etc.
 #' @param title The title of the plot.
 #'
@@ -306,4 +309,3 @@ traceplot.poll_of_polls <- function(x, pars = NULL, inc_warmup = FALSE, ...){
     ...
   )
 }
-
