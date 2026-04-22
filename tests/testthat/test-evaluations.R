@@ -46,6 +46,23 @@ expect_known_state_periods_match_pop <- function(pop) {
   expect_equal(get_known_state_periods(pop), expected, tolerance = 0)
 }
 
+expect_known_state_lookback_windows_match_pop <- function(pop, window = lubridate::period(months = 6)) {
+  periods <- get_known_state_periods(pop)
+  expected <- tibble::tibble(
+    window_index = periods$period_index,
+    evaluation_date = periods$evaluation_date,
+    window_from = lubridate::`%m-%`(periods$evaluation_date, window),
+    window_to = periods$evaluation_date,
+    period_index = periods$period_index,
+    previous_evaluation_date = periods$previous_evaluation_date,
+    period_from = periods$period_from,
+    period_to = periods$period_to,
+    is_last = periods$is_last
+  )
+
+  expect_equal(get_known_state_lookback_windows(pop, window = window), expected, tolerance = 0)
+}
+
 test_that("get_last_evaluation_info returns the latest usable known state for the saved rstan fixture", {
   expect_last_evaluation_info_matches_pop("rstan")
 })
@@ -134,6 +151,65 @@ test_that("get_known_state_periods returns a zero-row tibble when there are no u
     tibble::tibble(
       period_index = integer(),
       evaluation_date = as.Date(character()),
+      previous_evaluation_date = as.Date(character()),
+      period_from = as.Date(character()),
+      period_to = as.Date(character()),
+      is_last = logical()
+    ),
+    tolerance = 0
+  )
+})
+
+test_that("get_known_state_lookback_windows returns the expected default six-month windows for the saved rstan fixture", {
+  pop <- load_evaluation_fixture_pop("rstan")
+  expect_known_state_lookback_windows_match_pop(pop)
+})
+
+test_that("get_known_state_lookback_windows returns the expected default six-month windows for the saved cmdstanr fixture", {
+  pop <- load_evaluation_fixture_pop("cmdstanr")
+  expect_known_state_lookback_windows_match_pop(pop)
+})
+
+test_that("get_known_state_lookback_windows accepts day-based Period windows", {
+  pop <- load_evaluation_fixture_pop("rstan")
+  expect_known_state_lookback_windows_match_pop(pop, window = lubridate::days(180))
+})
+
+test_that("get_known_state_lookback_windows rejects non-Period windows", {
+  pop <- load_evaluation_fixture_pop("rstan")
+
+  expect_error(
+    get_known_state_lookback_windows(pop, window = lubridate::ddays(180)),
+    "'window' must be a scalar lubridate Period"
+  )
+})
+
+test_that("get_known_state_lookback_windows rejects non-positive Period windows", {
+  pop <- load_evaluation_fixture_pop("rstan")
+
+  expect_error(
+    get_known_state_lookback_windows(pop, window = lubridate::days(0)),
+    "'window' must be a positive lubridate Period"
+  )
+  expect_error(
+    get_known_state_lookback_windows(pop, window = lubridate::days(-1)),
+    "'window' must be a positive lubridate Period"
+  )
+})
+
+test_that("get_known_state_lookback_windows returns a zero-row tibble when there are no usable dates", {
+  pop <- load_evaluation_fixture_pop("rstan")
+  model_time_to <- unname(time_range(pop$time_line)["to"])
+  pop$known_state$date <- rep(model_time_to + 1, nrow(pop$known_state))
+
+  expect_equal(
+    get_known_state_lookback_windows(pop),
+    tibble::tibble(
+      window_index = integer(),
+      evaluation_date = as.Date(character()),
+      window_from = as.Date(character()),
+      window_to = as.Date(character()),
+      period_index = integer(),
       previous_evaluation_date = as.Date(character()),
       period_from = as.Date(character()),
       period_to = as.Date(character()),
