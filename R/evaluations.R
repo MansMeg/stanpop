@@ -87,6 +87,68 @@ get_known_state_periods <- function(pop) {
   )
 }
 
+#' Return known-state lookback windows for a poll_of_polls object
+#'
+#' @description
+#' Return one lookback window per usable known-state evaluation date.
+#'
+#' @details
+#' This helper builds directly on [get_known_state_periods()] so lookback
+#' windows use the same stable set of usable evaluation dates. The `window`
+#' argument must be a scalar lubridate [Period], for example
+#' `lubridate::period(months = 6)` or `lubridate::days(180)`.
+#'
+#' Lookback window semantics are:
+#'
+#' 1. `window_to` is the current `evaluation_date`,
+#' 2. `window_from` is `evaluation_date` shifted backward by `window`, and
+#' 3. the returned rows retain the matching period metadata.
+#'
+#' Calendar-aware month arithmetic is computed with `lubridate::\%m-\%` so
+#' month-based lookback windows behave consistently around month ends.
+#'
+#' @param pop a [poll_of_polls] object
+#' @param window a scalar lubridate [Period] defining how far back each
+#'   lookback window should start.
+#'
+#' @return A tibble with one row per usable known-state date and the columns
+#'   `window_index`, `evaluation_date`, `window_from`, `window_to`,
+#'   `period_index`, `previous_evaluation_date`, `period_from`, `period_to`,
+#'   and `is_last`.
+#' @export
+get_known_state_lookback_windows <- function(pop, window = lubridate::period(months = 6)) {
+  checkmate::assert_class(pop, "poll_of_polls")
+  assert_known_state_lookback_window(window)
+
+  periods <- get_known_state_periods(pop)
+
+  if(nrow(periods) < 1L) {
+    return(tibble::tibble(
+      window_index = integer(),
+      evaluation_date = as.Date(character()),
+      window_from = as.Date(character()),
+      window_to = as.Date(character()),
+      period_index = integer(),
+      previous_evaluation_date = as.Date(character()),
+      period_from = as.Date(character()),
+      period_to = as.Date(character()),
+      is_last = logical()
+    ))
+  }
+
+  tibble::tibble(
+    window_index = periods$period_index,
+    evaluation_date = periods$evaluation_date,
+    window_from = lubridate::`%m-%`(periods$evaluation_date, window),
+    window_to = periods$evaluation_date,
+    period_index = periods$period_index,
+    previous_evaluation_date = periods$previous_evaluation_date,
+    period_from = periods$period_from,
+    period_to = periods$period_to,
+    is_last = periods$is_last
+  )
+}
+
 #' @keywords internal
 evaluation_model_time_to <- function(pop) {
   checkmate::assert_class(pop, "poll_of_polls")
