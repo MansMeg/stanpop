@@ -171,6 +171,31 @@ evaluation_known_state_dates <- function(pop) {
   sort(unique(known_dates))
 }
 
+#' @keywords internal
+assert_known_state_lookback_window <- function(window) {
+  if(!lubridate::is.period(window) || length(window) != 1L) {
+    stop(
+      "'window' must be a scalar lubridate Period, e.g. ",
+      "'lubridate::period(months = 6)' or 'lubridate::days(180)'.",
+      call. = FALSE
+    )
+  }
+
+  # Period objects are calendar-relative, so we validate them by applying the
+  # window to one stable mid-month Date and checking that it actually shifts
+  # backward. The anchor date itself has no domain meaning.
+  anchor <- as.Date("2000-07-01")
+  shifted <- lubridate::`%m-%`(anchor, window)
+  if(is.na(shifted) || !(shifted < anchor)) {
+    stop(
+      "'window' must be a positive lubridate Period that shifts dates backward.",
+      call. = FALSE
+    )
+  }
+
+  invisible(TRUE)
+}
+
 #' Compute the elpd, percentiles and rmse for a true [known_state]
 #'
 #' @details
