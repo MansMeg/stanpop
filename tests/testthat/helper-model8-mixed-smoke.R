@@ -50,14 +50,16 @@ make_model8_mixed_smoke_case <- function(npolls = 40) {
 #   known_t: One latent time index that must appear in `x_known_t`.
 #   parties: Character vector of party names to check. Defaults to all modeled
 #     parties in `pop$y`.
-#   tolerance: Numerical tolerance for equality at the known state.
+#   tolerance: Numerical tolerance for equality at the known state. Kept
+#     slightly above machine-noise to allow backend-specific floating-point
+#     differences in reconstructed latent-state draws.
 #
 # Returns:
 #   Invisibly returns the checked `known_t` and its neighboring latent indices.
 expect_known_t_fixed_and_neighbors_vary <- function(pop,
                                                     known_t,
                                                     parties = pop$y,
-                                                    tolerance = 1e-10) {
+                                                    tolerance = 1e-8) {
   checkmate::assert_class(pop, "poll_of_polls")
   checkmate::assert_integerish(known_t, len = 1L)
   checkmate::assert_character(parties, any.missing = FALSE, min.len = 1L)

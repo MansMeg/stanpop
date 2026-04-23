@@ -48,6 +48,12 @@ test_that("model8k5 poll_of_polls runs with cmdstanr backend on a mixed latent g
   skip_if_no_cmdstanr()
 
   case <- make_model8_mixed_smoke_case(npolls = 12)
+  known_date <- case$known_state$date[1]
+  case$time_scale_overrides <- tibble::tibble(
+    from = known_date - 1L,
+    to = known_date + 1L,
+    time_scale = "day"
+  )
   cfg <- list(
     sigma_kappa_hyper = 0.03,
     use_industry_bias = 1L,
@@ -87,12 +93,17 @@ test_that("model8k5 poll_of_polls runs with cmdstanr backend on a mixed latent g
   expect_identical(pop$time_scale_overrides, case$time_scale_overrides)
   expect_identical(pop$input_args$time_scale_overrides, case$time_scale_overrides)
   expect_true(any(abs(pop$stan_data$stan_data$step_scale_t[-1] - 1) > 1e-12))
-  expect_true(any(pop$time_line$time_line$date %in% seq(as.Date("2010-05-05"), as.Date("2010-05-10"), by = 1)))
+  expect_true(any(pop$time_line$time_line$date %in% seq(known_date - 1L, known_date + 1L, by = 1)))
   expect_equal(get_ndraws(pop), 10)
 
   ls <- latent_state(pop)
   expect_identical(dim(ls$latent_state)[2], nrow(pop$time_line$time_line))
   expect_true(all(is.finite(ls$latent_state)))
+
+  expect_known_t_fixed_and_neighbors_vary(
+    pop = pop,
+    known_t = pop$stan_data$stan_data$x_known_t[1]
+  )
 
   sigma_x_draws <- extract(pop, pars = "sigma_x")$sigma_x
   x_pred_draws <- extract(pop, pars = "x_pred")$x_pred
