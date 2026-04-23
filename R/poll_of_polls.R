@@ -342,7 +342,7 @@ get_pop_stan_model_file_path <-function(model){
 #' @export
 print.poll_of_polls <- function(x, ...){
   ms <- utils::capture.output(print(utils::object.size(x), units = "auto", standard = "SI"))
-  cat("==== Poll of Polls Model (",ms,") ==== \n", sep = "")
+  cat("==== Poll of Polls Model (R object.size: ", ms, ") ==== \n", sep = "")
   tr <- time_range(x$time_line)
   cat("Model is fit during the period ", as.character(tr["from"]), "--", as.character(tr["to"]), "\n", sep = "")
   cat("Stan model: ", x$model, ".stan\n", sep = "")
