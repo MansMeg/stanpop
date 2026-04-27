@@ -26,10 +26,12 @@ Imports:
 Suggests: 
   abind,
   bayesplot,
+  BH,
   cmdstanr,
   matrixStats,
   git2r,
   posterior,
+  RcppEigen,
   testthat (>= 2.1.0)
 Remotes:
   stan-dev/cmdstanr

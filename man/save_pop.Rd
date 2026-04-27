@@ -4,7 +4,7 @@
 \alias{save_pop}
 \title{Save a poll_of_polls object}
 \usage{
-save_pop(x, file, compress = "xz")
+save_pop(x, file, compress = "xz", overwrite = FALSE)
 }
 \arguments{
 \item{x}{A [poll_of_polls] object.}
@@ -12,6 +12,8 @@ save_pop(x, file, compress = "xz")
 \item{file}{Path to the output `.rds` file.}
 
 \item{compress}{Compression passed to [base::saveRDS()].}
+
+\item{overwrite}{Should an existing file at `file` be overwritten?}
 }
 \value{
 Invisibly returns `x`.
