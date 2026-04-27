@@ -116,6 +116,66 @@ test_that("poll_of_polls API", {
   expect_true("compile_args" %in% names(formals(poll_of_polls)))
 })
 
+test_that("poll_of_polls cmdstanr cache save tolerates same-hash file created after lookup", {
+  case <- make_model8_mixed_smoke_case(npolls = 5)
+  cfg <- list(
+    sigma_kappa_hyper = 0.03,
+    use_industry_bias = 1L,
+    use_house_bias = 0L,
+    use_design_effects = 0L,
+    use_multivariate_version = 2L,
+    use_softmax = 1L
+  )
+
+  cache_dir <- tempfile("pop-cache-")
+  cache_fp <- file.path(cache_dir, "same-hash.rds")
+  on.exit(unlink(cache_dir, recursive = TRUE), add = TRUE)
+
+  mock_fit <- list(
+    save_object = function(file, ...) {
+      saveRDS(list(materialized = TRUE), file = file)
+      invisible(NULL)
+    }
+  )
+
+  testthat::local_mocked_bindings(
+    cache_file_path = function(sha, cache_dir) cache_fp,
+    backend_sample = function(...) {
+      saveRDS(list(created_by = "parallel-worker"), file = cache_fp)
+      mock_fit
+    },
+    backend_capture_warm_start_state = function(...) NULL,
+    compute_diagnostics = function(...) list(),
+    assert_cmdstanr_available = function() invisible(TRUE),
+    .package = "stanpop"
+  )
+
+  pop <- NULL
+  expect_silent(
+    pop <- suppressWarnings(
+      suppressMessages(
+        poll_of_polls(
+          y = case$parties,
+          model = "model8k5",
+          polls_data = case$polls_data,
+          time_scale = case$time_scale,
+          time_scale_overrides = case$time_scale_overrides,
+          known_state = case$known_state,
+          hyper_parameters = cfg,
+          backend = "cmdstanr",
+          cache_dir = cache_dir
+        )
+      )
+    ),
+    NA
+  )
+
+  if(!is.null(pop)) {
+    expect_s3_class(pop, "poll_of_polls")
+    expect_true(get_internal("is_save_pop_payload")(readRDS(cache_fp)))
+  }
+})
+
 test_that("poll_of_polls rejects rstan-only arguments for cmdstanr", {
   case <- make_model8_mixed_smoke_case(npolls = 5)
 
