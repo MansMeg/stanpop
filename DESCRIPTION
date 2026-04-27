@@ -26,6 +26,7 @@ Imports:
 Suggests: 
   abind,
   bayesplot,
+  BH,
   cmdstanr,
   matrixStats,
   git2r,
