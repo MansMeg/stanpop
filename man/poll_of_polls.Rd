@@ -56,7 +56,8 @@ These go to [rstan::stan()] when `backend = "rstan"` and to
 
 \item{cache_dir}{directory to cache model. Default is cache in tempdir().
 [NULL], no cache. Cached objects are stored with [save_pop()] in the same
-wrapped on-disk format used by the public save/load API.}
+wrapped on-disk format used by the public save/load API. Existing cache
+files at the same hash are replaced when it reaches the save step.}
 }
 \description{
 Fit a poll of polls object
