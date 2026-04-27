@@ -11,12 +11,14 @@
 #' @param x A [poll_of_polls] object.
 #' @param file Path to the output `.rds` file.
 #' @param compress Compression passed to [base::saveRDS()].
+#' @param overwrite Should an existing file at `file` be overwritten?
 #'
 #' @return Invisibly returns `x`.
 #' @export
-save_pop <- function(x, file, compress = "xz") {
+save_pop <- function(x, file, compress = "xz", overwrite = FALSE) {
   assert_pop(x)
-  checkmate::assert_path_for_output(file)
+  checkmate::assert_flag(overwrite)
+  checkmate::assert_path_for_output(file, overwrite = overwrite)
   x <- prepare_pop_for_save(x)
 
   saveRDS(

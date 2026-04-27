@@ -21,7 +21,8 @@
 #'   `CmdStanModel$sample()` when `backend = "cmdstanr"`.
 #' @param cache_dir directory to cache model. Default is cache in tempdir().
 #'   [NULL], no cache. Cached objects are stored with [save_pop()] in the same
-#'   wrapped on-disk format used by the public save/load API.
+#'   wrapped on-disk format used by the public save/load API. Existing cache
+#'   files at the same hash are replaced when it reaches the save step.
 #'
 #' @details
 #' The [input_args] slot contain all input arguments except polls data and known state that are stored in the original object instead.
@@ -235,7 +236,7 @@ poll_of_polls <- function(y,
 
   assert_pop(pop)
   # Save to cache
-  if(!is.null(cache_dir)) save_pop(pop, file = cache_fp)
+  if(!is.null(cache_dir)) save_pop(pop, file = cache_fp, overwrite = TRUE)
   pop
 }
 

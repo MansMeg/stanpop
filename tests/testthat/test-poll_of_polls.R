@@ -166,8 +166,7 @@ test_that("poll_of_polls cmdstanr cache save tolerates same-hash file created af
           cache_dir = cache_dir
         )
       )
-    ),
-    NA
+    )
   )
 
   if(!is.null(pop)) {
