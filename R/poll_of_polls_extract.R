@@ -13,7 +13,7 @@ extract_pop_empirical_posterior_mean_x_change <- function(pop, type){
   checkmate::assert_class(pop, "poll_of_polls")
   checkmate::assert_choice(type, choices = c("diff", "ratio"))
 
-  x <- rstan::extract(pop$stan_fit, "x_pred")$x_pred
+  x <- extract(pop, pars = "x_pred")$x_pred
   dims <- dim(x)
   n <- 1
   if(type == "diff"){
@@ -31,16 +31,34 @@ extract_pop_empirical_posterior_mean_x_change <- function(pop, type){
 }
 
 
-#' Extract election periods from a poll_of_polls object
+#' Deprecated: extract election periods from a poll_of_polls object
+#'
+#' @description
+#' Deprecated. This helper encodes an older fixed-length election-period
+#' marker. New code should instead use [get_known_state_periods()] or
+#' [get_known_state_lookback_windows()] and apply any report-specific window
+#' naming or presentation downstream.
 #'
 #' @details
-#' Extracts a tibble with the election period as a boolean per time point
+#' Kept for backward compatibility. It still returns a tibble with the election
+#' period as a boolean per time point.
 #'
 #' @param pop a poll of polls object
 #' @param election_period_length the number of time points that make up the lection period
 #'
+#' @seealso [get_known_state_periods()], [get_known_state_lookback_windows()]
+#'
 #' @export
 extract_pop_election_period <- function(pop, election_period_length = 6){
+  .Deprecated(
+    old = "extract_pop_election_period",
+    package = "stanpop",
+    msg = paste(
+      "extract_pop_election_period() is deprecated.",
+      "Use get_known_state_periods() or get_known_state_lookback_windows()",
+      "and keep report-specific election-window labeling downstream."
+    )
+  )
   checkmate::assert_class(pop, "poll_of_polls")
   checkmate::assert_int(election_period_length)
 

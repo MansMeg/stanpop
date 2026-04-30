@@ -1,6 +1,6 @@
 Package: stanpop
 Title: Stan-based Poll of Polls Models
-Version: 0.7.4
+Version: 0.8.4
 Authors@R: 
     person(given = "Mans",
            family = "Magnusson",
@@ -24,20 +24,14 @@ Imports:
   tibble,  
   yaml
 Suggests: 
-  BH,
   abind,
   bayesplot,
+  BH,
   cmdstanr,
   matrixStats,
   git2r,
-  jsonlite,  
-  knitr,
   posterior,
-  plyr,
-  RcppEigen,  
-  rmarkdown,  
-  stringr,
-  testthat (>= 2.1.0),  
-  xtable
+  RcppEigen,
+  testthat (>= 2.1.0)
 Remotes:
   stan-dev/cmdstanr

@@ -19,6 +19,8 @@ Resolve how many chains the refit will use when validating warm-start
 inputs. The helper prefers an explicit `chains` sampler argument, otherwise
 it infers the chain count from chain-specific warm-start values such as
 `init`, `inv_metric`, or `step_size`, and finally falls back to the number
-of chains stored in `x`.
+of chains stored in `x`. For `backend = "cmdstanr"`, this means
+`parallel_chains` affects execution parallelism only and does not change the
+refit chain count.
 }
 \keyword{internal}

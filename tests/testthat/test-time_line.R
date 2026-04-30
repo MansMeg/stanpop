@@ -49,6 +49,23 @@ test_that("get_time_points_from_time_line works", {
 })
 
 
+test_that("get_time_points works for time_line and poll_of_polls objects", {
+  x <- 1:10
+  expect_silent(tl1 <- time_line(x, time_scale = "week", start_date = "2010-01-04"))
+
+  dates <- as.Date(c("2010-01-04", "2010-01-05", "2010-01-11", "2010-01-18"))
+  expected_t <- c(1L, 1L, 2L, 3L)
+
+  expect_equal(get_time_points(tl1, dates), expected_t)
+
+  pop <- structure(
+    list(time_line = tl1),
+    class = c("poll_of_polls", "list")
+  )
+  expect_equal(get_time_points(pop, dates), expected_t)
+})
+
+
 test_that("get_time_points_from_time_line edge case tests", {
   x <- 1:100
   expect_silent(tl1 <- time_line(x, time_scale = "week", start_date = "2010-01-01"))

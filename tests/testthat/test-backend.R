@@ -1,5 +1,40 @@
 context("backend")
 
+backend_draws_fixture_path <- function(backend) {
+  testthat::test_path("files", paste0("test_pop_v0_7_3_", backend, ".rds"))
+}
+
+expect_backend_draws_array_matches_fixture <- function(backend) {
+  testthat::skip_if_not_installed("posterior")
+
+  fixture_path <- backend_draws_fixture_path(backend)
+  if(!file.exists(fixture_path)) {
+    testthat::skip(paste0("Fixture not available: ", basename(fixture_path)))
+  }
+  if(identical(backend, "cmdstanr")) {
+    testthat::skip_if_not_installed("cmdstanr")
+  }
+
+  backend_draws_array <- get_internal("backend_draws_array")
+  pop <- load_pop(fixture_path)
+  vars <- c("x_pred[2,1]", "x_pred[1,1]", "sigma_x[1]")
+
+  draws <- backend_draws_array(pop$backend, pop$stan_fit, variables = vars)
+  x_pred <- extract(pop, pars = "x_pred")[[1]]
+  sigma_x <- extract(pop, pars = "sigma_x")[[1]]
+
+  expect_s3_class(draws, "draws_array")
+  expect_identical(posterior::variables(draws), vars)
+  expect_equal(
+    as.integer(dim(draws)),
+    c(length(sigma_x[, 1]), 1L, length(vars)),
+    tolerance = 0
+  )
+  expect_equal(as.numeric(draws[, 1, "x_pred[2,1]"]), x_pred[, 2, 1], tolerance = 0)
+  expect_equal(as.numeric(draws[, 1, "x_pred[1,1]"]), x_pred[, 1, 1], tolerance = 0)
+  expect_equal(as.numeric(draws[, 1, "sigma_x[1]"]), sigma_x[, 1], tolerance = 0)
+}
+
 test_that("backend_relist_flat_draw_to_init reconstructs init objects from flat draws", {
   backend_relist_flat_draw_to_init <- get_internal("backend_relist_flat_draw_to_init")
 
@@ -666,6 +701,62 @@ test_that("backend_get_last_draws_for_init with cmdstanr returns init-ready last
   expect_equal(as.numeric(res[[1]]$y), as.numeric(draws[dim(draws)[1], 1, ]), tolerance = 0)
 })
 
+test_that("backend_get_random_draws_for_init with cmdstanr-like fits returns init values and source chains", {
+  backend_get_random_draws_for_init <- get_internal("backend_get_random_draws_for_init")
+
+  draws_array <- array(
+    c(
+      11, 12,
+      21, 22,
+      31, 32,
+      41, 42
+    ),
+    dim = c(2, 2, 2),
+    dimnames = list(
+      NULL,
+      NULL,
+      c("y[1]", "y[2]")
+    )
+  )
+  mock_fit <- list(
+    draws = function(inc_warmup = FALSE, format = "draws_array") {
+      draws_array
+    },
+    runset = list(
+      stan_code = function() stop("stan code unavailable")
+    ),
+    metadata = function() {
+      list(
+        model_params = c("y[1]", "y[2]"),
+        sampler_diagnostics = c("accept_stat__", "stepsize__")
+      )
+    }
+  )
+
+  res <- backend_get_random_draws_for_init(
+    backend = "cmdstanr",
+    fit = mock_fit,
+    chains = 3,
+    seed = 123
+  )
+
+  set.seed(123)
+  expected_draw_ids <- sample.int(4, size = 3, replace = FALSE)
+  expected_iter_ids <- ((expected_draw_ids - 1L) %% 2L) + 1L
+  expected_chain_ids <- ((expected_draw_ids - 1L) %/% 2L) + 1L
+  expected_init <- lapply(seq_along(expected_draw_ids), function(i) {
+    list(y = as.numeric(draws_array[expected_iter_ids[[i]], expected_chain_ids[[i]], ]))
+  })
+
+  expect_length(res$init, 3)
+  expect_equal(res$source_chain_ids, expected_chain_ids, tolerance = 0)
+  expect_equal(
+    lapply(res$init, unlist, use.names = TRUE),
+    lapply(expected_init, unlist, use.names = TRUE),
+    tolerance = 0
+  )
+})
+
 test_that("backend_get_last_draws_for_init output can be passed back to cmdstanr as init", {
   skip_if_no_stan_tests()
   skip_if_no_cmdstanr_tests()
@@ -712,5 +803,30 @@ test_that("backend_get_last_draws_for_init output can be passed back to cmdstanr
     lapply(init_from_fit, unlist, use.names = TRUE),
     lapply(init_values, unlist, use.names = TRUE),
     tolerance = 1e-12
+  )
+})
+
+test_that("backend_draws_array preserves exact variable names, order, and values for the saved rstan fixture", {
+  expect_backend_draws_array_matches_fixture("rstan")
+})
+
+test_that("backend_draws_array preserves exact variable names, order, and values for the saved cmdstanr fixture", {
+  expect_backend_draws_array_matches_fixture("cmdstanr")
+})
+
+test_that("backend_draws_array reports missing variables clearly", {
+  testthat::skip_if_not_installed("posterior")
+
+  fixture_path <- backend_draws_fixture_path("rstan")
+  if(!file.exists(fixture_path)) {
+    testthat::skip(paste0("Fixture not available: ", basename(fixture_path)))
+  }
+
+  backend_draws_array <- get_internal("backend_draws_array")
+  pop <- load_pop(fixture_path)
+
+  expect_error(
+    backend_draws_array(pop$backend, pop$stan_fit, variables = "not_a_parameter"),
+    "Unknown variable\\(s\\): not_a_parameter\\."
   )
 })

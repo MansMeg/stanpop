@@ -31,15 +31,28 @@ plot.polls_data <- function(x, y = NULL, publish_date = TRUE, collection_period 
 #' @rdname plot.polls_data
 #' @export
 geom_publish_date <- function(x, y, ...){
-  ggplot2::geom_point(data = as.data.frame(x),
-                      ggplot2::aes_string(x = ".publish_date", y = y), ...)
+  ggplot2::geom_point(
+    data = as.data.frame(x),
+    mapping = ggplot2::aes(
+      x = .data[[".publish_date"]],
+      y = .data[[y]]
+    ),
+    ...
+  )
 }
 
 #' @rdname plot.polls_data
 #' @export
 geom_collection_period <- function(x, y, ...){
-  ggplot2::geom_segment(data = as.data.frame(x),
-                        ggplot2::aes_string(x = ".start_date", xend = ".end_date", y = y, yend = y))
+  ggplot2::geom_segment(
+    data = as.data.frame(x),
+    mapping = ggplot2::aes(
+      x = .data[[".start_date"]],
+      xend = .data[[".end_date"]],
+      y = .data[[y]],
+      yend = .data[[y]]
+    )
+  )
 }
 
 #' Add a [latent_state] geom to a ggplot
@@ -70,10 +83,28 @@ geom_latent_state <- function(x, median = TRUE, intervals = c(0.90, 0.75, 0.5), 
   P <- length(psn)
   geom <- list()
   for (i in seq_along(intervals)){
-    geom[[i]] <- ggplot2::geom_ribbon(data = lsp, ggplot2::aes_string(x = "date", ymin = psn[i], ymax = psn[P - i + 1]), alpha = interval_alpha, fill = latent_state_colour, ...)
+    geom[[i]] <- ggplot2::geom_ribbon(
+      data = lsp,
+      mapping = ggplot2::aes(
+        x = .data[["date"]],
+        ymin = .data[[psn[i]]],
+        ymax = .data[[psn[P - i + 1L]]]
+      ),
+      alpha = interval_alpha,
+      fill = latent_state_colour,
+      ...
+    )
   }
   if(median){
-    geom[[length(geom) + 1]] <- ggplot2::geom_line(data = lsp, ggplot2::aes_string(x = "date", y = "X0.5"), colour = latent_state_colour, ...)
+    geom[[length(geom) + 1]] <- ggplot2::geom_line(
+      data = lsp,
+      mapping = ggplot2::aes(
+        x = .data[["date"]],
+        y = .data[["X0.5"]]
+      ),
+      colour = latent_state_colour,
+      ...
+    )
   }
   return(geom)
 }
@@ -89,18 +120,84 @@ geom_known_state <- function(x, y, ...){
 
 #' @export
 geom_known_state.data.frame <- function(x, y, ...){
-  checkmate::assert_data_frame(x)
-  checkmate::assert_names(colnames(x), must.include = c("date", y))
-  geom <- list()
-  colnames(x) <- make.names(colnames(x))
-  geom[[1]] <- ggplot2::geom_vline(xintercept = x$date, lty = "dashed", ...)
-  geom[[2]] <- ggplot2::geom_point(data = x, ggplot2::aes_string(x = "date", y = make.names(y)), ...)
-  geom
+  geom_known_state_layers(known_state_overlay_data(x, y), ...)
 }
 
 #' @export
 geom_known_state.poll_of_polls <- function(x, y, ...){
-  geom_known_state(x$known_state, y, ...)
+  geom_known_state_layers(known_state_overlay_data(x, y), ...)
+}
+
+#' Normalize known-state overlay data
+#'
+#' @param x A [poll_of_polls] object or explicit known-state data frame.
+#' @param y Name of the value column to plot.
+#'
+#' @return A tibble with sorted `date` and `value` columns ready to be passed
+#'   to [geom_known_state_layers()].
+#' @keywords internal
+known_state_overlay_data <- function(x, y) {
+  checkmate::assert_string(y)
+
+  if(inherits(x, "poll_of_polls")) {
+    if(is.null(x$known_state)) {
+      stop("poll_of_polls object does not contain known_state data.", call. = FALSE)
+    }
+    x <- x$known_state
+  }
+
+  checkmate::assert_data_frame(x)
+
+  missing_columns <- setdiff(c("date", y), names(x))
+  if(length(missing_columns) > 0L) {
+    stop(
+      "Known-state overlay data is missing required column(s): ",
+      paste(missing_columns, collapse = ", "),
+      ".",
+      call. = FALSE
+    )
+  }
+
+  checkmate::assert_date(x$date, any.missing = TRUE)
+
+  overlay_data <- tibble::tibble(
+    date = x$date,
+    value = x[[y]]
+  )
+  overlay_data <- overlay_data[!is.na(overlay_data$date), , drop = FALSE]
+  overlay_data <- overlay_data[order(overlay_data$date), , drop = FALSE]
+
+  if(anyDuplicated(overlay_data$date) > 0L) {
+    stop("Known-state overlay data must not contain duplicate dates.", call. = FALSE)
+  }
+
+  overlay_data
+}
+
+#' Build known-state overlay layers
+#'
+#' @param data Normalized overlay data returned by
+#'   [known_state_overlay_data()].
+#' @param ... Further arguments passed on to [ggplot2::geom_vline()] and
+#'   [ggplot2::geom_point()].
+#'
+#' @return A list containing the vline and point layers used by
+#'   [geom_known_state()].
+#' @keywords internal
+geom_known_state_layers <- function(data, ...) {
+  list(
+    ggplot2::geom_vline(
+      data = data,
+      ggplot2::aes(xintercept = .data[["date"]]),
+      lty = "dashed",
+      ...
+    ),
+    ggplot2::geom_point(
+      data = data,
+      ggplot2::aes(x = .data[["date"]], y = .data[["value"]]),
+      ...
+    )
+  )
 }
 
 #' Visualize a stan_data object
@@ -203,106 +300,15 @@ geom_pop_line <- function(x, y, ...){
 }
 
 
-#' @rdname plot_poll_of_polls
-#' @param house the house or houses to normalize and plot.
-#' @param standard_errors logical flag indicating if standard error of polls should be visualized
-#' @export
-plot_house_differences <- function(x, y, house, publish_date = FALSE, standard_errors = TRUE){
-  checkmate::assert_class(x, "poll_of_polls")
-  checkmate::assert_choice(y, choices = x$y)
-  checkmate::assert_subset(house, levels(x$polls_data$poll_info$.house))
-  checkmate::assert_flag(publish_date)
-  checkmate::assert_flag(standard_errors)
-
-  pd <- subset(x$polls_data, subset = x$polls_data$poll_info$.house %in% house)
-
-  dts <- collection_midpoint_dates(pd)
-  dts <- latent_state_mean_dates(latent_state(x)[,,y], dts)
-
-  ypd <- y(pd)
-  ypd$date <- dts$date
-  ypd$mean <- dts$mean
-  ypd$st <- (ypd[[y]] - ypd$mean)
-  ypd$se <- standard_error(pd, y)[[y]]
-  ypd$st_low <- ypd$st - ypd$se
-  ypd$st_high <- ypd$st + ypd$se
-  ypd$in_interval <- ypd$st_low < 0 & ypd$st_high > 0
-  y(pd) <- ypd
-
-  pd <- subset(pd, subset = abs(ypd$st) < Inf)
-  df <- as.data.frame(pd)
-
-  ks <- x$known_state
-  ks$x <- 0
-  l <- max(abs(y(pd)$st))
-  if(standard_errors) {
-    l  <- max(abs(c(y(pd)$st_high, y(pd)$st_low)))
-    label <- paste0("P(0 in interval): ", round(mean(y(pd)$in_interval), 3), "")
-  } else {
-#    subtitle <- NULL
-  }
-  ks[[y]] <- 0
-  plt <- plot.polls_data(pd, "st", publish_date = publish_date) +
-    geom_known_state(ks, y) +
-    ggplot2::ylim(c(-l, l)) +
-    ggplot2::ylab(y) +
-    ggplot2::ggtitle(house[1]) +
-    ggplot2::geom_hline(yintercept = 0, lty = "dotted")
-  if(standard_errors){
-    plt <- plt +
-      ggplot2::geom_segment(data = df, ggplot2::aes_string(x = "date", xend = "date", y = "st_low", yend = "st_high")) +
-      ggplot2::geom_label(ggplot2::aes(x = as.Date(ypd$date[which.max(ypd$date)]), y = l, label = label), vjust = "inward", hjust = "inward", size = 3)
-  }
-  plt
-}
-
-#' @rdname plot_poll_of_polls
-#' @export
-plot_house_predictive_quantile <- function(x, y, house){
-  checkmate::assert_class(x, "poll_of_polls")
-  checkmate::assert_choice(y, choices = x$y)
-  checkmate::assert_subset(house, levels(x$polls_data$poll_info$.house))
-
-  polls_bool <- houses(x$polls_data) %in% house
-  pd <- subset(x$polls_data, subset = polls_bool)
-  pids <- poll_ids(pd)
-  ppd <- poll_predictive_distribution(x, y = y, poll_ids = pids)
-  y_value <- y(pd)[, y, drop = TRUE]
-  y_matrix <- matrix(rep(y_value, dim(ppd$pred_y)[1]), nrow = dim(ppd$pred_y)[1], byrow = TRUE)
-  pq <- ppd$pred_y[,,y] < y_matrix
-  pq <- colMeans(pq)
-
-  dts <- collection_midpoint_dates(pd)
-
-  ypd <- y(pd)
-  ypd$date <- dts
-  ypd$pq <- pq
-  y(pd) <- ypd
-  df <- as.data.frame(pd)
-
-  ks <- x$known_state
-  ks$x <- 0
-  ks[[y]] <- 0
-
-  plt <- ggplot2::ggplot(df, ggplot2::aes(y = pq, x = date)) +
-    ggplot2::geom_point() +
-    geom_known_state(ks, y)[[1]] +
-    ggplot2::ylab(paste0("Pred. dist. quantile (", y, ")")) +
-    ggplot2::xlab("") +
-    ggplot2::ylim(0,1) +
-    ggplot2::ggtitle(house[1]) +
-    ggplot2::geom_hline(yintercept = 0.5, lty = "dotted") +
-    ggplot2::geom_smooth(alpha = 0.3, color = "black", size = 0.5, method = 'loess', formula = y ~ x)
-
-  plt
-}
-
 
 #' Plot posterior distributions of parameters
 #'
 #' @param x a [poll_of_polls] object
 #' @param params parameters to plot (see \code{parameter_names()} too see all parameters in model)
 #' @param params_plot_name names to use for parameters in plot
+#' @param pars optional parameter names to include in the traceplot.
+#' @param inc_warmup should warmup draws be included when constructing the
+#'   traceplot input?
 #' @param ... further arguments sent to bayesplot::mcmc_areas, bayesplot::mcmc_hex, etc.
 #' @param title The title of the plot.
 #'
@@ -361,11 +367,9 @@ plot_parameters_bayesplot <- function(x, bayeplot_FUN, params, params_plot_name 
 
   if(is.null(params_plot_name)) params_plot_name <- params
 
-  post <- rstan::extract(x$stan_fit, par = params[1])[[1]]
-  post_matrix <- matrix(0.0, ncol = length(params), nrow = length(post), dimnames = list(NULL, params_plot_name))
-  for(i in seq_along(params)){
-    post_matrix[,i] <- rstan::extract(x$stan_fit, par = params[i])[[1]]
-  }
+  post_array <- pop_draws_array(x, variables = params)
+  post_matrix <- as.matrix(posterior::as_draws_matrix(post_array))
+  colnames(post_matrix) <- params_plot_name
   plt <- suppressWarnings(
     bayeplot_FUN(post_matrix, ...))
   plt
@@ -387,245 +391,16 @@ traceplot <- function(x, ...){
 
 #' @rdname plot_parameters_areas
 #' @export
-traceplot.poll_of_polls <- function(x, ...){
-  rstan::traceplot(x$stan_fit, ...)
-}
-
-
-#' Plot beta_mu and beta_sigma by s
-#'
-#' @param x a [poll_of_polls] object
-#' @param y party to plot
-#' @param s time point to plot
-#' @param house house to plot
-#' @param houses houses to plot
-#'
-#' @export
-plot_beta_mu_by_s <- function(x, y, house){
+traceplot.poll_of_polls <- function(x, pars = NULL, inc_warmup = FALSE, ...){
   checkmate::assert_class(x, "poll_of_polls")
-  checkmate::assert_choice(y, choices = x$y)
-  checkmate::assert_choice(house, choices = house_levels(x))
-
-
-  # beta_mu[S, H, P]
-  y_idx <- which(x$y %in% y)
-  house_idx <- which(house_levels(x) %in% house)
-  s <- 1:x$stan_data$stan_data$S
-
-  pars <- paste0("beta_mu[",s,",", house_idx,",",y_idx,"]")
-  suppressMessages(
-    bayesplot::mcmc_intervals(x$stan_fit,
-                              pars = pars,
-    ) +
-      ggplot2::ylab("s") +
-      ggplot2::scale_y_discrete(labels = as.character(s)) +
-      # ggplot2::scale_y_discrete(labels = as.character(pop$known_state$PublDate)) +
-      #      ggplot2::scale_y_date(labels = as.Date(pop$known_state$PublDate)) +
-      ggplot2::coord_flip() +
-      ggplot2::ggtitle(paste0("beta_mu (",y,", ", house ,")"))
-  )
-}
-
-#' @rdname plot_beta_mu_by_s
-#' @export
-plot_beta_sigma_by_s <- function(x, house){
-  checkmate::assert_class(x, "poll_of_polls")
-  checkmate::assert_choice(house, choices = house_levels(x))
-
-  # beta_sigma[S, H]
-  house_idx <- which(house_levels(x) %in% house)
-  s <- 1:x$stan_data$stan_data$S
-
-  pars <- paste0("beta_sigma[",s,",", house_idx,"]")
-  suppressMessages(
-    bayesplot::mcmc_intervals(x$stan_fit,
-                              pars = pars,
-    ) +
-      ggplot2::ylab("s") +
-      ggplot2::scale_y_discrete(labels = as.character(s)) +
-      # ggplot2::scale_y_discrete(labels = as.character(pop$known_state$PublDate)) +
-      #      ggplot2::scale_y_date(labels = as.Date(pop$known_state$PublDate)) +
-      ggplot2::coord_flip() +
-      ggplot2::ggtitle(paste0("beta_sigma (", house ,")"))
-  )
-}
-
-
-#' @rdname plot_beta_mu_by_s
-#' @export
-plot_beta_mu_by_house <- function(x, y, s, houses = NULL){
-  checkmate::assert_class(x, "poll_of_polls")
-  checkmate::assert_choice(y, choices = x$y)
-  checkmate::assert_choice(s, choices = 1:x$stan_data$stan_data$S)
-  checkmate::assert_subset(houses, choices = house_levels(x))
-
-  # beta_mu[S, H, P]
-  y_idx <- which(x$y %in% y)
-  if(is.null(houses)) houses <- house_levels(x)
-
-  house_idx <- which(house_levels(x) %in% houses)
-
-  pars <- paste0("beta_mu[",s,",", house_idx,",",y_idx,"]")
-  suppressMessages(
-    bayesplot::mcmc_intervals(x$stan_fit,
-                              pars = pars,
-    ) +
-      ggplot2::ylab("House") +
-      ggplot2::scale_y_discrete(labels = as.character(house_levels(x)[house_idx])) +
-      # ggplot2::scale_y_discrete(labels = as.character(pop$known_state$PublDate)) +
-      #      ggplot2::scale_y_date(labels = as.Date(pop$known_state$PublDate)) +
-#      ggplot2::coord_flip() +
-      ggplot2::ggtitle(paste0("beta_mu (s = ",s,", ", y ,")"))
-  )
-}
-
-#' @rdname plot_beta_mu_by_s
-#' @export
-plot_beta_mu_by_party <- function(x, y, s, house){
-  checkmate::assert_class(x, "poll_of_polls")
-  checkmate::assert_subset(y, choices = party_levels(x))
-  checkmate::assert_choice(s, choices = 1:x$stan_data$stan_data$S)
-  checkmate::assert_choice(houses, choices = house_levels(x))
-
-  # beta_mu[S, H, P]
-  y_idx <- which(x$y %in% y)
-  house_idx <- which(house_levels(x) %in% house)
-
-  pars <- paste0("beta_mu[",s,",", house_idx,",",y_idx,"]")
-  suppressMessages(
-    bayesplot::mcmc_intervals(x$stan_fit,
-                              pars = pars,
-    ) +
-      ggplot2::ylab("Party") +
-      ggplot2::scale_y_discrete(labels = as.character(party_levels(x)[y_idx])) +
-      # ggplot2::scale_y_discrete(labels = as.character(pop$known_state$PublDate)) +
-      #      ggplot2::scale_y_date(labels = as.Date(pop$known_state$PublDate)) +
-      #      ggplot2::coord_flip() +
-      ggplot2::ggtitle(paste0("beta_mu (s = ",s,", ", house ,")"))
-  )
-}
-
-#' @rdname plot_beta_mu_by_s
-#' @export
-plot_beta_mu_by_party_industry_bias_correction <- function(x, y, s, house){
-  checkmate::assert_class(x, "poll_of_polls")
-  checkmate::assert_subset(y, choices = party_levels(x))
-  checkmate::assert_choice(s, choices = 1:x$stan_data$stan_data$S)
-  checkmate::assert_choice(houses, choices = house_levels(x))
-
-  # beta_mu[S, H, P]
-  y_idx <- which(x$y %in% y)
-  house_idx <- which(house_levels(x) %in% house)
-
-  pars_beta_mu <- paste0("beta_mu[",s,",", house_idx,",",y_idx,"]")
-  res <- rstan::extract(x$stan_fit, pars_beta_mu)
-  beta_mu_res <- do.call(cbind, res)
-  colnames(beta_mu_res) <- names(res)
-
-  pars_kappa <- paste0("kappa_pred[",s+1,",",y_idx,"]")
-  res <- rstan::extract(x$stan_fit, pars_kappa)
-  kappa_res <- do.call(cbind, res)
-  colnames(kappa_res) <- names(res)
-
-  corrected_res <- beta_mu_res + kappa_res
-
-  suppressMessages(
-    bayesplot::mcmc_intervals(corrected_res) +
-      ggplot2::ylab("Party") +
-      ggplot2::scale_y_discrete(labels = as.character(party_levels(x)[y_idx])) +
-      # ggplot2::scale_y_discrete(labels = as.character(pop$known_state$PublDate)) +
-      #      ggplot2::scale_y_date(labels = as.Date(pop$known_state$PublDate)) +
-      #      ggplot2::coord_flip() +
-      ggplot2::ggtitle(paste0("beta_mu + kappa (s = ",s,", ", house ,")"))
-  )
-}
-
-
-
-#' @rdname plot_beta_mu_by_s
-#' @export
-plot_beta_sigma_by_house <- function(x, s, houses = NULL){
-  checkmate::assert_class(x, "poll_of_polls")
-  checkmate::assert_choice(s, choices = 1:x$stan_data$stan_data$S)
-  checkmate::assert_subset(houses, choices = house_levels(x))
-
-  #   # beta_sigma[S, H]
-  if(is.null(houses)) houses <- house_levels(x)
-  house_idx <- which(house_levels(x) %in% houses)
-
-  pars <- paste0("beta_sigma[",s,",", house_idx,"]")
-  suppressMessages(
-    bayesplot::mcmc_intervals(x$stan_fit,
-                              pars = pars,
-    ) +
-      ggplot2::ylab("House") +
-      ggplot2::scale_y_discrete(labels = as.character(house_levels(x)[house_idx])) +
-      # ggplot2::scale_y_discrete(labels = as.character(pop$known_state$PublDate)) +
-      #      ggplot2::scale_y_date(labels = as.Date(pop$known_state$PublDate)) +
-      #      ggplot2::coord_flip() +
-      ggplot2::ggtitle(paste0("beta_sigma (s = ",s,")"))
-  )
-}
-
-#' Plot kappa
-#'
-#' @param x a [poll_of_polls] object
-#' @param y party to plot (NULL is all)
-#' @param s time point to plot (NULL is all)
-#'
-#' @export
-plot_kappa_by_party <- function(x, s, y = NULL){
-  checkmate::assert_class(x, "poll_of_polls")
-  checkmate::assert_choice(y, choices = x$y, null.ok = TRUE)
-  checkmate::assert_choice(s, choices = 1:(x$stan_data$stan_data$T_known+1))
-
-  # matrix[use_industry_bias ? (T_known + 1) : 0, use_industry_bias ? P : 0] kappa
-  if(is.null(y)){
-    y_idx <- 1:length(x$y)
-  } else {
-    y_idx <- which(x$y %in% y)
-  }
-  # s <- 1:x$stan_data$stan_data$S
-
-  pars <- paste0("kappa_pred[",s,",",y_idx,"]")
-  suppressMessages(
-    bayesplot::mcmc_intervals(x$stan_fit,
-                              pars = pars,
-    ) +
-      ggplot2::ylab("party") +
-      ggplot2::scale_y_discrete(labels = as.character(x$y[y_idx])) +
-      # ggplot2::scale_y_discrete(labels = as.character(pop$known_state$PublDate)) +
-      #      ggplot2::scale_y_date(labels = as.Date(pop$known_state$PublDate)) +
-      #      ggplot2::coord_flip() +
-      ggplot2::ggtitle(paste0("kappa (s = ",s,")"))
-  )
-}
-
-#' @rdname plot_kappa_by_party
-#' @export
-plot_kappa_by_s <- function(x, y , s = NULL){
-  checkmate::assert_class(x, "poll_of_polls")
-  checkmate::assert_choice(y, choices = x$y)
-  checkmate::assert_choice(s, choices = 1:x$stan_data$stan_data$S, null.ok = TRUE)
-
-  # matrix[use_industry_bias ? (T_known + 1) : 0, use_industry_bias ? P : 0] kappa
-  y_idx <- which(x$y %in% y)
-
-  if(is.null(s)){
-    s <- 1:x$stan_data$stan_data$S
+  checkmate::assert_character(pars, any.missing = FALSE, unique = TRUE, null.ok = TRUE)
+  checkmate::assert_flag(inc_warmup)
+  if(!is.null(pars)) {
+    checkmate::assert_subset(pars, parameter_names(x))
   }
 
-  pars <- paste0("kappa_pred[",s,",",y_idx,"]")
-  suppressMessages(
-    bayesplot::mcmc_intervals(x$stan_fit,
-                              pars = pars,
-    ) +
-      ggplot2::ylab("s") +
-      ggplot2::scale_y_discrete(labels = as.character(s) +
-                                  # ggplot2::scale_y_discrete(labels = as.character(pop$known_state$PublDate)) +
-                                  #      ggplot2::scale_y_date(labels = as.Date(pop$known_state$PublDate)) +
-                                  #      ggplot2::coord_flip() +
-                                  ggplot2::ggtitle(paste0("kappa (party = ",x$y[y_idx],")"))
-      )
+  bayesplot::mcmc_trace(
+    pop_draws_array(x, variables = pars, inc_warmup = inc_warmup),
+    ...
   )
 }

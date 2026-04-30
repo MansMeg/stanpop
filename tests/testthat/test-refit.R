@@ -264,6 +264,46 @@ test_that("extract_poll_of_polls_sample_arguments falls back to nested input arg
   )
 })
 
+test_that("refit_fitted_chain_count prefers cached sampler state", {
+  refit_fitted_chain_count <- get_internal("refit_fitted_chain_count")
+  pop <- make_mock_pop_for_refit_helpers("cmdstanr")
+  pop$warm_start_state <- list(
+    sampler_state = list(
+      list(step_size = 0.1),
+      list(step_size = 0.2),
+      list(step_size = 0.3)
+    )
+  )
+
+  testthat::local_mocked_bindings(
+    backend_get_sampler_state = function(...) {
+      stop("cached sampler state should be used before backend recovery")
+    },
+    .package = "stanpop"
+  )
+
+  expect_identical(refit_fitted_chain_count(pop), 3L)
+})
+
+test_that("refit_fitted_chain_count falls back to backend sampler state", {
+  refit_fitted_chain_count <- get_internal("refit_fitted_chain_count")
+  pop <- make_mock_pop_for_refit_helpers("cmdstanr")
+
+  testthat::local_mocked_bindings(
+    backend_get_sampler_state = function(...) {
+      list(
+        list(step_size = 0.1),
+        list(step_size = 0.2),
+        list(step_size = 0.3),
+        list(step_size = 0.4)
+      )
+    },
+    .package = "stanpop"
+  )
+
+  expect_identical(refit_fitted_chain_count(pop), 4L)
+})
+
 test_that("refit_poll_of_polls has a narrow refit-oriented signature", {
   expect_identical(
     names(formals(refit_poll_of_polls)),
@@ -494,6 +534,127 @@ test_that("refit_poll_of_polls prefers cached warm-start state on x", {
   )
   expect_identical(res$args$metric, "diag_e")
   expect_equal(res$args$step_size, c(0.12, 0.34))
+})
+
+test_that("refit_poll_of_polls changing only parallel_chains keeps default init_mode last", {
+  pop <- make_mock_pop_for_refit_helpers("cmdstanr")
+  last_draws <- list(
+    list(x = c(0.11, 0.22)),
+    list(x = c(0.33, 0.44))
+  )
+
+  testthat::local_mocked_bindings(
+    backend_get_last_draws_for_init = function(...) {
+      last_draws
+    },
+    backend_get_init_skeleton = function(...) {
+      list(
+        list(x = numeric(2)),
+        list(x = numeric(2))
+      )
+    },
+    backend_get_sampler_state = function(...) {
+      list(
+        list(step_size = 0.12, inv_metric = c(1, 2), metric_type = "diag_e"),
+        list(step_size = 0.34, inv_metric = c(3, 4), metric_type = "diag_e")
+      )
+    },
+    .package = "stanpop"
+  )
+
+  args <- resolve_refit_arguments_for_test(
+    pop,
+    dots = list(
+      parallel_chains = 1L
+    )
+  )
+
+  expect_identical(args$parallel_chains, 1L)
+  expect_equal(args$chains, 2)
+  expect_identical(args$init, last_draws)
+})
+
+test_that("refit_poll_of_polls changing chains with init_mode last requires matching chain counts", {
+  pop <- make_mock_pop_for_refit_helpers("cmdstanr")
+
+  testthat::local_mocked_bindings(
+    backend_get_last_draws_for_init = function(...) {
+      list(
+        list(x = c(0.11, 0.22)),
+        list(x = c(0.33, 0.44))
+      )
+    },
+    backend_get_init_skeleton = function(...) {
+      list(
+        list(x = numeric(2)),
+        list(x = numeric(2))
+      )
+    },
+    .package = "stanpop"
+  )
+
+  expect_error(
+    refit_poll_of_polls(
+      pop,
+      chains = 1
+    ),
+    "init_mode = 'last'\\) requires matching chain counts"
+  )
+})
+
+test_that("refit_poll_of_polls with init_mode random reuses sampler state from sampled source chains", {
+  pop <- make_mock_pop_for_refit_helpers("rstan")
+  pop$warm_start_state <- list(
+    init = NULL,
+    init_complete = FALSE,
+    sampler_state = list(
+      list(step_size = 0.12, inv_metric = c(1, 2), metric_type = "diag_e"),
+      list(step_size = 0.34, inv_metric = c(3, 4), metric_type = "diag_e")
+    ),
+    init_skeleton = list(
+      list(x = numeric(2)),
+      list(x = numeric(2))
+    ),
+    num_upars = 2L
+  )
+  sampled_init <- list(
+    list(x = c(10.1, 10.2)),
+    list(x = c(20.1, 20.2)),
+    list(x = c(30.1, 30.2))
+  )
+
+  testthat::local_mocked_bindings(
+    backend_get_random_draws_for_init = function(...) {
+      list(
+        init = sampled_init,
+        source_chain_ids = c(2L, 1L, 2L)
+      )
+    },
+    backend_get_last_draws_for_init = function(...) {
+      stop("random init reuse should not request last draws")
+    },
+    backend_get_sampler_state = function(...) {
+      stop("cached sampler state should be used")
+    },
+    poll_of_polls = function(...) {
+      list(args = list(...))
+    },
+    .package = "stanpop"
+  )
+
+  res <- refit_poll_of_polls(
+    pop,
+    chains = 3,
+    warm_start = list(init_mode = "random")
+  )
+
+  expect_identical(res$args$init, sampled_init)
+  expect_identical(
+    res$args$inv_metric,
+    list(c(3, 4), c(1, 2), c(3, 4))
+  )
+  expect_identical(res$args$metric, "diag_e")
+  expect_equal(res$args$step_size, c(0.34, 0.12, 0.34))
 })
 
 test_that("refit_poll_of_polls skips automatic init reuse when cached init is incomplete", {
@@ -872,6 +1033,44 @@ test_that("refit_poll_of_polls validates warm_start names", {
   expect_error(
     refit_poll_of_polls(pop, warm_start = list(unknown = 1)),
     "Unknown 'warm_start' element"
+  )
+})
+
+test_that("normalize_refit_warm_start accepts supported init_mode values", {
+  normalize_refit_warm_start <- get_internal("normalize_refit_warm_start")
+
+  expect_identical(
+    normalize_refit_warm_start(list(init_mode = "last")),
+    list(init_mode = "last")
+  )
+  expect_identical(
+    normalize_refit_warm_start(list(init_mode = "random")),
+    list(init_mode = "random")
+  )
+})
+
+test_that("normalize_refit_warm_start validates init_mode values", {
+  normalize_refit_warm_start <- get_internal("normalize_refit_warm_start")
+
+  expect_error(
+    normalize_refit_warm_start(list(init_mode = "foo")),
+    "Must be element of set"
+  )
+})
+
+test_that("refit_poll_of_polls accepts init_mode in warm_start", {
+  pop <- make_mock_pop_for_refit_helpers("cmdstanr")
+
+  expect_silent(
+    resolve_refit_arguments_for_test(
+      pop,
+      warm_start = list(
+        init = NULL,
+        init_mode = "random",
+        inv_metric = NULL,
+        step_size = NULL
+      )
+    )
   )
 })
 

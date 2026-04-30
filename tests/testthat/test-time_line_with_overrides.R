@@ -66,6 +66,43 @@ test_that("time_line_with_overrides inserts daily latent dates inside override w
 })
 
 
+test_that("get_time_points works with time scale override timelines", {
+  time_line_with_overrides <- get_internal("time_line_with_overrides")
+  tr <- time_range(c("2020-01-01", "2020-01-15"))
+  overrides <- tibble::tibble(
+    from = as.Date("2020-01-08"),
+    to = as.Date("2020-01-10"),
+    time_scale = "day"
+  )
+
+  expect_silent(
+    tl <- time_line_with_overrides(
+      model_time_range = tr,
+      time_scale = "week",
+      time_scale_overrides = overrides
+    )
+  )
+
+  dates <- as.Date(c(
+    "2020-01-07",
+    "2020-01-08",
+    "2020-01-09",
+    "2020-01-10",
+    "2020-01-11",
+    "2020-01-13"
+  ))
+  expected_t <- c(2L, 3L, 4L, 5L, 5L, 6L)
+
+  expect_equal(get_time_points(tl, dates), expected_t)
+
+  pop <- structure(
+    list(time_line = tl),
+    class = c("poll_of_polls", "list")
+  )
+  expect_equal(get_time_points(pop, dates), expected_t)
+})
+
+
 test_that("time_line_with_overrides handles overrides that start on a weekly anchor", {
   time_line_with_overrides <- get_internal("time_line_with_overrides")
   tr <- time_range(c("2020-01-01", "2020-01-15"))

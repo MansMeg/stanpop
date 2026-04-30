@@ -25,6 +25,15 @@ assert_cmdstanr_available <- function() {
   }
 }
 
+assert_posterior_available <- function() {
+  if(!requireNamespace("posterior", quietly = TRUE)) {
+    stop(
+      "Package 'posterior' must be installed to process Stan draws.",
+      call. = FALSE
+    )
+  }
+}
+
 #' Run a Stan fit using the selected backend
 #'
 #' @keywords internal
@@ -230,6 +239,172 @@ backend_get_last_draws_for_init <- function(backend, fit, ...) {
   stop("Unknown backend '", backend, "'.", call. = FALSE)
 }
 
+#' Backend random posterior draws formatted for init
+#'
+#' @description
+#' Sample one or more post-warmup posterior draws from an existing fit and
+#' return them in the constrained structure expected by Stan's `init`
+#' argument. In addition to the relisted init values, the helper records which
+#' source chain each sampled draw came from so callers can reuse chain-specific
+#' sampler state such as inverse metrics and step sizes.
+#'
+#' @param backend Stan backend used by `fit`.
+#' @param fit A fitted backend object.
+#' @param chains Integer scalar giving the number of init draws to return.
+#' @param seed Optional integer scalar used to sample reproducibly without
+#'   permanently changing the caller's `.Random.seed`.
+#' @param ... Reserved for backend-specific extensions.
+#'
+#' @return A named list with elements `init` and `source_chain_ids`.
+#'
+#' @keywords internal
+backend_get_random_draws_for_init <- function(backend, fit, chains, seed = NULL, ...) {
+  assert_pop_backend(backend)
+  checkmate::assert_integerish(chains, len = 1L, lower = 1L, any.missing = FALSE)
+  checkmate::assert_integerish(seed, len = 1L, lower = 1L, any.missing = FALSE, null.ok = TRUE)
+
+  if(backend == "rstan") {
+    return(backend_get_random_draws_for_init_rstan(
+      fit = fit,
+      chains = as.integer(chains)[[1]],
+      seed = seed,
+      ...
+    ))
+  }
+  if(backend == "cmdstanr") {
+    return(backend_get_random_draws_for_init_cmdstanr(
+      fit = fit,
+      chains = as.integer(chains)[[1]],
+      seed = seed,
+      ...
+    ))
+  }
+  stop("Unknown backend '", backend, "'.", call. = FALSE)
+}
+
+#' Sample draw positions from an iteration-by-chain grid
+#'
+#' @description
+#' Convert a flat sample over the post-warmup draws in a fit into paired
+#' iteration and chain indices that can be used to extract selected draws from
+#' a draw array with dimensions `(iteration, chain, variable)`. Sampling is
+#' over the `(iteration, chain)` positions only; the variable dimension is
+#' retained when extracting each full draw.
+#'
+#' @param n_iter Number of post-warmup iterations per chain.
+#' @param n_chains Number of chains in the stored fit.
+#' @param size Number of draw positions to sample.
+#' @param seed Optional integer scalar used to sample reproducibly.
+#'
+#' @return A named list with integer vectors `iter_ids` and `chain_ids`.
+#'
+#' @keywords internal
+backend_sample_draw_positions <- function(n_iter, n_chains, size, seed = NULL) {
+  checkmate::assert_integerish(n_iter, len = 1L, lower = 1L, any.missing = FALSE)
+  checkmate::assert_integerish(n_chains, len = 1L, lower = 1L, any.missing = FALSE)
+  checkmate::assert_integerish(size, len = 1L, lower = 1L, any.missing = FALSE)
+  checkmate::assert_integerish(seed, len = 1L, lower = 1L, any.missing = FALSE, null.ok = TRUE)
+
+  n_iter <- as.integer(n_iter)[[1]]
+  n_chains <- as.integer(n_chains)[[1]]
+  size <- as.integer(size)[[1]]
+  total_draws <- n_iter * n_chains
+  draw_ids <- backend_sample_indices(
+    total = total_draws,
+    size = size,
+    seed = seed
+  )
+
+  list(
+    iter_ids = ((draw_ids - 1L) %% n_iter) + 1L,
+    chain_ids = ((draw_ids - 1L) %/% n_iter) + 1L
+  )
+}
+
+#' Sample integer indices with optional reproducible seeding
+#'
+#' @description
+#' Draw integer indices from `1:total`, sampling with replacement only when the
+#' requested `size` exceeds the available total. When `seed` is supplied, the
+#' helper restores the caller's RNG state after sampling so reproducible
+#' selection does not leak into later random-number generation.
+#'
+#' @param total Number of available indices.
+#' @param size Number of indices to sample.
+#' @param seed Optional integer scalar used to sample reproducibly.
+#'
+#' @return Integer vector of sampled indices.
+#'
+#' @keywords internal
+backend_sample_indices <- function(total, size, seed = NULL) {
+  checkmate::assert_integerish(total, len = 1L, lower = 1L, any.missing = FALSE)
+  checkmate::assert_integerish(size, len = 1L, lower = 1L, any.missing = FALSE)
+  checkmate::assert_integerish(seed, len = 1L, lower = 1L, any.missing = FALSE, null.ok = TRUE)
+
+  total <- as.integer(total)[[1]]
+  size <- as.integer(size)[[1]]
+  replace <- size > total
+
+  if(is.null(seed)) {
+    return(sample.int(total, size = size, replace = replace))
+  }
+
+  had_seed <- exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+  if(had_seed) {
+    old_seed <- get(".Random.seed", envir = .GlobalEnv, inherits = FALSE)
+  }
+  on.exit({
+    if(had_seed) {
+      assign(".Random.seed", old_seed, envir = .GlobalEnv)
+    } else if(exists(".Random.seed", envir = .GlobalEnv, inherits = FALSE)) {
+      rm(list = ".Random.seed", envir = .GlobalEnv)
+    }
+  }, add = TRUE)
+
+  set.seed(as.integer(seed)[[1]])
+  sample.int(total, size = size, replace = replace)
+}
+
+#' Sample init-ready posterior draws from an RStan fit
+#'
+#' @description
+#' Sample post-warmup draws from an `rstan::stanfit`, relist each sampled draw
+#' into the constrained structure expected by Stan's `init` argument, and
+#' record which source chain each sampled draw came from.
+#'
+#' @inheritParams backend_get_random_draws_for_init
+#'
+#' @return A named list with elements `init` and `source_chain_ids`.
+#'
+#' @keywords internal
+backend_get_random_draws_for_init_rstan <- function(fit, chains, seed = NULL, ...) {
+  skeleton <- backend_get_rstan_init_skeleton(fit)
+  draws <- as.array(fit)
+  if(dim(draws)[1] < 1L) {
+    stop("RStan fit does not contain post-warmup draws.", call. = FALSE)
+  }
+
+  selected <- backend_sample_draw_positions(
+    n_iter = dim(draws)[1],
+    n_chains = dim(draws)[2],
+    size = chains,
+    seed = seed
+  )
+  variable_names <- dimnames(draws)[[3]]
+  init <- lapply(seq_along(selected$chain_ids), function(i) {
+    chain_id <- selected$chain_ids[[i]]
+    iter_id <- selected$iter_ids[[i]]
+    chain_draw <- as.numeric(draws[iter_id, chain_id, ])
+    names(chain_draw) <- variable_names
+    backend_relist_flat_draw_to_init(chain_draw, skeleton[[chain_id]])
+  })
+
+  list(
+    init = init,
+    source_chain_ids = as.integer(selected$chain_ids)
+  )
+}
+
 #' @keywords internal
 backend_get_last_draws_for_init_rstan <- function(fit, ...) {
   skeleton <- backend_get_rstan_init_skeleton(fit)
@@ -302,6 +477,49 @@ backend_get_last_draws_for_init_cmdstanr <- function(fit, ...) {
     names(chain_draw) <- variable_names
     backend_relist_flat_draw_to_init(chain_draw, skeleton)
   })
+}
+
+#' Sample init-ready posterior draws from a CmdStanR fit
+#'
+#' @description
+#' Sample post-warmup draws from a CmdStanR fit object, relist each sampled
+#' draw into the constrained structure expected by Stan's `init` argument, and
+#' record which source chain each sampled draw came from.
+#'
+#' @inheritParams backend_get_random_draws_for_init
+#'
+#' @return A named list with elements `init` and `source_chain_ids`.
+#'
+#' @keywords internal
+backend_get_random_draws_for_init_cmdstanr <- function(fit, chains, seed = NULL, ...) {
+  draws <- as.array(fit$draws(inc_warmup = FALSE, format = "draws_array"))
+  if(dim(draws)[1] < 1L) {
+    stop("CmdStanR fit does not contain post-warmup draws.", call. = FALSE)
+  }
+
+  variable_names <- dimnames(draws)[[3]]
+  skeleton <- backend_build_init_skeleton_from_variable_names(
+    variable_names,
+    parameter_roots = backend_get_cmdstanr_parameter_roots(fit, variable_names = variable_names)
+  )
+  selected <- backend_sample_draw_positions(
+    n_iter = dim(draws)[1],
+    n_chains = dim(draws)[2],
+    size = chains,
+    seed = seed
+  )
+  init <- lapply(seq_along(selected$chain_ids), function(i) {
+    chain_id <- selected$chain_ids[[i]]
+    iter_id <- selected$iter_ids[[i]]
+    chain_draw <- as.numeric(draws[iter_id, chain_id, ])
+    names(chain_draw) <- variable_names
+    backend_relist_flat_draw_to_init(chain_draw, skeleton)
+  })
+
+  list(
+    init = init,
+    source_chain_ids = as.integer(selected$chain_ids)
+  )
 }
 
 #' Build a CmdStanR init skeleton from draw names
@@ -879,6 +1097,54 @@ backend_get_ndraws <- function(backend, fit) {
     return(dim(dr)[1] * dim(dr)[2])
   }
   stop("Unknown backend '", backend, "'.", call. = FALSE)
+}
+
+#' Backend posterior draws as a draws_array
+#'
+#' @keywords internal
+backend_draws_array <- function(backend, fit, variables = NULL, inc_warmup = FALSE) {
+  assert_pop_backend(backend)
+  checkmate::assert_character(variables, any.missing = FALSE, unique = TRUE, null.ok = TRUE)
+  checkmate::assert_flag(inc_warmup)
+  assert_posterior_available()
+
+  if(backend == "rstan"){
+    draws <- rstan::extract(fit, permuted = FALSE, inc_warmup = inc_warmup)
+    draws <- backend_subset_draws_array_variables(draws, variables)
+    return(posterior::as_draws_array(draws))
+  }
+  if(backend == "cmdstanr"){
+    draws <- as.array(fit$draws(
+      variables = variables,
+      inc_warmup = inc_warmup,
+      format = "draws_array"
+    ))
+    draws <- backend_subset_draws_array_variables(draws, variables)
+    return(posterior::as_draws_array(draws))
+  }
+  stop("Unknown backend '", backend, "'.", call. = FALSE)
+}
+
+#' @keywords internal
+backend_subset_draws_array_variables <- function(draws, variables = NULL) {
+  if(is.null(variables)) {
+    return(draws)
+  }
+
+  variable_names <- dimnames(draws)[[3]]
+  variable_idx <- match(variables, variable_names)
+  missing_variables <- variables[is.na(variable_idx)]
+
+  if(length(missing_variables) > 0L) {
+    stop(
+      "Unknown variable(s): ",
+      paste(missing_variables, collapse = ", "),
+      ".",
+      call. = FALSE
+    )
+  }
+
+  draws[, , variable_idx, drop = FALSE]
 }
 
 #' Backend draw extraction

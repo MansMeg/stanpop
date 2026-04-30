@@ -56,6 +56,20 @@ extract.poll_of_polls <- function(object, ...){
   backend_extract(object$backend, object$stan_fit, ...)
 }
 
+#' Return posterior draws as a draws_array
+#'
+#' @keywords internal
+pop_draws_array <- function(object, variables = NULL, inc_warmup = FALSE) {
+  checkmate::assert_class(object, "poll_of_polls")
+
+  backend_draws_array(
+    backend = object$backend,
+    fit = object$stan_fit,
+    variables = variables,
+    inc_warmup = inc_warmup
+  )
+}
+
 #' Extract the date when Stan was run
 #'
 #' @param object a [poll_of_polls] object

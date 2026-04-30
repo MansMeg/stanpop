@@ -44,6 +44,27 @@ test_that("save_pop stores a wrapped poll_of_polls payload and load_pop restores
   expect_identical(loaded, pop)
 })
 
+test_that("save_pop requires explicit overwrite for existing files", {
+  pop <- make_mock_pop_for_io()
+  replacement <- make_mock_pop_for_io()
+  replacement$stanpop_version <- "replacement"
+  tmp <- tempfile(fileext = ".rds")
+  on.exit(unlink(tmp), add = TRUE)
+
+  save_pop(pop, tmp)
+
+  expect_error(
+    save_pop(replacement, tmp),
+    "already exists"
+  )
+
+  saved <- save_pop(replacement, tmp, overwrite = TRUE)
+  loaded <- load_pop(tmp)
+
+  expect_identical(saved, replacement)
+  expect_identical(loaded, replacement)
+})
+
 test_that("prepare_pop_for_save is a no-op for rstan", {
   pop_rstan <- make_mock_pop_for_io("rstan")
 
