@@ -729,27 +729,27 @@ assert_model_argument_value <- function(model, arg, value, x, stan_data){
     checkmate::assert_int(value, lower = 0, .var.name = arg)
   }
     else if (arg %in% c("eta_1_mu_hyper", "kappa_1_mu_hyper")){
-      if (x$use_conditional_model == 1){
+      if (isTRUE(x$use_conditional_model == 1)){
       checkmate::assert_numeric(value, len = stan_data$P, .var.name = arg)
       } else {
         checkmate::assert_numeric(value, len = 1, .var.name = arg)
       }
   } 
     else if (arg %in% c("eta_1_sigma_hyper", "kappa_1_sigma_hyper")){
-      if (x$use_conditional_model == 1){
+      if (isTRUE(x$use_conditional_model == 1)){
         checkmate::assert_numeric(value, lower = 0, len = stan_data$P, .var.name = arg)
       } else {
          checkmate::assert_numeric(value, lower = 0, len = 1, .var.name = arg)
       }
   }
     else if (arg %in% c("beta_sigma_1_mu_hyper")){
-      if (x$use_conditional_model == 1){
+      if (isTRUE(x$use_conditional_model == 1)){
         checkmate::assert_numeric(value, len = stan_data$H, .var.name = arg)
       } else {
         checkmate::assert_numeric(value, len = 1, .var.name = arg)
       }
   } else if (arg %in% c("beta_sigma_1_sigma_hyper")){
-    if (x$use_conditional_model == 1){
+    if (isTRUE(x$use_conditional_model == 1)){
         checkmate::assert_numeric(value, lower = 0, len = stan_data$H, .var.name = arg)
       } else {
         checkmate::assert_numeric(value, lower = 0, len = 1, .var.name = arg)
@@ -757,7 +757,7 @@ assert_model_argument_value <- function(model, arg, value, x, stan_data){
      
   } else if (arg %in% c("beta_mu_1_mu_hyper")) {
       if (model %in% c("model8k6")){
-        if (x$use_conditional_model == 1){
+        if (isTRUE(x$use_conditional_model == 1)){
           checkmate::assertMatrix(value, nrows = stan_data$H_cond, ncols = stan_data$P, mode = "numeric") 
         } else {
        checkmate::assertMatrix(value, nrows = 1, ncols = 1, mode = "numeric") 
@@ -765,7 +765,7 @@ assert_model_argument_value <- function(model, arg, value, x, stan_data){
       }
   } else if (arg %in% c("beta_mu_1_sigma_hyper")) {
       if (model %in% c("model8k6")){
-        if (x$use_conditional_model == 1){
+        if (isTRUE(x$use_conditional_model == 1)){
        checkmate::assertMatrix(value, nrows = stan_data$H_cond, ncols = stan_data$P, mode = "numeric") }
        else{
           checkmate::assertMatrix(value, nrows = 1, ncols = 1, mode = "numeric")
@@ -774,10 +774,10 @@ assert_model_argument_value <- function(model, arg, value, x, stan_data){
       checkmate::assert_number(value, lower = 0, .var.name = arg)
       }
   } else if (arg %in% c("houses_key")) {
-    if (x$use_conditional_model ==1){
+    if (isTRUE(x$use_conditional_model == 1)){
       checkmate::assert_integerish(value, .var.name = arg)
     } else {
-       checkmate::assert_list(value,  .var.name = arg, len = 0)
+       checkmate::assert_integerish(value,  .var.name = arg, len = 0)
     }
     
   }
