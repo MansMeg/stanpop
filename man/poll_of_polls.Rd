@@ -14,6 +14,7 @@ poll_of_polls(
   latent_time_ranges = NULL,
   hyper_parameters = NULL,
   slow_scales = NULL,
+  cond_state = NULL,
   ...,
   cache_dir = file.path(tempdir(), "pop_cache")
 )
@@ -36,6 +37,8 @@ poll_of_polls(
 \item{hyper_parameters}{hyperparameters to supply direct to the model}
 
 \item{slow_scales}{a vector of [Date]s that indicate breaks (right-inclusive) for a slower moving time scale.}
+
+\item{cond_state}{a list representation of a conditional state of the process, containing the hyperparameters and the active houses. This is used to fit a conditional Ada model.}
 
 \item{...}{further arguments to [rstan::stan()] function}
 

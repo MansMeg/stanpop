@@ -24,7 +24,8 @@ stan_polls_data(
   model_time_range = NULL,
   latent_time_ranges = NULL,
   hyper_parameters = NULL,
-  slow_scales = NULL
+  slow_scales = NULL,
+  cond_state = NULL
 )
 
 stan_polls_data_model2(x, y_name, time_scale = "week", model_time_range = NULL)
@@ -139,6 +140,8 @@ stan_polls_data_model8d(
 \item{slow_scales}{a vector of [Date]s that indicate breaks (right-inclusive) for a slower moving time scale.
 Example: If only 2010-01-15 is used, all dates up to and including 2010-01-15, will have s=1,
          Dates after 2010-01-15 will have s=2.}
+
+\item{cond_state}{a list representation of a conditional state of the process, containing the hyperparameters and the active houses. This is used to fit a conditional Ada model.}
 }
 \description{
 Generate Stan Data from [polls_data] objects
