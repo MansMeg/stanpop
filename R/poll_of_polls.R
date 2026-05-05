@@ -83,7 +83,8 @@ poll_of_polls <- function(y,
                        model_time_range = mtr,
                        latent_time_ranges = ltr,
                        hyper_parameters = hyper_parameters,
-                       slow_scales = slow_scales)
+                       slow_scales = slow_scales,
+                       cond_state = cond_state)
   checkmate::assert_set_equal(fun_args, names(sha_fun_args))
   sha_stan_args <- list(data = sd$stan_data, ...)
   sha <- digest::digest(c(sha_fun_args, sha_stan_args), algo = "sha1")
