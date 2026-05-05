@@ -40,6 +40,26 @@ functions {
     }
     return L;
   }
+  /**
+   * Return the inverse isometric log-ratio transform.
+   *
+   * @param y A vector of N - 1 isometric log-ratio coordinates.
+   * @param N The length of the transformed vector to return.
+   *
+   * @return A length N vector on the unconstrained log-proportion scale.
+   */
+  vector IRL_VP(vector y, int N) {
+    vector[N] x = zeros_vector(N);
+    real sum_w = 0;
+    for (n in 1:(N-1)) {
+      int i = N - n;
+      real w = y[i] * inv_sqrt(i * (i + 1));
+      sum_w += w;
+      x[i] += sum_w;
+      x[i + 1] -= w * i;
+    }
+    return x;
+  }
 
    /**
    * Return exp(logsumexp(eta) - eta)
@@ -327,7 +347,6 @@ transformed parameters {
   matrix[use_softmax ? 0 : T, use_softmax ? 0 : P] x_z = rep_matrix(0.0, use_softmax ? 0 : T, use_softmax ? 0 : P);
   matrix[use_softmax ? T : 0, use_softmax ? P : 0] eta_z = rep_matrix(0.0, use_softmax ? T : 0, use_softmax ? P : 0);
   matrix[use_softmax ? T : 0, use_softmax ? P : 0] eta = rep_matrix(0.0, use_softmax ? T : 0, use_softmax ? P : 0);
-  matrix[use_softmax ? T : 0, use_softmax ? Px : 0] eta_full = rep_matrix(0.0, use_softmax ? T : 0, use_softmax ? Px : 0);
   vector[use_constrained_party_kappa ? no_unknown_kappa : 0] kappa_sum_T_known_plus_1  = rep_vector(0, use_constrained_party_kappa ? no_unknown_kappa : 0);
   matrix[use_constrained_party_house_bias ? S : 0, use_constrained_party_house_bias ? H : 0] beta_mu_sum_H = rep_matrix(0, use_constrained_party_house_bias ? S : 0, use_constrained_party_house_bias ? H : 0);
   matrix[use_constrained_house_house_bias ? S : 0, use_constrained_house_house_bias ? P : 0] beta_mu_sum_P = rep_matrix(0, use_constrained_house_house_bias ? S : 0, use_constrained_house_house_bias ? P : 0);
@@ -383,10 +402,9 @@ transformed parameters {
       }
     }
 
-    //  Tranform eta to x through softmax
-    eta_full = append_col(eta, rep_matrix(0.0, T, 1));
+    //  Tranform eta to x through Isometric log-ratio transform (ILR)
     for(t in 1:T){
-      x[t, ] = to_row_vector(softmax(to_vector(eta_full[t, ])));
+      x[t, ] = to_row_vector(softmax(IRL_VP(to_vector(eta[t, ]), Px)));
     }
   } else {
     // Uses centered parametrization
