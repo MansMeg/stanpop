@@ -15,6 +15,7 @@ model_config <- function(model, x = NULL, stan_data = NULL){
   checkmate::assert_choice(model, supported_pop_models())
   if (is.null(x)) x <- list()
   checkmate::assert_list(x, null.ok = FALSE)
+  
   mp <- model_arguments(model)
   mc <- as.character(names(x))
   checkmate::assert_subset(mc, mp)
@@ -786,14 +787,14 @@ assert_model_argument_value <- function(model, arg, value, x, stan_data){
   }
 }
 
-assert_model_arguments <- function(x){
+assert_model_arguments <- function(x, model){
   checkmate::assert_list(x)
   spm <- supported_model_arguments()
   nms <- names(x)
   to_check <- nms %in% spm
 
   for(i in which(to_check)){
-    assert_model_argument_value(nms[i], value = x[[nms[i]]], x = x, stan_data = x)
+    assert_model_argument_value(model, nms[i], value = x[[nms[i]]], x = x, stan_data = x)
   }
 }
 

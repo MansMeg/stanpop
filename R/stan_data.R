@@ -769,7 +769,7 @@ assert_stan_data_model.model8b <- function(x){
   assert_stan_data_h_i(x)
   assert_stan_data_S(x)
   assert_stan_data_s_i(x)
-  assert_model_arguments(x)
+  assert_model_arguments(x, model = "model8b")
 }
 
 assert_stan_data_H <- function(x){
@@ -797,7 +797,7 @@ assert_stan_data_model.model8c <- function(x){
   assert_stan_data_h_i(x)
   assert_stan_data_S(x)
   assert_stan_data_s_i(x)
-  assert_model_arguments(x)
+  assert_model_arguments(x, model = "model8c")
 }
 
 
@@ -890,7 +890,7 @@ stan_polls_data_model8d <- function(x, y_name, time_scale = "week", known_state 
 assert_stan_data_model.model8d <- function(x){
   assert_stan_data_model.model6b(x)
   assert_stan_data_g(x)
-  assert_model_arguments(x$stan_data)
+  assert_model_arguments(x$stan_data, model = "model8d")
 }
 
 assert_stan_data_g <- function(x){
@@ -946,7 +946,7 @@ stan_polls_data_model8e <- function(x, y_name, time_scale = "week", known_state 
 assert_stan_data_model.model8e <- function(x){
   assert_stan_data_model.model6b(x)
   assert_stan_data_g(x)
-  assert_model_arguments(x$stan_data)
+  assert_model_arguments(x$stan_data, model = "model8e")
 }
 
 
@@ -1004,7 +1004,7 @@ assert_stan_data_model.model8f <- function(x){
   assert_stan_data_S(x)
   assert_stan_data_s_i(x)
   assert_stan_data_g_i_and_g_t(x)
-  assert_model_arguments(x)
+  assert_model_arguments(x, model = "model8f")
 }
 
 assert_stan_data_g_i_and_g_t <- function(x){
@@ -1133,7 +1133,7 @@ assert_stan_data_model.model8g <- function(x){
   assert_stan_data_s_i(x)
   assert_stan_data_s_t(x)
   assert_stan_data_g_i_and_g_t(x)
-  assert_model_arguments(x)
+  assert_model_arguments(x, model = "model8g")
 }
 
 assert_stan_data_s_t <- function(x){
@@ -1205,7 +1205,7 @@ assert_stan_data_model.model8i <- function(x){
   assert_stan_data_s_i(x)
   assert_stan_data_s_t(x)
   assert_stan_data_g_i_and_g_t(x)
-  assert_model_arguments(x)
+  assert_model_arguments(x, model = "model8i")
 }
 
 
@@ -1275,7 +1275,7 @@ stan_polls_data_model8k <- function(x, y_name, time_scale = "week", known_state 
 #' @export
 assert_stan_data_model.model8k <- function(x){
   assert_stan_data_model.model8i(x)
-  assert_model_arguments(x)
+  assert_model_arguments(x, model = "model8k")
 }
 
 #' Parse a data frame of observed x (t distributed)
@@ -1380,7 +1380,7 @@ stan_polls_data_model8l <- function(x, y_name, time_scale = "week", known_state 
 assert_stan_data_model.model8l <- function(x){
   assert_stan_data_model.model8i(x)
   checkmate::assert_integer(x$stan_data$election_period, lower = 0L, len = x$T)
-  assert_model_arguments(x)
+  assert_model_arguments(x, model = "model8l")
 }
 
 
@@ -1478,5 +1478,5 @@ assert_stan_data_model.model8m <- function(x){
   for(i in seq_along(x$stan_data$ep_inv_x)){
     checkmate::assert_numeric(x$stan_data$ep_inv_x[[i]], lower = 0, len = x$stan_data$P)
   }
-  assert_model_arguments(x)
+  assert_model_arguments(x, model = "model8m")
 }
