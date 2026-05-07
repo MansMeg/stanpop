@@ -1,4 +1,4 @@
-// Built from model 8j1
+// Built from model 8m4
 
 functions {
   /**
@@ -40,6 +40,39 @@ functions {
     }
     return L;
   }
+  /**
+   * Return the inverse isometric log-ratio transform.
+   *
+   * @param y A vector of N - 1 isometric log-ratio coordinates.
+   * @param N The length of the transformed vector to return.
+   *
+   * @return A length N vector on the unconstrained log-proportion scale.
+   */
+  vector ILR_VP(vector y, int N) {
+    vector[N] x = zeros_vector(N);
+    real sum_w = 0;
+    for (n in 1:(N-1)) {
+      int i = N - n;
+      real w = y[i] * inv_sqrt(i * (i + 1));
+      sum_w += w;
+      x[i] += sum_w;
+      x[i + 1] -= w * i;
+    }
+    return x;
+  }
+
+   /**
+   * Return exp(logsumexp(eta) - eta)
+   *
+   * @param eta a vector of values on the log scale
+   *
+   * @return a vector
+   */
+   vector exp_logsumexp_minus_eta(row_vector eta) {
+     real lse = log_sum_exp(append_col(eta, 0));
+     return (exp(lse - to_vector(eta)));
+   }
+
 }
 
 // The same model but more efficiently reparametrized
@@ -128,7 +161,8 @@ data {
   int<lower=0, upper=1> estimate_alpha_beta_sigma;
   array[1] real<lower=-1, upper=1> alpha_beta_sigma_known;
 
-  real<lower=0> sigma_kappa_hyper;
+  real<lower=0> sigma_kappa_hyper_sd;
+  real<lower=0> sigma_kappa_hyper_mean;
   real<lower=0> kappa_1_sigma_hyper;
   int<lower=0, upper=1> estimate_alpha_kappa;
   array[1] real<lower=-1, upper=1> alpha_kappa_known;
@@ -170,12 +204,23 @@ data {
   real<lower=0> alpha_beta_mu_sd;
   real alpha_beta_sigma_mean;
   real<lower=0> alpha_beta_sigma_sd;
+
+  // use_sigma_ep if 0, no election period effect, 1 one common sigma_ep, 2 one sigma_ep per party
+  int<lower=0, upper=2> use_sigma_ep; // Currently the prior is only handled for one sigma per party
+  array[T] int<lower=0> election_period; // indicator if by time point
+  real sigma_ep_mean; // prior mean for N+ prior
+  real<lower=0> sigma_ep_sd; // prior sd for N+ prior
+  vector[P] sigma_ep_mean_vector; // prior mean for N+ prior
+  vector<lower=0>[P] sigma_ep_sd_vector; // prior sd for N+ prior
+  int<lower=0> EP;
+  array[EP] vector[P] ep_inv_x;
 }
 
 transformed data {
   // Compute hyperparameter based on time_scale_length
   real<lower=0, upper=1> sigma_x_hyper = 0.25 * sqrt(time_scale_length / 30);
   int<lower=0, upper=P> no_sigma_xc = 0;
+  int<lower=0, upper=P> no_sigma_ep = 0;
   array[T] real<lower=0> gs_t;
   array[N] real<lower=0> gs_i;
   int Px = P;
@@ -184,6 +229,7 @@ transformed data {
   int t_start_all = min(t_start); // starting point for latent state
   int t_end_all = max(t_end); // end point of latent state
   int no_Omega = 1;
+  int no_Omega_ep = 0;
   array[T] int s_t_Omega = rep_array(1, T); // map between time point and corr matrix
   matrix[P,P] Omega_identity = diag_matrix(rep_vector(1.0, P));
   int use_multivariate_model = 0;
@@ -198,6 +244,11 @@ transformed data {
 
   if(use_multivariate_version > 0)
     use_multivariate_model = 1;
+
+  if(use_sigma_ep == 1)
+    no_sigma_ep = 1;
+  if(use_sigma_ep == 2)
+    no_sigma_ep = P;
 
   if(use_softmax){
     // Compute known eta
@@ -219,6 +270,9 @@ transformed data {
     no_Omega = S;
     s_t_Omega = s_t;
   }
+  if(use_sigma_ep > 0)
+    no_Omega_ep = 1;
+
   if(use_multivariate_version < 3){
     use_cholesky_factor_corr = 1;
   }
@@ -265,6 +319,7 @@ parameters {
   matrix[use_softmax ? T - T_known : 0, use_softmax ? P : 0] eta_z_unknown; // unknown states (proportions)
   vector<lower=0>[P] sigma_x; // dynamic movement
   array[no_sigma_xc] real<lower=0> sigma_xc;
+  vector<lower=0>[no_sigma_ep] sigma_ep;
   matrix[use_industry_bias ? no_unknown_kappa : 0, use_industry_bias ? P : 0] kappa_raw; // Industry bias
   vector<lower=0>[use_industry_bias ? P : 0] sigma_kappa; // Industry bias effect
   array[use_house_bias ? S : 0, use_house_bias ? H : 0, use_house_bias ? P : 0] real beta_mu;
@@ -292,7 +347,6 @@ transformed parameters {
   matrix[use_softmax ? 0 : T, use_softmax ? 0 : P] x_z = rep_matrix(0.0, use_softmax ? 0 : T, use_softmax ? 0 : P);
   matrix[use_softmax ? T : 0, use_softmax ? P : 0] eta_z = rep_matrix(0.0, use_softmax ? T : 0, use_softmax ? P : 0);
   matrix[use_softmax ? T : 0, use_softmax ? P : 0] eta = rep_matrix(0.0, use_softmax ? T : 0, use_softmax ? P : 0);
-  matrix[use_softmax ? T : 0, use_softmax ? Px : 0] eta_full = rep_matrix(0.0, use_softmax ? T : 0, use_softmax ? Px : 0);
   vector[use_constrained_party_kappa ? no_unknown_kappa : 0] kappa_sum_T_known_plus_1  = rep_vector(0, use_constrained_party_kappa ? no_unknown_kappa : 0);
   matrix[use_constrained_party_house_bias ? S : 0, use_constrained_party_house_bias ? H : 0] beta_mu_sum_H = rep_matrix(0, use_constrained_party_house_bias ? S : 0, use_constrained_party_house_bias ? H : 0);
   matrix[use_constrained_house_house_bias ? S : 0, use_constrained_house_house_bias ? P : 0] beta_mu_sum_P = rep_matrix(0, use_constrained_house_house_bias ? S : 0, use_constrained_house_house_bias ? P : 0);
@@ -303,6 +357,7 @@ transformed parameters {
   vector<lower=1>[use_t_dist_industry_bias ? 1 : 0] nu_kappa = rep_vector(2, use_t_dist_industry_bias ? 1 : 0);
   matrix<lower=0>[use_jump_process ? T : 0, use_jump_process ? P : 0] V;
   array[no_Omega] cholesky_factor_cov[use_multivariate_model ? P : 0] L_Sigma;
+  array[no_Omega_ep] cholesky_factor_cov[use_multivariate_model ? P : 0] L_Sigma_ep; // Temp variable (overwritten)
 
   // setup multivariate L_Sigma
   for(i in 1:no_Omega){
@@ -323,16 +378,33 @@ transformed parameters {
     eta[1,] = t1_prior_mu + t1_prior_sigma .* eta_z[1,];
     for(t in t_start_all:t_end_all){
       if(x_t_is_known[t]){ // then eta_z_t is also known (see derivation)
-        eta_z[t,] = to_row_vector((inverse(L_Sigma[s_t_Omega[t]]) / step_scale_t[t]) * to_vector((eta[t,] - eta[t-1,])));
+        if(election_period[t] > 0){
+          if(use_sigma_ep == 1)
+            L_Sigma_ep[1] = diag_pre_multiply((ep_inv_x[election_period[t]] * sigma_ep[1] + sigma_x), L_Omega_x[s_t_Omega[t]]);
+          if(use_sigma_ep == 2)
+            L_Sigma_ep[1] = diag_pre_multiply((ep_inv_x[election_period[t]] .* sigma_ep + sigma_x), L_Omega_x[s_t_Omega[t]]);
+
+          eta_z[t,] = to_row_vector((inverse(L_Sigma_ep[1]) / step_scale_t[t]) * to_vector((eta[t,] - eta[t-1,])));
+        } else {
+          eta_z[t,] = to_row_vector((inverse(L_Sigma[s_t_Omega[t]]) / step_scale_t[t]) * to_vector((eta[t,] - eta[t-1,])));
+        }
       } else {
-        eta[t,] = eta[t-1,] + step_scale_t[t] * to_row_vector(L_Sigma[s_t_Omega[t]] * to_vector(eta_z[t,]));
+        if(election_period[t] > 0){
+          if(use_sigma_ep == 1)
+            L_Sigma_ep[1] = diag_pre_multiply((ep_inv_x[election_period[t]] * sigma_ep[1] + sigma_x), L_Omega_x[s_t_Omega[t]]);
+          if(use_sigma_ep == 2)
+            L_Sigma_ep[1] = diag_pre_multiply((ep_inv_x[election_period[t]] .* sigma_ep + sigma_x), L_Omega_x[s_t_Omega[t]]);
+
+          eta[t,] = eta[t-1,] + step_scale_t[t] * to_row_vector(L_Sigma_ep[1] * to_vector(eta_z[t,]));
+        } else {
+          eta[t,] = eta[t-1,] + step_scale_t[t] * to_row_vector(L_Sigma[s_t_Omega[t]] * to_vector(eta_z[t,]));
+        }
       }
     }
 
-    //  Tranform eta to x through softmax
-    eta_full = append_col(eta, rep_matrix(0.0, T, 1));
+    //  Tranform eta to x through Isometric log-ratio transform (ILR)
     for(t in 1:T){
-      x[t, ] = to_row_vector(softmax(to_vector(eta_full[t, ])));
+      x[t, ] = to_row_vector(softmax(ILR_VP(to_vector(eta[t, ]), Px)));
     }
   } else {
     // Uses centered parametrization
@@ -487,6 +559,14 @@ model {
 
   // sigma_x ~ normal(0, sigma_x_hyper);
   target += normal_lpdf(sigma_x | 0, sigma_x_hyper);
+  if(use_sigma_ep == 2){
+    for(p in 1:P){
+      target += normal_lpdf(sigma_ep[p] | sigma_ep_mean_vector[p], sigma_ep_sd_vector[p]);
+    }
+  } else {
+    target += normal_lpdf(sigma_ep | sigma_ep_mean, sigma_ep_sd);
+  }
+
 
   // latent state dynamics
   if(use_softmax){
@@ -514,7 +594,7 @@ model {
       for(j in 1:no_unknown_kappa) {
         target += std_normal_lpdf(kappa_raw[j, p]);
       }
-      target += normal_lpdf(sigma_kappa[p] | 0, sigma_kappa_hyper);
+      target += normal_lpdf(sigma_kappa[p] | sigma_kappa_hyper_mean, sigma_kappa_hyper_sd);
     }
   }
 
