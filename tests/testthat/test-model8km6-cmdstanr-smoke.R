@@ -6,9 +6,7 @@ if(FALSE){ # For debugging
 }
 
 expect_model8_cmdstanr_smoke <- function(model, hyper_parameters, draws = 5L) {
-  skip_if_no_stan_tests()
   skip_if_no_cmdstanr_tests()
-  skip_if_no_cmdstanr()
 
   case <- make_model8_mixed_smoke_case(npolls = 8)
   known_date <- case$known_state$date[1]
