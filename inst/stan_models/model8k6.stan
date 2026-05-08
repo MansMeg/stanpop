@@ -40,6 +40,50 @@ functions {
     }
     return L;
   }
+  /**
+   * Return the inverse isometric log-ratio transform.
+   *
+   * @param y A vector of N - 1 isometric log-ratio coordinates.
+   * @param N The length of the transformed vector to return.
+   *
+   * @return A length N vector on the unconstrained log-proportion scale.
+   */
+  vector ILR_VP_inv(vector y) {
+    int N = num_elements(y);
+    vector[N + 1] x = zeros_vector(N + 1);
+    real sum_w = 0;
+    for (n in 1:N) {
+      int i = N - n + 1;
+      real w = y[i] * inv_sqrt(i * (i + 1));
+      sum_w += w;
+      x[i] += sum_w;
+      x[i + 1] -= w * i;
+    }
+    return x;
+  }
+
+  /**
+   * Return the isometric log-ratio transform.
+   *
+   * @param x A length N vector on the unconstrained log-proportion scale.
+   *
+   * @return A vector of N - 1 isometric log-ratio coordinates.
+   */
+  vector ILR_VP(vector x) {
+    int N = num_elements(x) - 1;
+    vector[N] y;
+    y[N] = -x[N+1] * sqrt(1 + 1. / N);
+    real sum_w = 0;
+    for (n in 1:(N-1)) {
+      int i = N - n;
+      int i_p_1 = i + 1;
+      real w = y[i_p_1] * inv_sqrt(i_p_1 * (i_p_1 + 1));
+      sum_w += w;
+      y[i] = (sum_w - x[i_p_1]) * sqrt(i_p_1 * i) / i;
+    }
+    return y;
+  }
+
 }
 
 // The same model but more efficiently reparametrized
@@ -211,8 +255,7 @@ transformed data {
     // Compute known eta and normalize with last value of x_known
     // this create a softmax known value with other being a reference at 0
     for(t in 1:T_known)
-      for(p in 1:P)
-        eta_known[t,p] = log(x_known[t,p]) - log(x_known_other[t]);
+        eta_known[t,] = to_row_vector(ILR_VP(log(to_vector(append_col(x_known[t,], x_known_other[t])))));
   }
 
   if(use_multivariate_version > 1){
@@ -292,7 +335,6 @@ transformed parameters {
   matrix[use_softmax ? 0 : T, use_softmax ? 0 : P] x_z = rep_matrix(0.0, use_softmax ? 0 : T, use_softmax ? 0 : P);
   matrix[use_softmax ? T : 0, use_softmax ? P : 0] eta_z = rep_matrix(0.0, use_softmax ? T : 0, use_softmax ? P : 0);
   matrix[use_softmax ? T : 0, use_softmax ? P : 0] eta = rep_matrix(0.0, use_softmax ? T : 0, use_softmax ? P : 0);
-  matrix[use_softmax ? T : 0, use_softmax ? Px : 0] eta_full = rep_matrix(0.0, use_softmax ? T : 0, use_softmax ? Px : 0);
   vector[use_constrained_party_kappa ? no_unknown_kappa : 0] kappa_sum_T_known_plus_1  = rep_vector(0, use_constrained_party_kappa ? no_unknown_kappa : 0);
   matrix[use_constrained_party_house_bias ? S : 0, use_constrained_party_house_bias ? H : 0] beta_mu_sum_H = rep_matrix(0, use_constrained_party_house_bias ? S : 0, use_constrained_party_house_bias ? H : 0);
   matrix[use_constrained_house_house_bias ? S : 0, use_constrained_house_house_bias ? P : 0] beta_mu_sum_P = rep_matrix(0, use_constrained_house_house_bias ? S : 0, use_constrained_house_house_bias ? P : 0);
@@ -329,10 +371,9 @@ transformed parameters {
       }
     }
 
-    //  Tranform eta to x through softmax
-    eta_full = append_col(eta, rep_matrix(0.0, T, 1));
+    //  Tranform eta to x through Isometric log-ratio transform (ILR)
     for(t in 1:T){
-      x[t, ] = to_row_vector(softmax(to_vector(eta_full[t, ])));
+      x[t, ] = to_row_vector(softmax(ILR_VP_inv(to_vector(eta[t, ]))));
     }
   } else {
     // Uses centered parametrization
