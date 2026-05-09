@@ -17,7 +17,7 @@ sampler.}
 Invisibly returns `TRUE` when validation succeeds.
 }
 \description{
-Checks sampler arguments before a backend fit starts. Currently this rejects
-RStan-only argument names when `backend = "cmdstanr"` so callers supply
-CmdStanR sample arguments directly.
+Checks sampler arguments before a backend fit starts. This rejects common
+argument names from the other Stan backend so callers supply arguments in
+the style expected by the selected backend.
 }

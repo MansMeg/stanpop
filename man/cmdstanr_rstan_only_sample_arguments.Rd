@@ -13,7 +13,7 @@ Character vector of unsupported RStan-style argument names for
 \description{
 Returns the centrally owned list of RStan-style sampler argument names that
 [validate_backend_sample_arguments()] rejects when `backend = "cmdstanr"`.
-Downstream runners should call [validate_backend_sample_arguments()] rather
+Users should call [validate_backend_sample_arguments()] rather
 than duplicating this list.
 }
 \keyword{internal}
