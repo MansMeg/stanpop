@@ -199,6 +199,53 @@ test_that("poll_of_polls rejects rstan-only arguments for cmdstanr", {
   )
 })
 
+test_that("poll_of_polls allows rstan-only arguments for rstan", {
+  case <- make_model8_mixed_smoke_case(npolls = 5)
+  sampled <- NULL
+  mock_fit <- structure(list(), class = "mock_stan_fit")
+
+  testthat::local_mocked_bindings(
+    backend_sample = function(backend, sample_arguments, ...) {
+      sampled <<- list(
+        backend = backend,
+        sample_arguments = sample_arguments
+      )
+      mock_fit
+    },
+    backend_capture_warm_start_state = function(...) NULL,
+    compute_diagnostics = function(...) list(),
+    .package = "stanpop"
+  )
+
+  pop <- NULL
+  expect_silent(
+    pop <- suppressWarnings(
+      suppressMessages(
+        poll_of_polls(
+          y = case$parties,
+          model = "model8k5",
+          polls_data = case$polls_data,
+          time_scale = case$time_scale,
+          time_scale_overrides = case$time_scale_overrides,
+          known_state = case$known_state,
+          backend = "rstan",
+          iter = 1,
+          warmup = 0,
+          chains = 1,
+          control = list(adapt_delta = 0.9),
+          refresh = 0,
+          cache_dir = NULL
+        )
+      )
+    )
+  )
+
+  expect_s3_class(pop, "poll_of_polls")
+  expect_identical(sampled$backend, "rstan")
+  expect_identical(sampled$sample_arguments$warmup, 0)
+  expect_identical(sampled$sample_arguments$control, list(adapt_delta = 0.9))
+})
+
 test_that("poll_of_polls rejects time_scale_overrides for models without step_scale_t", {
   case <- make_model8_mixed_smoke_case(npolls = 5)
 
