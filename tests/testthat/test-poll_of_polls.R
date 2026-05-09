@@ -246,6 +246,29 @@ test_that("poll_of_polls allows rstan-only arguments for rstan", {
   expect_identical(sampled$sample_arguments$control, list(adapt_delta = 0.9))
 })
 
+test_that("poll_of_polls rejects cmdstanr-style arguments for rstan", {
+  case <- make_model8_mixed_smoke_case(npolls = 5)
+
+  expect_error(
+    suppressWarnings(
+      poll_of_polls(
+        y = case$parties,
+        model = "model8k5",
+        polls_data = case$polls_data,
+        time_scale = case$time_scale,
+        time_scale_overrides = case$time_scale_overrides,
+        known_state = case$known_state,
+        backend = "rstan",
+        iter_warmup = 1,
+        iter_sampling = 1,
+        parallel_chains = 1,
+        cache_dir = NULL
+      )
+    ),
+    regexp = "Unsupported CmdStanR-style arguments"
+  )
+})
+
 test_that("poll_of_polls rejects time_scale_overrides for models without step_scale_t", {
   case <- make_model8_mixed_smoke_case(npolls = 5)
 
