@@ -12,6 +12,70 @@ assert_pop_backend <- function(backend){
   checkmate::assert_choice(backend, choices = supported_pop_backends())
 }
 
+#' RStan-only sampler arguments rejected for CmdStanR
+#'
+#' @description
+#' Returns the centrally owned list of RStan-style sampler argument names that
+#' [validate_backend_sample_arguments()] rejects when `backend = "cmdstanr"`.
+#' Users should call [validate_backend_sample_arguments()] rather
+#' than duplicating this list.
+#'
+#' @return Character vector of unsupported RStan-style argument names for
+#'   CmdStanR sampling.
+#'
+#' @keywords internal
+cmdstanr_rstan_only_sample_arguments <- function() {
+  c(
+    "file",
+    "model_name",
+    "control",
+    "iter",
+    "warmup",
+    "cores",
+    "algorithm",
+    "init_r"
+  )
+}
+
+#' Validate backend-specific sampler arguments
+#'
+#' @description
+#' Checks sampler arguments before a backend fit starts. Currently this rejects
+#' RStan-only argument names when `backend = "cmdstanr"` so callers supply
+#' CmdStanR sample arguments directly.
+#'
+#' @param backend Stan backend to validate against. Supported values are
+#'   [rstan] and [cmdstanr].
+#' @param sample_arguments A list of arguments intended for the backend
+#'   sampler.
+#'
+#' @return Invisibly returns `TRUE` when validation succeeds.
+#'
+#' @export
+validate_backend_sample_arguments <- function(backend, sample_arguments) {
+  assert_pop_backend(backend)
+  checkmate::assert_list(sample_arguments, null.ok = TRUE)
+  if(is.null(sample_arguments)) sample_arguments <- list()
+
+  if(backend == "cmdstanr"){
+    found_rstan_only_args <- intersect(
+      names(sample_arguments),
+      cmdstanr_rstan_only_sample_arguments()
+    )
+    if(length(found_rstan_only_args) > 0){
+      stop(
+        "With backend = 'cmdstanr', supply CmdStanR sample arguments directly in '...'. ",
+        "Unsupported RStan-style arguments: ",
+        paste0(found_rstan_only_args, collapse = ", "),
+        ". Use e.g. 'iter_warmup', 'iter_sampling', 'parallel_chains', and 'compile_args'.",
+        call. = FALSE
+      )
+    }
+  }
+
+  invisible(TRUE)
+}
+
 backend_default <- function(x, default) {
   if(is.null(x)) default else x
 }
