@@ -37,12 +37,55 @@ cmdstanr_rstan_only_sample_arguments <- function() {
   )
 }
 
+#' CmdStanR-style sampler arguments rejected for RStan
+#'
+#' @description
+#' Returns the centrally owned list of CmdStanR-style sampler argument names
+#' that [validate_backend_sample_arguments()] rejects when `backend = "rstan"`.
+#' Users should call [validate_backend_sample_arguments()] rather
+#' than duplicating this list.
+#'
+#' @return Character vector of unsupported CmdStanR-style argument names for
+#'   RStan sampling.
+#'
+#' @keywords internal
+rstan_cmdstanr_only_sample_arguments <- function() {
+  c(
+    "save_latent_dynamics",
+    "output_dir",
+    "output_basename",
+    "sig_figs",
+    "parallel_chains",
+    "chain_ids",
+    "threads_per_chain",
+    "opencl_ids",
+    "iter_warmup",
+    "iter_sampling",
+    "max_treedepth",
+    "adapt_engaged",
+    "adapt_delta",
+    "step_size",
+    "metric",
+    "metric_file",
+    "inv_metric",
+    "init_buffer",
+    "term_buffer",
+    "window",
+    "fixed_param",
+    "show_messages",
+    "show_exceptions",
+    "diagnostics",
+    "save_metric",
+    "save_cmdstan_config"
+  )
+}
+
 #' Validate backend-specific sampler arguments
 #'
 #' @description
-#' Checks sampler arguments before a backend fit starts. Currently this rejects
-#' RStan-only argument names when `backend = "cmdstanr"` so callers supply
-#' CmdStanR sample arguments directly.
+#' Checks sampler arguments before a backend fit starts. This rejects common
+#' argument names from the other Stan backend so callers supply arguments in
+#' the style expected by the selected backend.
 #'
 #' @param backend Stan backend to validate against. Supported values are
 #'   [rstan] and [cmdstanr].
@@ -68,6 +111,21 @@ validate_backend_sample_arguments <- function(backend, sample_arguments) {
         "Unsupported RStan-style arguments: ",
         paste0(found_rstan_only_args, collapse = ", "),
         ". Use e.g. 'iter_warmup', 'iter_sampling', 'parallel_chains', and 'compile_args'.",
+        call. = FALSE
+      )
+    }
+  }
+  if(backend == "rstan"){
+    found_cmdstanr_only_args <- intersect(
+      names(sample_arguments),
+      rstan_cmdstanr_only_sample_arguments()
+    )
+    if(length(found_cmdstanr_only_args) > 0){
+      stop(
+        "With backend = 'rstan', supply RStan sample arguments directly in '...'. ",
+        "Unsupported CmdStanR-style arguments: ",
+        paste0(found_cmdstanr_only_args, collapse = ", "),
+        ". Use e.g. 'iter', 'warmup', 'chains', 'cores', and 'control'.",
         call. = FALSE
       )
     }
