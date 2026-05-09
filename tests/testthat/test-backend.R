@@ -1,5 +1,80 @@
 context("backend")
 
+test_that("validate_backend_sample_arguments rejects rstan-only arguments for cmdstanr", {
+  expected_message <- paste0(
+    "With backend = 'cmdstanr', supply CmdStanR sample arguments directly in '...'. ",
+    "Unsupported RStan-style arguments: warmup, control. ",
+    "Use e.g. 'iter_warmup', 'iter_sampling', 'parallel_chains', and 'compile_args'."
+  )
+
+  err <- tryCatch(
+    validate_backend_sample_arguments(
+      backend = "cmdstanr",
+      sample_arguments = list(warmup = 0, control = list(adapt_delta = 0.9))
+    ),
+    error = identity
+  )
+
+  expect_s3_class(err, "error")
+  expect_identical(conditionMessage(err), expected_message)
+})
+
+test_that("validate_backend_sample_arguments accepts cmdstanr-style sample arguments", {
+  expect_silent(
+    validate_backend_sample_arguments(
+      backend = "cmdstanr",
+      sample_arguments = list(
+        iter_warmup = 100,
+        iter_sampling = 200,
+        parallel_chains = 2,
+        adapt_delta = 0.9,
+        max_treedepth = 12
+      )
+    )
+  )
+})
+
+test_that("validate_backend_sample_arguments rejects cmdstanr-style arguments for rstan", {
+  expected_message <- paste0(
+    "With backend = 'rstan', supply RStan sample arguments directly in '...'. ",
+    "Unsupported CmdStanR-style arguments: iter_warmup, iter_sampling, ",
+    "parallel_chains, adapt_delta, max_treedepth. ",
+    "Use e.g. 'iter', 'warmup', 'chains', 'cores', and 'control'."
+  )
+
+  err <- tryCatch(
+    validate_backend_sample_arguments(
+      backend = "rstan",
+      sample_arguments = list(
+        iter_warmup = 100,
+        iter_sampling = 200,
+        parallel_chains = 2,
+        adapt_delta = 0.9,
+        max_treedepth = 12
+      )
+    ),
+    error = identity
+  )
+
+  expect_s3_class(err, "error")
+  expect_identical(conditionMessage(err), expected_message)
+})
+
+test_that("validate_backend_sample_arguments leaves rstan arguments to rstan", {
+  expect_silent(
+    validate_backend_sample_arguments(
+      backend = "rstan",
+      sample_arguments = list(
+        iter = 100,
+        warmup = 0,
+        chains = 2,
+        cores = 2,
+        control = list(adapt_delta = 0.9, max_treedepth = 12)
+      )
+    )
+  )
+})
+
 backend_draws_fixture_path <- function(backend) {
   testthat::test_path("files", paste0("test_pop_v0_7_3_", backend, ".rds"))
 }

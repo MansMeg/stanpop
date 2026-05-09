@@ -156,20 +156,7 @@ poll_of_polls <- function(y,
   stan_arguments <- list(...)
   if(!is.null(backend_arguments$data)) warning("The 'data' argument has been overwritten")
   backend_arguments$data <- sd$stan_data
-  if(backend == "cmdstanr"){
-    cmdstanr_rstan_only_args <- c("file", "model_name", "control", "iter", "warmup",
-                                  "cores", "algorithm", "init_r")
-    found_rstan_only_args <- intersect(names(backend_arguments), cmdstanr_rstan_only_args)
-    if(length(found_rstan_only_args) > 0){
-      stop(
-        "With backend = 'cmdstanr', supply CmdStanR sample arguments directly in '...'. ",
-        "Unsupported RStan-style arguments: ",
-        paste0(found_rstan_only_args, collapse = ", "),
-        ". Use e.g. 'iter_warmup', 'iter_sampling', 'parallel_chains', and 'compile_args'.",
-        call. = FALSE
-      )
-    }
-  }
+  validate_backend_sample_arguments(backend, backend_arguments)
   if(backend == "rstan" && !is.null(compile_args) && length(compile_args) > 0){
     warning("'compile_args' is ignored when backend = 'rstan'.", call. = FALSE)
   }
