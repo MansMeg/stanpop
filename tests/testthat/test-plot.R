@@ -102,6 +102,15 @@ expect_known_state_overlay_equivalent <- function(backend) {
   expect_equal(pop_build$data, df_build$data, tolerance = 0)
 }
 
+test_that("latent-state display dates can use period-start anchor dates", {
+  latent_state_display_dates <- get_internal("latent_state_display_dates")
+  tl <- time_line(time_range(c("2014-09-01", "2014-09-21")), time_scale = "week")
+
+  display_dates <- latent_state_display_dates(tl, position = "period_start")
+
+  expect_equal(unname(display_dates), tl$time_line$date, tolerance = 0)
+})
+
 test_that("plot works for polls data object", {
   skip("TODO: Test that there is a warning if not the whole latent state is plotted that also propose how to change time_range to show the whole LS")
 })
