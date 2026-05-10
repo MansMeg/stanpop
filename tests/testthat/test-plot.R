@@ -119,6 +119,47 @@ test_that("latent-state period-end display dates handle weekly timelines", {
 
   expect_equal(unname(display_dates), tl$time_line$date + lubridate::days(6), tolerance = 0)
 })
+
+test_that("latent-state period-end display dates handle mixed weekly and daily timelines", {
+  latent_state_display_dates <- get_internal("latent_state_display_dates")
+  time_line_with_overrides <- get_internal("time_line_with_overrides")
+  election_date <- as.Date("2014-09-14")
+  tl <- time_line_with_overrides(
+    model_time_range = time_range(c("2014-08-01", "2014-10-01")),
+    time_scale = "week",
+    time_scale_overrides = data.frame(
+      from = election_date,
+      to = election_date,
+      time_scale = "day"
+    )
+  )
+
+  expected_display_dates_end <- as.Date(
+    c("2014-08-03", "2014-08-10", "2014-08-17",
+      "2014-08-24", "2014-08-31", "2014-09-07",
+      "2014-09-13", "2014-09-14", "2014-09-21",
+      "2014-09-28", "2014-10-01"))
+
+  daily_row <- tl$daily[tl$daily$date == election_date, , drop = FALSE]
+  expect_equal(daily_row$time_scale, "day")
+
+  display_dates <- latent_state_display_dates(tl, position = "period_end")
+  daily_t <- unique(daily_row$time_line_t)
+  weekly_t <- unique(tl$daily$time_line_t[tl$daily$date == election_date - 1L])
+
+  expect_equal(tl$time_line$date[match(daily_t, tl$time_line$t)], election_date, tolerance = 0)
+  expect_equal(unname(display_dates[as.character(daily_t)]), election_date, tolerance = 0)
+  expect_false((election_date + lubridate::days(6)) %in% unname(display_dates))
+
+  expect_equal(
+    unname(display_dates[as.character(weekly_t)]),
+    election_date - lubridate::days(1),
+    tolerance = 0
+  )
+
+  expect_equal(as.character(unname(display_dates)), as.character(expected_display_dates_end))
+})
+
 test_that("plot works for polls data object", {
   skip("TODO: Test that there is a warning if not the whole latent state is plotted that also propose how to change time_range to show the whole LS")
 })
