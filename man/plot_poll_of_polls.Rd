@@ -44,8 +44,8 @@ geom_pop_line(x, y, ...)
 \item{include_latent_state}{include latent state in plot}
 
 \item{latent_date_position}{Where to display latent-state dates.
-\code{"period_start"} uses the latent anchor/start dates stored in the timeline.
-\code{"period_end"} uses the last daily date mapped to each latent time point,
+`"period_start"` uses the latent anchor/start dates stored in the timeline.
+`"period_end"` uses the last daily date mapped to each latent time point,
 which is aware of mixed time-scale timelines.}
 
 \item{...}{further arguments to [geom_line]}

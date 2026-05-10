@@ -12,12 +12,12 @@ latent_state_display_dates(
 \arguments{
 \item{time_line}{A [time_line] object.}
 
-\item{position}{Where to display latent-state dates. \code{"period_start"} uses
-the latent anchor/start dates stored in [time_line]. \code{"period_end"} uses
+\item{position}{Where to display latent-state dates. `"period_start"` uses
+the latent anchor/start dates stored in [time_line]. `"period_end"` uses
 the last daily date mapped to each latent time point.}
 }
 \value{
-A named \code{Date} vector, with names corresponding to latent \code{t} values.
+A named `Date` vector, with names corresponding to latent `t` values.
 }
 \description{
 Compute the calendar dates used to display latent-state points in plots.
@@ -25,6 +25,6 @@ Period-start display uses the latent anchor/start dates stored in the
 [time_line] object.
 Period-end display uses the last daily date mapped to each latent time point,
 which makes the result aware of mixed time-scale timelines created by
-\code{time_scale_overrides}.
+`time_scale_overrides`.
 }
 \keyword{internal}
