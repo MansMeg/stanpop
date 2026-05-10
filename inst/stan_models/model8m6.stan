@@ -72,14 +72,10 @@ functions {
   vector ILR_VP(vector x) {
     int N = num_elements(x) - 1;
     vector[N] y;
-    y[N] = -x[N+1] * sqrt(1 + 1. / N);
     real sum_w = 0;
-    for (n in 1:(N-1)) {
-      int i = N - n;
-      int i_p_1 = i + 1;
-      real w = y[i_p_1] * inv_sqrt(i_p_1 * (i_p_1 + 1));
-      sum_w += w;
-      y[i] = (sum_w - x[i_p_1]) * sqrt(i_p_1 * i) / i;
+    for (i in 1:N) {
+      sum_w += x[i];
+      y[i] = inv_sqrt(i * (i + 1)) * (sum_w - i * x[i + 1]);
     }
     return y;
   }
