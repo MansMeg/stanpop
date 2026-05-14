@@ -126,7 +126,7 @@ use_override_aware_stan_data_by_default <- function(model) {
 
 model_supports_time_scale_overrides <- function(model) {
   checkmate::assert_string(model)
-  grepl(pattern = "^model8[km][56]$", x = model)
+  grepl(pattern = "^model8k[56]$|^model8m(5|6|10)$", x = model)
 }
 
 

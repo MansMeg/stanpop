@@ -311,7 +311,7 @@ model_arguments <- function(model){
              "use_obs_of_x", "R", "obs_of_x_t", "obs_of_x_p", "obs_of_x_mu", "obs_of_x_sigma", "obs_of_x_nu",
              "use_sigma_ep", "election_period", "sigma_ep_mean", "sigma_ep_sd"
     ))
-  } else if(grepl(model, pattern = "^model8m1")) {
+  } else if(grepl(model, pattern = "^model8m1$")) {
     return(c("sigma_kappa_hyper", "kappa_1_sigma_hyper",
              "g_scale",
              "use_industry_bias", "use_house_bias", "use_design_effects",
@@ -369,7 +369,7 @@ model_arguments <- function(model){
              "use_sigma_ep", "election_period", "sigma_ep_mean", "sigma_ep_sd",
              "EP", "ep_inv_x"
     ))
-  } else if(grepl(model, pattern = "^model8m[3-9]$")) {
+  } else if(grepl(model, pattern = "^model8m([3-9]|10)$")) {
     return(c("sigma_kappa_hyper_sd", "sigma_kappa_hyper_mean", "kappa_1_sigma_hyper",
              "g_scale",
              "use_industry_bias", "use_house_bias", "use_design_effects",
