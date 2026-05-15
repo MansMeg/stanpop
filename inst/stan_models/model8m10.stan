@@ -275,8 +275,8 @@ data {
   int<lower=0, upper=3> structural_bridge_type;
 
   // Whether the bridge applies at latent time t. This should be 1 only for
-  // unknown latent states inside the bridge window. Known states should always
-  // be 0.
+  // unknown latent states in the inclusive global bridge window. Known states
+  // should always be 0.
   array[T] int<lower=0, upper=1> structural_bridge_active_t;
 
   // Number of parties receiving direct x-scale drift. Use 1 as the no-bridge
@@ -298,8 +298,8 @@ data {
   // Bridge-specific row scaling of the Cholesky factor during active bridge
   // steps. If lambda_p < 1, the bridge is tighter for eta coordinate p. If
   // lambda_p = 1, the bridge uses the ordinary latent innovation variance. If
-  // lambda_p > 1, the bridge is softer.
-  vector<lower=0>[P] structural_bridge_sigma_scale;
+  // lambda_p > 1, the bridge is softer. Values must be strictly positive.
+  vector<lower=1e-12>[P] structural_bridge_sigma_scale;
 }
 
 transformed data {
