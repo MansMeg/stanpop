@@ -239,6 +239,35 @@ test_that("structural bridge parser applies drift after from and through to", {
   expect_identical(res$structural_bridge_active_t[to_t], 1L)
 })
 
+test_that("structural bridge parser normalizes named list x-drift input", {
+  parse_structural_bridge <- get_internal("parse_structural_bridge")
+  case <- make_bridge_parser_case()
+  common_hp <- list(
+    structural_bridge_window = c(as.Date("2026-06-04"), as.Date("2026-06-08"))
+  )
+  list_hp <- c(common_hp, list(
+    structural_bridge_x_drift = list(
+      y = c("L", "C"),
+      from_x = c(0.026, 0.049),
+      to_x = c(0.044, 0.054)
+    )
+  ))
+  data_frame_hp <- c(common_hp, list(
+    structural_bridge_x_drift = data.frame(
+      y = c("L", "C"),
+      from_x = c(0.026, 0.049),
+      to_x = c(0.044, 0.054)
+    )
+  ))
+
+  list_res <- parse_structural_bridge(list_hp, case$time_line, case$y_name, case$stan_data)
+  data_frame_res <- parse_structural_bridge(data_frame_hp, case$time_line, case$y_name, case$stan_data)
+
+  expect_identical(list_res$structural_bridge_party, data_frame_res$structural_bridge_party)
+  expect_equal(list_res$structural_bridge_delta_x, data_frame_res$structural_bridge_delta_x)
+  expect_identical(list_res$structural_bridge_party, c(2L, 3L))
+})
+
 test_that("structural bridge parser allows only one global bridge window", {
   parse_structural_bridge <- get_internal("parse_structural_bridge")
   case <- make_bridge_parser_case()
@@ -295,6 +324,22 @@ test_that("structural bridge parser allows only one global bridge window", {
   expect_error(
     parse_structural_bridge(hp, case$time_line, case$y_name, case$stan_data),
     "Only one global structural bridge window"
+  )
+
+  expect_error(
+    parse_structural_bridge(
+      list(
+        structural_bridge_window = c(as.Date("2026-06-04"), as.Date("2026-06-08")),
+        structural_bridge_x_drift = list(
+          y = c("L", "C"),
+          from_x = c(0.025, 0.30)
+        )
+      ),
+      case$time_line,
+      case$y_name,
+      case$stan_data
+    ),
+    "Names"
   )
 })
 

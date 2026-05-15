@@ -1965,6 +1965,7 @@ build_structural_bridge_x_drift <- function(structural_bridge_x_drift,
                                             time_line,
                                             y_name,
                                             stan_data){
+  structural_bridge_x_drift <- normalize_structural_bridge_x_drift(structural_bridge_x_drift)
   assert_structural_bridge_x_drift(structural_bridge_x_drift, y_name)
   bridge_window <- parse_structural_bridge_window(
     structural_bridge_window = structural_bridge_window,
@@ -2020,6 +2021,17 @@ build_structural_bridge_x_drift <- function(structural_bridge_x_drift,
     party = match(parties, y_name),
     delta_x = delta_x
   )
+}
+
+normalize_structural_bridge_x_drift <- function(x){
+  if(is.data.frame(x)){
+    return(x)
+  }
+  if(is.list(x) && !is.null(names(x))){
+    return(as.data.frame(x, stringsAsFactors = FALSE))
+  }
+
+  x
 }
 
 assert_structural_bridge_x_drift <- function(x, y_name){
