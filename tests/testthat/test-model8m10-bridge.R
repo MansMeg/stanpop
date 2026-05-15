@@ -200,7 +200,7 @@ test_that("high-level bridge windows containing known states keep those states i
   expect_equal(sum(spd$stan_data$structural_bridge_delta_x[, 1]), 0.043 - 0.025)
 })
 
-test_that("structural bridge parser uses an inclusive global window", {
+test_that("structural bridge parser applies drift after from and through to", {
   parse_structural_bridge <- get_internal("parse_structural_bridge")
   case <- make_bridge_parser_case()
   hp <- list(
@@ -215,7 +215,7 @@ test_that("structural bridge parser uses an inclusive global window", {
   res <- parse_structural_bridge(hp, case$time_line, case$y_name, case$stan_data)
   from_t <- get_time_points(case$time_line, as.Date("2026-06-04"))
   to_t <- get_time_points(case$time_line, as.Date("2026-06-08"))
-  expected_active <- seq_len(case$stan_data$T) >= from_t &
+  expected_active <- seq_len(case$stan_data$T) > from_t &
     seq_len(case$stan_data$T) <= to_t
   expected_active[case$stan_data$x_known_t] <- FALSE
   expected_active[case$stan_data$delta_days_t == 0L] <- FALSE
@@ -230,7 +230,7 @@ test_that("structural bridge parser uses an inclusive global window", {
   expect_equal(res$structural_bridge_delta_x[, 1], expected_delta)
   expect_equal(sum(res$structural_bridge_delta_x[, 1]), 0.043 - 0.025)
   expect_identical(res$structural_bridge_active_t[case$stan_data$x_known_t], 0L)
-  expect_identical(res$structural_bridge_active_t[from_t], 1L)
+  expect_identical(res$structural_bridge_active_t[from_t], 0L)
   expect_identical(res$structural_bridge_active_t[to_t], 1L)
 })
 

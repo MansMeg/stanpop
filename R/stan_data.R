@@ -22,16 +22,17 @@
 #' `structural_bridge_type = 1` enables a state-dependent x-scale drift for
 #' selected parties. Types 2 and 3 are reserved for future bridge variants and
 #' are rejected until implemented. `structural_bridge_window` supplies one
-#' global inclusive date range for both x-scale drift and bridge-specific sigma
+#' global inclusive calendar date range for both x-scale drift and bridge-specific sigma
 #' scaling. The high-level `structural_bridge_x_drift` data frame should
 #' contain `y`, `from_x`, and `to_x`; party names are matched through `y_name`,
 #' and stepwise drift is scaled by `delta_days_t`. `from_x` and `to_x` define
 #' the total drift size, `to_x - from_x`; they are not an attractor endpoint.
 #' For example, if the sampled party vote share at the bridge start is 0.028
 #' and `from_x = 0.025`, `to_x = 0.043`, the bridge adds 0.018, so absent
-#' innovations the drift points toward 0.046, not 0.043. The bridge is applied
-#' only to unknown latent states in the inclusive bridge window; known states
-#' and zero-day steps are forced inactive. `structural_bridge_sigma_scale` is
+#' innovations the drift points toward 0.046, not 0.043. The bridge window is
+#' inclusive in calendar time; drift is applied to latent transitions after
+#' `from` and through `to`. Known states and zero-day steps are forced inactive.
+#' `structural_bridge_sigma_scale` is
 #' ordered by `y_name` when named, must be strictly positive, applies only
 #' during active bridge steps, and scales eta-coordinate innovations rather than
 #' vote-share points directly.
@@ -1837,12 +1838,14 @@ parse_election_period <- function(x, tl){
 #' @details
 #' `structural_bridge_x_drift` is the high-level interface for bridge type 1.
 #' It is a data frame with columns `y`, `from_x`, and `to_x`. A single global
-#' `structural_bridge_window` supplies the inclusive bridge dates. For
+#' `structural_bridge_window` supplies the inclusive calendar bridge dates. For
 #' compatibility, `from` and `to` may be included in `structural_bridge_x_drift`,
 #' but all rows must share the same dates. Party names in `y` are mapped through
 #' `y_name`, date bounds are mapped through `time_line`, and stepwise drift is
-#' allocated in proportion to `delta_days_t`. Active bridge steps are defined by
-#' `from_t <= t <= to_t`; known states and zero-day steps are forced inactive.
+#' allocated in proportion to `delta_days_t`. The bridge window is inclusive in
+#' calendar time; drift is applied to latent transitions after `from` and
+#' through `to`, so active bridge steps are defined by `from_t < t <= to_t`.
+#' Known states and zero-day steps are forced inactive.
 #' The `from_x` and `to_x` columns define the total drift amount,
 #' `to_x - from_x`, not an attractor endpoint. The drift is added to the
 #' sampled current vote share path before the helper maps back to eta.
@@ -1951,14 +1954,14 @@ build_structural_bridge_x_drift <- function(structural_bridge_x_drift,
   known_t <- as.integer(stan_data$x_known_t)
   from_t <- get_time_points_from_time_line(bridge_window$from, time_line)
   to_t <- get_time_points_from_time_line(bridge_window$to, time_line)
-  row_active <- seq_len(T) >= from_t & seq_len(T) <= to_t
+  row_active <- seq_len(T) > from_t & seq_len(T) <= to_t
   if(length(known_t) > 0){
     row_active[known_t] <- FALSE
   }
   row_active[delta_days_t == 0] <- FALSE
   total_days <- sum(delta_days_t[row_active])
   if(!(total_days > 0)){
-    stop("structural_bridge_window has no active unknown bridge steps between from and to.", call. = FALSE)
+    stop("structural_bridge_window has no active unknown bridge steps after from and through to.", call. = FALSE)
   }
 
   for(i in seq_len(nrow(structural_bridge_x_drift))){
@@ -1993,8 +1996,8 @@ assert_structural_bridge_x_drift <- function(x, y_name){
 #' Parse the global structural bridge date window
 #'
 #' @description
-#' Normalize the user-facing bridge window into a single inclusive pair of
-#' `Date` values used by `build_structural_bridge_x_drift()`.
+#' Normalize the user-facing bridge window into a single inclusive calendar pair
+#' of `Date` values used by `build_structural_bridge_x_drift()`.
 #'
 #' @details
 #' The preferred API supplies `structural_bridge_window` as either a length-two
@@ -2008,9 +2011,9 @@ assert_structural_bridge_x_drift <- function(x, y_name){
 #' avoid ambiguity.
 #'
 #' This helper only parses and validates the date range. It does not decide
-#' which latent time points are active; known states and zero-day steps are
-#' forced inactive later when the parsed dates are mapped through the model time
-#' line.
+#' which latent transitions are active; the parsed dates are mapped through the
+#' model time line later, where drift is applied to transitions after `from` and
+#' through `to`, with known states and zero-day steps forced inactive.
 #'
 #' @param structural_bridge_window `NULL`, a length-two date vector, or a
 #'   one-row data frame with columns `from` and `to`.

@@ -38,9 +38,10 @@
 #' `structural_bridge_sigma_scale`, and `structural_bridge_epsilon`. Type 0
 #' means no bridge, type 1 enables a state-dependent x-scale drift for selected
 #' parties, and types 2 and 3 are reserved but rejected until implemented.
-#' `structural_bridge_window` supplies one global inclusive date range for both
-#' x-scale drift and bridge-specific sigma scaling. The bridge is applied only
-#' to unknown latent states; known states and zero-day steps are forced inactive.
+#' `structural_bridge_window` supplies one global inclusive calendar date range
+#' for both x-scale drift and bridge-specific sigma scaling. The bridge window
+#' is inclusive in calendar time; drift is applied to latent transitions after
+#' `from` and through `to`. Known states and zero-day steps are forced inactive.
 #' `from_x` and `to_x` define the total drift size, `to_x - from_x`; they are
 #' not an attractor endpoint. For example, if the sampled party vote share at
 #' the bridge start is 0.028 and `from_x = 0.025`, `to_x = 0.043`, the bridge
