@@ -25,9 +25,10 @@
 #' mapped to the model time line, party names are matched through `y_name`, and
 #' stepwise drift is scaled by `delta_days_t`. The bridge is applied only to
 #' unknown latent states inside the bridge window; known states are not modified.
-#' `structural_bridge_sigma_scale` is ordered by `y_name` when named, applies
-#' only during active bridge steps, and scales eta-coordinate innovations rather
-#' than vote-share points directly.
+#' High-level bridge windows fail if a known latent state falls in the active
+#' interior (`from_t < t < to_t`). `structural_bridge_sigma_scale` is ordered by
+#' `y_name` when named, applies only during active bridge steps, and scales
+#' eta-coordinate innovations rather than vote-share points directly.
 #'
 #' Example `model8m10` bridge hyperparameters:
 #'
@@ -42,8 +43,7 @@
 #'   structural_bridge_sigma_scale = c(
 #'     M = 1, L = 0.5, C = 1, KD = 1,
 #'     S = 1, V = 1, MP = 1, SD = 1
-#'   ),
-#'   structural_bridge_epsilon = 1e-6
+#'   )
 #' )}
 #'
 #' The returned object keeps the existing [stan_data] and [time_line] fields
@@ -1827,11 +1827,12 @@ parse_election_period <- function(x, tl){
 #' It is a data frame with columns `from`, `to`, `y`, `from_x`, and `to_x`.
 #' Party names in `y` are mapped through `y_name`, date bounds are mapped
 #' through `time_line`, and stepwise drift is allocated in proportion to
-#' `delta_days_t`. Active bridge steps are defined by `from_t < t < to_t`, then
-#' known latent states and zero-day steps are forced inactive. Direct Stan
-#' bridge arguments are left in `hyper_parameters` for `model_config()` to
-#' validate; in particular, `structural_bridge_active_t` must be zero at known
-#' states before data are supplied to Stan.
+#' `delta_days_t`. Active bridge steps are defined by `from_t < t < to_t`.
+#' High-level bridge windows fail if a known latent state falls in that active
+#' interior, and zero-day steps are forced inactive. Direct Stan bridge
+#' arguments are left in `hyper_parameters` for `model_config()` to validate;
+#' in particular, `structural_bridge_active_t` must be zero at known states
+#' before data are supplied to Stan.
 #'
 #' Named `structural_bridge_sigma_scale` vectors are reordered to match
 #' `y_name`. Unnamed vectors must already have length `P`.
@@ -1924,6 +1925,12 @@ build_structural_bridge_x_drift <- function(structural_bridge_x_drift,
   for(i in seq_len(nrow(structural_bridge_x_drift))){
     from_t <- get_time_points_from_time_line(structural_bridge_x_drift$from[i], time_line)
     to_t <- get_time_points_from_time_line(structural_bridge_x_drift$to[i], time_line)
+    known_in_active_interior <- known_t[known_t > from_t & known_t < to_t]
+    if(length(known_in_active_interior) > 0){
+      stop("structural_bridge_x_drift row ", i,
+           " contains known latent state time point(s) in the active bridge interior: ",
+           paste(known_in_active_interior, collapse = ", "), call. = FALSE)
+    }
     row_active <- seq_len(T) > from_t & seq_len(T) < to_t
     if(length(known_t) > 0){
       row_active[known_t] <- FALSE

@@ -136,8 +136,8 @@ test_that("model8m10 accepts high-level bridge hyperparameters in stan_polls_dat
   known_date <- case$known_state$date[1]
   hp <- list(
     structural_bridge_x_drift = data.frame(
-      from = known_date - 14L,
-      to = known_date + 14L,
+      from = known_date - 28L,
+      to = known_date - 7L,
       y = case$parties[2],
       from_x = 0.025,
       to_x = 0.043
@@ -171,12 +171,46 @@ test_that("model8m10 accepts high-level bridge hyperparameters in stan_polls_dat
   expect_equal(sd$structural_bridge_sigma_scale, c(1, 0.5))
 })
 
+test_that("poll_of_polls rejects high-level bridge windows containing known states", {
+  case <- make_model8_mixed_smoke_case(npolls = 20)
+  known_date <- case$known_state$date[1]
+
+  expect_error(
+    suppressWarnings(
+      suppressMessages(
+        poll_of_polls(
+          y = case$parties,
+          model = "model8m10",
+          polls_data = case$polls_data,
+          time_scale = case$time_scale,
+          known_state = case$known_state,
+          hyper_parameters = list(
+            structural_bridge_x_drift = data.frame(
+              from = known_date - 14L,
+              to = known_date + 14L,
+              y = case$parties[2],
+              from_x = 0.025,
+              to_x = 0.043
+            )
+          ),
+          iter = 1,
+          warmup = 0,
+          chains = 1,
+          refresh = 0,
+          cache_dir = NULL
+        )
+      )
+    ),
+    "known latent state"
+  )
+})
+
 test_that("structural bridge parser maps dates, known states, and day-scaled drift", {
   parse_structural_bridge <- get_internal("parse_structural_bridge")
   case <- make_bridge_parser_case()
   hp <- list(
     structural_bridge_x_drift = data.frame(
-      from = as.Date("2026-06-01"),
+      from = as.Date("2026-06-06"),
       to = as.Date("2026-06-15"),
       y = "L",
       from_x = 0.025,
@@ -185,7 +219,7 @@ test_that("structural bridge parser maps dates, known states, and day-scaled dri
   )
 
   res <- parse_structural_bridge(hp, case$time_line, case$y_name, case$stan_data)
-  from_t <- get_time_points(case$time_line, as.Date("2026-06-01"))
+  from_t <- get_time_points(case$time_line, as.Date("2026-06-06"))
   to_t <- get_time_points(case$time_line, as.Date("2026-06-15"))
   expected_active <- seq_len(case$stan_data$T) > from_t &
     seq_len(case$stan_data$T) < to_t
@@ -203,6 +237,25 @@ test_that("structural bridge parser maps dates, known states, and day-scaled dri
   expect_equal(sum(res$structural_bridge_delta_x[, 1]), 0.043 - 0.025)
   expect_identical(res$structural_bridge_active_t[case$stan_data$x_known_t], 0L)
   expect_identical(res$structural_bridge_active_t[to_t], 0L)
+})
+
+test_that("structural bridge parser rejects active interiors with known states", {
+  parse_structural_bridge <- get_internal("parse_structural_bridge")
+  case <- make_bridge_parser_case()
+  hp <- list(
+    structural_bridge_x_drift = data.frame(
+      from = as.Date("2026-06-01"),
+      to = as.Date("2026-06-15"),
+      y = "L",
+      from_x = 0.025,
+      to_x = 0.043
+    )
+  )
+
+  expect_error(
+    parse_structural_bridge(hp, case$time_line, case$y_name, case$stan_data),
+    "known latent state"
+  )
 })
 
 test_that("structural bridge sigma scale is ordered and validated", {
@@ -275,6 +328,25 @@ test_that("model8m10 Stan model compiles with rstan", {
   expect_silent(
     rstan::stan_model(file = get_pop_stan_model_file_path("model8m10"))
   )
+})
+
+test_that("model8m10 Stan model compiles with cmdstanr", {
+  skip_if_no_stan_tests()
+  skip_if_no_cmdstanr_tests()
+  skip_if_no_cmdstanr()
+
+  tmp_stan_file <- tempfile("model8m10-", fileext = ".stan")
+  tmp_model_root <- tools::file_path_sans_ext(tmp_stan_file)
+  on.exit(unlink(Sys.glob(paste0(tmp_model_root, "*"))), add = TRUE)
+  expect_true(file.copy(get_pop_stan_model_file_path("model8m10"), tmp_stan_file))
+
+  expect_silent(
+    cmdstan_model <- cmdstanr::cmdstan_model(
+      stan_file = tmp_stan_file,
+      force_recompile = TRUE
+    )
+  )
+  expect_true(inherits(cmdstan_model, "CmdStanModel"))
 })
 
 test_that("positive bridge drift raises and tightens the pushed party", {
