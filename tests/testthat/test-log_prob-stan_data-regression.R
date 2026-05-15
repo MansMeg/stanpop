@@ -693,5 +693,59 @@ test_that("model8m5 should differ from model8m2 on mixed override-aware stan_dat
                  isTRUE(all.equal(lp_probe_m2, lp_probe_m5, tolerance = 1e-8)))
 })
 
+test_that("model8m10 log_prob matches model8m5 on mixed override-aware stan_data", {
+  skip_if_no_stan_tests()
+  skip_if_no_rstan_tests()
+
+  case <- make_simple_mixed_log_prob_regression_case()
+  cfg <- list(
+    sigma_kappa_hyper_sd = 0.03,
+    use_industry_bias = 1L,
+    use_house_bias = 0L,
+    use_design_effects = 0L,
+    use_multivariate_version = 2L,
+    use_softmax = 1L,
+    election_period = list(c("2010-05-03", "2010-05-20")),
+    use_sigma_ep = 2L,
+    ep_inv_x = list(c(3.984064, 3.937008))
+  )
+
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          model8m5 <- fit_from_stan_data(
+            model = "model8m5",
+            cfg = cfg,
+            case = case,
+            stan_data_name = "stan_data_with_overrides"
+          )
+        )
+      )
+    )
+  )
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          model8m10 <- fit_from_stan_data(
+            model = "model8m10",
+            cfg = cfg,
+            case = case,
+            stan_data_name = "stan_data_with_overrides"
+          )
+        )
+      )
+    )
+  )
+
+  expect_log_prob_match(
+    lhs = model8m5,
+    rhs = model8m10,
+    lhs_label = "model8m5",
+    rhs_label = "model8m10"
+  )
+})
+
 
 if(run_stan_tests) Sys.setenv(STANPOP_RUN_STAN_TESTS = "false")

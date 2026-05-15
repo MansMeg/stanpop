@@ -10,3 +10,5 @@ stanpop.Rproj$
 ^tests/testthat/stan_code/sampler_state_test$
 ^scripts($|/)
 ^tmp($|/)
+^\.positai$
+^\.claude$
