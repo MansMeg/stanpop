@@ -1,6 +1,6 @@
 Package: stanpop
 Title: Stan-based Poll of Polls Models
-Version: 0.8.8
+Version: 0.9.0
 Authors@R: 
     person(given = "Mans",
            family = "Magnusson",
