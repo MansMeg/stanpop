@@ -1832,18 +1832,20 @@ parse_election_period <- function(x, tl){
 #'
 #' @details
 #' `structural_bridge_x_drift` is the high-level interface for bridge type 1.
-#' It is a data frame with columns `from`, `to`, `y`, `from_x`, and `to_x`.
-#' Party names in `y` are mapped through `y_name`, date bounds are mapped
-#' through `time_line`, and stepwise drift is allocated in proportion to
-#' `delta_days_t`. Active bridge steps are defined by `from_t < t < to_t`.
-#' High-level bridge windows fail if a known latent state falls in that active
-#' interior, and zero-day steps are forced inactive. Direct Stan bridge
-#' arguments are left in `hyper_parameters` for `model_config()` to validate;
-#' in particular, `structural_bridge_active_t` must be zero at known states
-#' before data are supplied to Stan.
+#' It is a data frame with columns `y`, `from_x`, and `to_x`. A single global
+#' `structural_bridge_window` supplies the inclusive bridge dates. For
+#' compatibility, `from` and `to` may be included in `structural_bridge_x_drift`,
+#' but all rows must share the same dates. Party names in `y` are mapped through
+#' `y_name`, date bounds are mapped through `time_line`, and stepwise drift is
+#' allocated in proportion to `delta_days_t`. Active bridge steps are defined by
+#' `from_t <= t <= to_t`; known states and zero-day steps are forced inactive.
+#' Direct Stan bridge arguments are left in `hyper_parameters` for
+#' `model_config()` to validate; in particular, `structural_bridge_active_t`
+#' must be zero at known states before data are supplied to Stan.
 #'
 #' Named `structural_bridge_sigma_scale` vectors are reordered to match
-#' `y_name`. Unnamed vectors must already have length `P`.
+#' `y_name`. Unnamed vectors must already have length `P`. All sigma-scale
+#' values must be strictly positive.
 #'
 #' @param hyper_parameters a list of model hyperparameters, possibly including
 #'   high-level bridge fields.
@@ -1853,8 +1855,9 @@ parse_election_period <- function(x, tl){
 #' @param stan_data the partly-built Stan data list. Must include `T`, `P`,
 #'   `x_known_t`, and, when available, `delta_days_t`.
 #'
-#' @return A hyperparameter list with `structural_bridge_x_drift` removed and
-#'   the corresponding direct Stan bridge arguments added.
+#' @return A hyperparameter list with `structural_bridge_x_drift` and
+#'   `structural_bridge_window` removed and the corresponding direct Stan bridge
+#'   arguments added.
 #'
 #' @keywords internal
 #' @noRd
@@ -1866,6 +1869,11 @@ parse_structural_bridge <- function(hyper_parameters, time_line, y_name, stan_da
   checkmate::assert_list(stan_data)
 
   has_x_drift <- !is.null(hyper_parameters$structural_bridge_x_drift)
+  has_bridge_window <- !is.null(hyper_parameters$structural_bridge_window)
+
+  if(!has_x_drift && has_bridge_window){
+    stop("structural_bridge_window requires structural_bridge_x_drift.", call. = FALSE)
+  }
 
   if(has_x_drift){
     if(!is.null(hyper_parameters$structural_bridge_type) &&
@@ -1884,6 +1892,7 @@ parse_structural_bridge <- function(hyper_parameters, time_line, y_name, stan_da
 
     parsed <- build_structural_bridge_x_drift(
       structural_bridge_x_drift = hyper_parameters$structural_bridge_x_drift,
+      structural_bridge_window = hyper_parameters$structural_bridge_window,
       time_line = time_line,
       y_name = y_name,
       stan_data = stan_data
@@ -1906,16 +1915,20 @@ parse_structural_bridge <- function(hyper_parameters, time_line, y_name, stan_da
   }
 
   hyper_parameters$structural_bridge_x_drift <- NULL
+  hyper_parameters$structural_bridge_window <- NULL
   hyper_parameters
 }
 
 build_structural_bridge_x_drift <- function(structural_bridge_x_drift,
+                                            structural_bridge_window = NULL,
                                             time_line,
                                             y_name,
                                             stan_data){
   assert_structural_bridge_x_drift(structural_bridge_x_drift, y_name)
-  structural_bridge_x_drift$from <- as.Date(structural_bridge_x_drift$from)
-  structural_bridge_x_drift$to <- as.Date(structural_bridge_x_drift$to)
+  bridge_window <- parse_structural_bridge_window(
+    structural_bridge_window = structural_bridge_window,
+    structural_bridge_x_drift = structural_bridge_x_drift
+  )
   structural_bridge_x_drift$y <- as.character(structural_bridge_x_drift$y)
 
   T <- stan_data$T
@@ -1929,28 +1942,19 @@ build_structural_bridge_x_drift <- function(structural_bridge_x_drift,
   }
   delta_days_t[is.na(delta_days_t)] <- 0
   known_t <- as.integer(stan_data$x_known_t)
+  from_t <- get_time_points_from_time_line(bridge_window$from, time_line)
+  to_t <- get_time_points_from_time_line(bridge_window$to, time_line)
+  row_active <- seq_len(T) >= from_t & seq_len(T) <= to_t
+  if(length(known_t) > 0){
+    row_active[known_t] <- FALSE
+  }
+  row_active[delta_days_t == 0] <- FALSE
+  total_days <- sum(delta_days_t[row_active])
+  if(!(total_days > 0)){
+    stop("structural_bridge_window has no active unknown bridge steps between from and to.", call. = FALSE)
+  }
 
   for(i in seq_len(nrow(structural_bridge_x_drift))){
-    from_t <- get_time_points_from_time_line(structural_bridge_x_drift$from[i], time_line)
-    to_t <- get_time_points_from_time_line(structural_bridge_x_drift$to[i], time_line)
-    known_in_active_interior <- known_t[known_t > from_t & known_t < to_t]
-    if(length(known_in_active_interior) > 0){
-      stop("structural_bridge_x_drift row ", i,
-           " contains known latent state time point(s) in the active bridge interior: ",
-           paste(known_in_active_interior, collapse = ", "), call. = FALSE)
-    }
-    row_active <- seq_len(T) > from_t & seq_len(T) < to_t
-    if(length(known_t) > 0){
-      row_active[known_t] <- FALSE
-    }
-    row_active[delta_days_t == 0] <- FALSE
-
-    total_days <- sum(delta_days_t[row_active])
-    if(!(total_days > 0)){
-      stop("structural_bridge_x_drift row ", i,
-           " has no active unknown bridge steps between from and to.", call. = FALSE)
-    }
-
     b <- match(structural_bridge_x_drift$y[i], parties)
     total_drift <- structural_bridge_x_drift$to_x[i] - structural_bridge_x_drift$from_x[i]
     delta_x[row_active, b] <- delta_x[row_active, b] +
@@ -1968,22 +1972,65 @@ build_structural_bridge_x_drift <- function(structural_bridge_x_drift,
 
 assert_structural_bridge_x_drift <- function(x, y_name){
   checkmate::assert_data_frame(x, min.rows = 1L)
-  checkmate::assert_names(
-    names(x),
-    identical.to = c("from", "to", "y", "from_x", "to_x")
-  )
-  x$from <- as.Date(x$from)
-  x$to <- as.Date(x$to)
-  checkmate::assert_date(x$from, any.missing = FALSE)
-  checkmate::assert_date(x$to, any.missing = FALSE)
-  checkmate::assert_true(all(x$from <= x$to), .var.name = "structural_bridge_x_drift from <= to")
+  has_row_dates <- all(c("from", "to") %in% names(x))
+  expected_names <- if(has_row_dates) c("from", "to", "y", "from_x", "to_x") else c("y", "from_x", "to_x")
+  checkmate::assert_names(names(x), identical.to = expected_names)
   checkmate::assert_names(as.character(x$y), subset.of = y_name)
+  if(anyDuplicated(as.character(x$y))){
+    stop("structural_bridge_x_drift can include each party only once in the single global bridge prior.", call. = FALSE)
+  }
   checkmate::assert_numeric(x$from_x, lower = 0, upper = 1, any.missing = FALSE)
   checkmate::assert_numeric(x$to_x, lower = 0, upper = 1, any.missing = FALSE)
 }
 
+parse_structural_bridge_window <- function(structural_bridge_window,
+                                           structural_bridge_x_drift){
+  has_row_dates <- all(c("from", "to") %in% names(structural_bridge_x_drift))
+
+  if(!is.null(structural_bridge_window)){
+    if(has_row_dates){
+      stop("Do not include from/to in structural_bridge_x_drift when structural_bridge_window is supplied.", call. = FALSE)
+    }
+    if(is.data.frame(structural_bridge_window)){
+      checkmate::assert_data_frame(structural_bridge_window, nrows = 1L)
+      checkmate::assert_names(names(structural_bridge_window), identical.to = c("from", "to"))
+      from <- as.Date(structural_bridge_window$from)
+      to <- as.Date(structural_bridge_window$to)
+    } else {
+      dates <- as.Date(structural_bridge_window)
+      checkmate::assert_date(dates, len = 2L, any.missing = FALSE, .var.name = "structural_bridge_window")
+      from <- dates[1]
+      to <- dates[2]
+    }
+  } else {
+    if(!has_row_dates){
+      stop("structural_bridge_x_drift requires a single global structural_bridge_window with from/to dates.", call. = FALSE)
+    }
+    from_by_row <- as.Date(structural_bridge_x_drift$from)
+    to_by_row <- as.Date(structural_bridge_x_drift$to)
+    checkmate::assert_date(from_by_row, any.missing = FALSE, .var.name = "structural_bridge_x_drift$from")
+    checkmate::assert_date(to_by_row, any.missing = FALSE, .var.name = "structural_bridge_x_drift$to")
+    if(length(unique(from_by_row)) != 1L || length(unique(to_by_row)) != 1L){
+      stop("Only one global structural bridge window is supported; all structural_bridge_x_drift rows must share the same from/to dates.", call. = FALSE)
+    }
+    from <- from_by_row[1]
+    to <- to_by_row[1]
+  }
+
+  checkmate::assert_date(from, any.missing = FALSE, len = 1L, .var.name = "structural_bridge_window from")
+  checkmate::assert_date(to, any.missing = FALSE, len = 1L, .var.name = "structural_bridge_window to")
+  if(from > to){
+    stop("structural_bridge_window from must be on or before to.", call. = FALSE)
+  }
+
+  list(from = from, to = to)
+}
+
 parse_structural_bridge_sigma_scale <- function(x, y_name){
-  checkmate::assert_numeric(x, lower = 0, any.missing = FALSE)
+  checkmate::assert_numeric(x, any.missing = FALSE)
+  if(any(x < 1e-12)){
+    stop("structural_bridge_sigma_scale must be at least 1e-12 for every eta coordinate.", call. = FALSE)
+  }
   if(is.null(names(x))){
     checkmate::assert_numeric(x, len = length(y_name))
     return(unname(x))
@@ -2061,8 +2108,10 @@ assert_stan_data_model.model8m <- function(x){
                              ncols = x$stan_data$structural_bridge_B)
     checkmate::assert_number(x$stan_data$structural_bridge_epsilon, lower = 0)
     checkmate::assert_numeric(x$stan_data$structural_bridge_sigma_scale,
-                              lower = 0,
-                              len = x$stan_data$P)
+                              len = x$stan_data$P,
+                              any.missing = FALSE)
+    checkmate::assert_true(all(x$stan_data$structural_bridge_sigma_scale >= 1e-12),
+                           .var.name = "structural_bridge_sigma_scale")
   }
   assert_model_arguments(x)
 }

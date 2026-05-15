@@ -136,9 +136,8 @@ test_that("model8m10 accepts high-level bridge hyperparameters in stan_polls_dat
   case <- make_model8_mixed_smoke_case(npolls = 20)
   known_date <- case$known_state$date[1]
   hp <- list(
+    structural_bridge_window = c(known_date - 28L, known_date - 7L),
     structural_bridge_x_drift = data.frame(
-      from = known_date - 28L,
-      to = known_date - 7L,
       y = case$parties[2],
       from_x = 0.025,
       to_x = 0.043
@@ -172,47 +171,41 @@ test_that("model8m10 accepts high-level bridge hyperparameters in stan_polls_dat
   expect_equal(sd$structural_bridge_sigma_scale, c(1, 0.5))
 })
 
-test_that("poll_of_polls rejects high-level bridge windows containing known states", {
+test_that("high-level bridge windows containing known states keep those states inactive", {
   case <- make_model8_mixed_smoke_case(npolls = 20)
   known_date <- case$known_state$date[1]
 
-  expect_error(
-    suppressWarnings(
-      suppressMessages(
-        poll_of_polls(
-          y = case$parties,
-          model = "model8m10",
-          polls_data = case$polls_data,
-          time_scale = case$time_scale,
-          known_state = case$known_state,
-          hyper_parameters = list(
-            structural_bridge_x_drift = data.frame(
-              from = known_date - 14L,
-              to = known_date + 14L,
-              y = case$parties[2],
-              from_x = 0.025,
-              to_x = 0.043
-            )
-          ),
-          iter = 1,
-          warmup = 0,
-          chains = 1,
-          refresh = 0,
-          cache_dir = NULL
+  spd <- suppressWarnings(
+    suppressMessages(
+      stan_polls_data(
+        x = case$polls_data,
+        y_name = case$parties,
+        model = "model8m10",
+        time_scale = case$time_scale,
+        known_state = case$known_state,
+        hyper_parameters = list(
+          structural_bridge_window = c(known_date - 14L, known_date + 14L),
+          structural_bridge_x_drift = data.frame(
+            y = case$parties[2],
+            from_x = 0.025,
+            to_x = 0.043
+          )
         )
       )
-    ),
-    "known latent state"
+    )
   )
+
+  expect_true(all(spd$stan_data$structural_bridge_active_t[spd$stan_data$x_known_t] == 0L))
+  expect_true(any(spd$stan_data$structural_bridge_active_t == 1L))
+  expect_equal(sum(spd$stan_data$structural_bridge_delta_x[, 1]), 0.043 - 0.025)
 })
 
-test_that("structural bridge parser maps dates, known states, and day-scaled drift", {
+test_that("structural bridge parser uses an inclusive global window", {
   parse_structural_bridge <- get_internal("parse_structural_bridge")
   case <- make_bridge_parser_case()
   hp <- list(
+    structural_bridge_window = c(as.Date("2026-06-04"), as.Date("2026-06-08")),
     structural_bridge_x_drift = data.frame(
-      from = as.Date("2026-06-06"),
-      to = as.Date("2026-06-15"),
       y = "L",
       from_x = 0.025,
       to_x = 0.043
@@ -220,10 +213,10 @@ test_that("structural bridge parser maps dates, known states, and day-scaled dri
   )
 
   res <- parse_structural_bridge(hp, case$time_line, case$y_name, case$stan_data)
-  from_t <- get_time_points(case$time_line, as.Date("2026-06-06"))
-  to_t <- get_time_points(case$time_line, as.Date("2026-06-15"))
-  expected_active <- seq_len(case$stan_data$T) > from_t &
-    seq_len(case$stan_data$T) < to_t
+  from_t <- get_time_points(case$time_line, as.Date("2026-06-04"))
+  to_t <- get_time_points(case$time_line, as.Date("2026-06-08"))
+  expected_active <- seq_len(case$stan_data$T) >= from_t &
+    seq_len(case$stan_data$T) <= to_t
   expected_active[case$stan_data$x_known_t] <- FALSE
   expected_active[case$stan_data$delta_days_t == 0L] <- FALSE
   expected_delta <- rep(0, case$stan_data$T)
@@ -237,30 +230,72 @@ test_that("structural bridge parser maps dates, known states, and day-scaled dri
   expect_equal(res$structural_bridge_delta_x[, 1], expected_delta)
   expect_equal(sum(res$structural_bridge_delta_x[, 1]), 0.043 - 0.025)
   expect_identical(res$structural_bridge_active_t[case$stan_data$x_known_t], 0L)
-  expect_identical(res$structural_bridge_active_t[to_t], 0L)
+  expect_identical(res$structural_bridge_active_t[from_t], 1L)
+  expect_identical(res$structural_bridge_active_t[to_t], 1L)
 })
 
-test_that("structural bridge parser rejects active interiors with known states", {
+test_that("structural bridge parser allows only one global bridge window", {
   parse_structural_bridge <- get_internal("parse_structural_bridge")
   case <- make_bridge_parser_case()
+
+  expect_error(
+    parse_structural_bridge(
+      list(
+        structural_bridge_window = data.frame(
+          from = as.Date(c("2026-06-04", "2026-06-09")),
+          to = as.Date(c("2026-06-08", "2026-06-15"))
+        ),
+        structural_bridge_x_drift = data.frame(
+          y = "L",
+          from_x = 0.025,
+          to_x = 0.043
+        )
+      ),
+      case$time_line,
+      case$y_name,
+      case$stan_data
+    ),
+    "rows"
+  )
+
+  expect_error(
+    parse_structural_bridge(
+      list(
+        structural_bridge_window = c(as.Date("2026-06-04"), as.Date("2026-06-08")),
+        structural_bridge_x_drift = data.frame(
+          from = as.Date("2026-06-04"),
+          to = as.Date("2026-06-08"),
+          y = "L",
+          from_x = 0.025,
+          to_x = 0.043
+        )
+      ),
+      case$time_line,
+      case$y_name,
+      case$stan_data
+    ),
+    "Do not include from/to"
+  )
+
   hp <- list(
     structural_bridge_x_drift = data.frame(
-      from = as.Date("2026-06-01"),
-      to = as.Date("2026-06-15"),
-      y = "L",
-      from_x = 0.025,
-      to_x = 0.043
+      from = as.Date(c("2026-06-04", "2026-06-09")),
+      to = as.Date(c("2026-06-08", "2026-06-15")),
+      y = c("L", "C"),
+      from_x = c(0.025, 0.30),
+      to_x = c(0.043, 0.27)
     )
   )
 
   expect_error(
     parse_structural_bridge(hp, case$time_line, case$y_name, case$stan_data),
-    "known latent state"
+    "Only one global structural bridge window"
   )
 })
 
 test_that("structural bridge sigma scale is ordered and validated", {
   parse_structural_bridge <- get_internal("parse_structural_bridge")
+  assert_model_argument_value <- get_internal("assert_model_argument_value")
   case <- make_bridge_parser_case()
 
   named <- parse_structural_bridge(
@@ -295,6 +330,33 @@ test_that("structural bridge sigma scale is ordered and validated", {
       case$stan_data
     ),
     "Names"
+  )
+  expect_error(
+    parse_structural_bridge(
+      list(structural_bridge_sigma_scale = c(M = 1, L = 0, C = 1)),
+      case$time_line,
+      case$y_name,
+      case$stan_data
+    ),
+    "at least 1e-12"
+  )
+  expect_error(
+    parse_structural_bridge(
+      list(structural_bridge_sigma_scale = c(1, 0, 3)),
+      case$time_line,
+      case$y_name,
+      case$stan_data
+    ),
+    "at least 1e-12"
+  )
+  expect_error(
+    assert_model_argument_value(
+      "structural_bridge_sigma_scale",
+      c(1, 0, 3),
+      x = list(),
+      stan_data = list(P = 3L)
+    ),
+    "at least 1e-12"
   )
 })
 
@@ -369,8 +431,6 @@ test_that("positive bridge drift raises and tightens the pushed party", {
     ep_inv_x = list(c(3.984064, 3.937008))
   )
   bridge_drift <- data.frame(
-    from = bridge_from,
-    to = bridge_to,
     y = "x4",
     from_x = 0.02,
     to_x = 0.12
@@ -400,10 +460,12 @@ test_that("positive bridge drift raises and tightens the pushed party", {
 
   no_bridge <- fit_pop(base_cfg, 501)
   loose_bridge <- fit_pop(c(base_cfg, list(
+    structural_bridge_window = c(bridge_from, bridge_to),
     structural_bridge_x_drift = bridge_drift,
     structural_bridge_sigma_scale = c(x3 = 1, x4 = 1)
   )), 502)
   tight_bridge <- fit_pop(c(base_cfg, list(
+    structural_bridge_window = c(bridge_from, bridge_to),
     structural_bridge_x_drift = bridge_drift,
     structural_bridge_sigma_scale = c(x3 = 1, x4 = 0.2)
   )), 503)
