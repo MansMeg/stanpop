@@ -239,6 +239,51 @@ test_that("structural bridge parser applies drift after from and through to", {
   expect_identical(res$structural_bridge_active_t[to_t], 1L)
 })
 
+test_that("structural bridge parser requires drift when a window is supplied", {
+  parse_structural_bridge <- get_internal("parse_structural_bridge")
+  case <- make_bridge_parser_case()
+
+  expect_error(
+    parse_structural_bridge(
+      list(
+        structural_bridge_window = c(as.Date("2026-06-04"), as.Date("2026-06-08"))
+      ),
+      case$time_line,
+      case$y_name,
+      case$stan_data
+    ),
+    "structural_bridge_window requires structural_bridge_x_drift"
+  )
+})
+
+test_that("structural bridge parser can derive delta days from the time line", {
+  parse_structural_bridge <- get_internal("parse_structural_bridge")
+  case <- make_bridge_parser_case()
+  hp <- list(
+    structural_bridge_window = c(as.Date("2026-06-04"), as.Date("2026-06-08")),
+    structural_bridge_x_drift = data.frame(
+      y = "L",
+      from_x = 0.025,
+      to_x = 0.043
+    )
+  )
+  stan_data_without_delta_days <- case$stan_data
+  stan_data_without_delta_days$delta_days_t <- NULL
+
+  res_with_delta_days <- parse_structural_bridge(hp, case$time_line, case$y_name, case$stan_data)
+  res_without_delta_days <- parse_structural_bridge(
+    hp,
+    case$time_line,
+    case$y_name,
+    stan_data_without_delta_days
+  )
+
+  expect_equal(res_without_delta_days$structural_bridge_delta_x,
+               res_with_delta_days$structural_bridge_delta_x)
+  expect_identical(res_without_delta_days$structural_bridge_active_t,
+                   res_with_delta_days$structural_bridge_active_t)
+})
+
 test_that("structural bridge parser normalizes named list x-drift input", {
   parse_structural_bridge <- get_internal("parse_structural_bridge")
   case <- make_bridge_parser_case()
@@ -266,6 +311,46 @@ test_that("structural bridge parser normalizes named list x-drift input", {
   expect_identical(list_res$structural_bridge_party, data_frame_res$structural_bridge_party)
   expect_equal(list_res$structural_bridge_delta_x, data_frame_res$structural_bridge_delta_x)
   expect_identical(list_res$structural_bridge_party, c(2L, 3L))
+})
+
+test_that("structural bridge parser accepts one-row data frame window input", {
+  parse_structural_bridge <- get_internal("parse_structural_bridge")
+  case <- make_bridge_parser_case()
+  hp <- list(
+    structural_bridge_window = data.frame(
+      from = as.Date("2026-06-04"),
+      to = as.Date("2026-06-08")
+    ),
+    structural_bridge_x_drift = data.frame(
+      y = "L",
+      from_x = 0.025,
+      to_x = 0.043
+    )
+  )
+
+  res <- parse_structural_bridge(hp, case$time_line, case$y_name, case$stan_data)
+
+  expect_identical(res$structural_bridge_party, 2L)
+  expect_equal(sum(res$structural_bridge_delta_x[, 1]), 0.043 - 0.025)
+  expect_error(
+    parse_structural_bridge(
+      list(
+        structural_bridge_window = data.frame(
+          start = as.Date("2026-06-04"),
+          to = as.Date("2026-06-08")
+        ),
+        structural_bridge_x_drift = data.frame(
+          y = "L",
+          from_x = 0.025,
+          to_x = 0.043
+        )
+      ),
+      case$time_line,
+      case$y_name,
+      case$stan_data
+    ),
+    "Names"
+  )
 })
 
 test_that("structural bridge parser allows only one global bridge window", {
@@ -324,6 +409,23 @@ test_that("structural bridge parser allows only one global bridge window", {
   expect_error(
     parse_structural_bridge(hp, case$time_line, case$y_name, case$stan_data),
     "Only one global structural bridge window"
+  )
+
+  expect_error(
+    parse_structural_bridge(
+      list(
+        structural_bridge_window = c(as.Date("2026-06-04"), as.Date("2026-06-08")),
+        structural_bridge_x_drift = data.frame(
+          y = c("L", "L"),
+          from_x = c(0.025, 0.026),
+          to_x = c(0.043, 0.044)
+        )
+      ),
+      case$time_line,
+      case$y_name,
+      case$stan_data
+    ),
+    "each party only once"
   )
 
   expect_error(
