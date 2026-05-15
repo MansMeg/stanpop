@@ -41,7 +41,10 @@
 #' `structural_bridge_window` supplies one global inclusive calendar date range
 #' for both x-scale drift and bridge-specific sigma scaling. The bridge window
 #' is inclusive in calendar time; drift is applied to latent transitions after
-#' `from` and through `to`. Known states and zero-day steps are forced inactive.
+#' `from` and through `to`. The `from` and `to` dates must be exact latent
+#' anchor dates; use `time_scale_overrides` when bridge endpoints need to be
+#' represented exactly on a coarser latent grid. Known states and zero-day steps
+#' are forced inactive.
 #' `from_x` and `to_x` define the total drift size, `to_x - from_x`; they are
 #' not an attractor endpoint. For example, if the sampled party vote share at
 #' the bridge start is 0.028 and `from_x = 0.025`, `to_x = 0.043`, the bridge
@@ -49,9 +52,15 @@
 #' Sigma scaling must be strictly positive, applies only during active bridge
 #' steps, and scales eta coordinates, not vote-share points directly.
 #'
-#' Example `model8m10` bridge hyperparameters:
+#' Example `model8m10` bridge setup:
 #'
-#' \preformatted{hyper_parameters <- list(
+#' \preformatted{time_scale_overrides <- tibble::tibble(
+#'   from = as.Date("2026-06-04"),
+#'   to = as.Date("2026-09-13"),
+#'   time_scale = "day"
+#' )
+#'
+#' hyper_parameters <- list(
 #'   structural_bridge_window = c(
 #'     as.Date("2026-06-04"),
 #'     as.Date("2026-09-13")

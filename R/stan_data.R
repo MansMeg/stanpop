@@ -31,15 +31,23 @@
 #' and `from_x = 0.025`, `to_x = 0.043`, the bridge adds 0.018, so absent
 #' innovations the drift points toward 0.046, not 0.043. The bridge window is
 #' inclusive in calendar time; drift is applied to latent transitions after
-#' `from` and through `to`. Known states and zero-day steps are forced inactive.
-#' `structural_bridge_sigma_scale` is
+#' `from` and through `to`. The `from` and `to` dates must be exact latent
+#' anchor dates in `time_line$time_line$date`; use `time_scale_overrides` when
+#' bridge endpoints need to be represented exactly on a coarser latent grid.
+#' Known states and zero-day steps are forced inactive. `structural_bridge_sigma_scale` is
 #' ordered by `y_name` when named, must be strictly positive, applies only
 #' during active bridge steps, and scales eta-coordinate innovations rather than
 #' vote-share points directly.
 #'
-#' Example `model8m10` bridge hyperparameters:
+#' Example `model8m10` bridge setup:
 #'
-#' \preformatted{hyper_parameters <- list(
+#' \preformatted{time_scale_overrides <- tibble::tibble(
+#'   from = as.Date("2026-06-04"),
+#'   to = as.Date("2026-09-13"),
+#'   time_scale = "day"
+#' )
+#'
+#' hyper_parameters <- list(
 #'   structural_bridge_window = c(
 #'     as.Date("2026-06-04"),
 #'     as.Date("2026-09-13")
@@ -130,7 +138,27 @@ stan_polls_data <- function(x,
   } else if(grepl(model, pattern = "^model8l[0-9]+$")) {
     spd <- stan_polls_data_model8l(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model)
   } else if(grepl(model, pattern = "^model8m[0-9]+$")) {
-    spd <- stan_polls_data_model8m(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model)
+    initial_hyper_parameters <- hyper_parameters
+    if(identical(model, "model8m10") &&
+       !is.null(time_scale_overrides) &&
+       nrow(time_scale_overrides) > 0){
+      # The first pass builds a legacy grid only so the override-aware data path
+      # can be attached below. Bridge endpoints must be checked on the final
+      # override-aware grid, where time_scale_overrides may add exact anchors.
+      bridge_args <- c("structural_bridge_type",
+                       "structural_bridge_window",
+                       "structural_bridge_x_drift",
+                       "structural_bridge_active_t",
+                       "structural_bridge_B",
+                       "structural_bridge_party",
+                       "structural_bridge_delta_x",
+                       "structural_bridge_epsilon",
+                       "structural_bridge_sigma_scale")
+      if(!is.null(initial_hyper_parameters)){
+        initial_hyper_parameters[bridge_args] <- NULL
+      }
+    }
+    spd <- stan_polls_data_model8m(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, initial_hyper_parameters, slow_scales, model)
   } else {
     stop("'", model, "' not implemented in stan_polls_data().")
   }
@@ -1845,7 +1873,10 @@ parse_election_period <- function(x, tl){
 #' allocated in proportion to `delta_days_t`. The bridge window is inclusive in
 #' calendar time; drift is applied to latent transitions after `from` and
 #' through `to`, so active bridge steps are defined by `from_t < t <= to_t`.
-#' Known states and zero-day steps are forced inactive.
+#' The `from` and `to` dates must be exact latent anchor dates in
+#' `time_line$time_line$date`; use `time_scale_overrides` to add exact endpoint
+#' anchors on a coarser latent grid. Known states and zero-day steps are forced
+#' inactive.
 #' The `from_x` and `to_x` columns define the total drift amount,
 #' `to_x - from_x`, not an attractor endpoint. The drift is added to the
 #' sampled current vote share path before the helper maps back to eta.
@@ -1952,6 +1983,17 @@ build_structural_bridge_x_drift <- function(structural_bridge_x_drift,
   }
   delta_days_t[is.na(delta_days_t)] <- 0
   known_t <- as.integer(stan_data$x_known_t)
+  bridge_dates <- c(bridge_window$from, bridge_window$to)
+  missing_dates <- bridge_dates[!bridge_dates %in% time_line$time_line$date]
+  if(length(missing_dates) > 0){
+    stop(
+      "structural_bridge_window dates must be latent anchor dates in ",
+      "time_line$time_line$date. Add time_scale_overrides so these dates are ",
+      "represented exactly: ",
+      paste(missing_dates, collapse = ", "),
+      call. = FALSE
+    )
+  }
   from_t <- get_time_points_from_time_line(bridge_window$from, time_line)
   to_t <- get_time_points_from_time_line(bridge_window$to, time_line)
   row_active <- seq_len(T) > from_t & seq_len(T) <= to_t

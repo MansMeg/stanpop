@@ -153,9 +153,9 @@ test_that("model8m10 accepts high-level bridge hyperparameters in stan_polls_dat
         model = "model8m10",
         time_scale = case$time_scale,
         time_scale_overrides = tibble::tibble(
-          from = known_date - 1L,
-          to = known_date + 1L,
-          time_scale = "day"
+          from = c(known_date - 28L, known_date - 1L),
+          to = c(known_date - 7L, known_date + 1L),
+          time_scale = c("day", "day")
         ),
         known_state = case$known_state,
         hyper_parameters = hp
@@ -182,6 +182,11 @@ test_that("high-level bridge windows containing known states keep those states i
         y_name = case$parties,
         model = "model8m10",
         time_scale = case$time_scale,
+        time_scale_overrides = tibble::tibble(
+          from = known_date - 14L,
+          to = known_date + 14L,
+          time_scale = "day"
+        ),
         known_state = case$known_state,
         hyper_parameters = list(
           structural_bridge_window = c(known_date - 14L, known_date + 14L),
@@ -290,6 +295,25 @@ test_that("structural bridge parser allows only one global bridge window", {
   expect_error(
     parse_structural_bridge(hp, case$time_line, case$y_name, case$stan_data),
     "Only one global structural bridge window"
+  )
+})
+
+test_that("structural bridge window dates must be latent anchor dates", {
+  parse_structural_bridge <- get_internal("parse_structural_bridge")
+  case <- make_bridge_parser_case()
+  hp <- list(
+    structural_bridge_window = c(as.Date("2026-06-04"), as.Date("2026-06-09")),
+    structural_bridge_x_drift = data.frame(
+      y = "L",
+      from_x = 0.025,
+      to_x = 0.043
+    )
+  )
+
+  expect_false(as.Date("2026-06-09") %in% case$time_line$time_line$date)
+  expect_error(
+    parse_structural_bridge(hp, case$time_line, case$y_name, case$stan_data),
+    "Add time_scale_overrides.*2026-06-09"
   )
 })
 
@@ -444,6 +468,11 @@ test_that("positive bridge drift raises and tightens the pushed party", {
           model = "model8m10",
           polls_data = case$polls_data,
           time_scale = case$time_scale,
+          time_scale_overrides = tibble::tibble(
+            from = bridge_from,
+            to = bridge_to,
+            time_scale = "day"
+          ),
           known_state = case$known_state,
           hyper_parameters = cfg,
           iter = 80,
