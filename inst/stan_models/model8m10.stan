@@ -53,6 +53,77 @@ functions {
      return (exp(lse - to_vector(eta)));
    }
 
+  /**
+   * Return the eta-scale transition mean implied by a state-dependent
+   * vote-share-scale drift.
+   *
+   * The previous eta state is mapped to the full simplex with the implicit
+   * reference/other category, selected parties receive direct x-scale drift,
+   * and all non-pushed categories (including other) absorb the remaining mass.
+   */
+  row_vector structural_bridge_eta_mean(row_vector eta_prev,
+                                        int structural_bridge_B,
+                                        array[] int structural_bridge_party,
+                                        row_vector structural_bridge_delta_x_t,
+                                        real structural_bridge_epsilon) {
+    int P_bridge = cols(eta_prev);
+    int P_full = P_bridge + 1;
+    vector[P_full] x_prev = softmax(to_vector(append_col(eta_prev, 0)));
+    vector[P_full] x_bar = rep_vector(0.0, P_full);
+    vector[P_full] x_pushed = rep_vector(0.0, P_full);
+    array[P_full] int is_pushed = rep_array(0, P_full);
+    int non_pushed_count = P_full - structural_bridge_B;
+    real pushed_sum = 0.0;
+    real max_pushed_sum = 1.0 - structural_bridge_epsilon * non_pushed_count;
+    real non_pushed_prev_sum = 0.0;
+    real remaining_mass;
+    real available_non_pushed;
+    row_vector[P_bridge] eta_bar;
+
+    for(b in 1:structural_bridge_B) {
+      int p = structural_bridge_party[b];
+      is_pushed[p] = 1;
+      x_pushed[p] = fmax(x_prev[p] + structural_bridge_delta_x_t[b],
+                         structural_bridge_epsilon);
+      pushed_sum += x_pushed[p];
+    }
+
+    if(pushed_sum > max_pushed_sum) {
+      real pushed_floor = structural_bridge_epsilon * structural_bridge_B;
+      real available_pushed = max_pushed_sum - pushed_floor;
+
+      for(b in 1:structural_bridge_B) {
+        int p = structural_bridge_party[b];
+        x_pushed[p] = structural_bridge_epsilon +
+          (x_pushed[p] - structural_bridge_epsilon) *
+          available_pushed / (pushed_sum - pushed_floor);
+      }
+      pushed_sum = max_pushed_sum;
+    }
+
+    for(b in 1:structural_bridge_B) {
+      int p = structural_bridge_party[b];
+      x_bar[p] = x_pushed[p];
+    }
+
+    for(p in 1:P_full)
+      if(is_pushed[p] == 0)
+        non_pushed_prev_sum += x_prev[p];
+
+    remaining_mass = 1.0 - pushed_sum;
+    available_non_pushed = remaining_mass -
+      structural_bridge_epsilon * non_pushed_count;
+    for(p in 1:P_full)
+      if(is_pushed[p] == 0)
+        x_bar[p] = structural_bridge_epsilon +
+          available_non_pushed * x_prev[p] / non_pushed_prev_sum;
+
+    for(p in 1:P_bridge)
+      eta_bar[p] = log(x_bar[p]) - log(x_bar[P_full]);
+
+    return eta_bar;
+  }
+
 }
 
 // The same model but more efficiently reparametrized
@@ -194,6 +265,41 @@ data {
   vector<lower=0>[P] sigma_ep_sd_vector; // prior sd for N+ prior
   int<lower=0> EP;
   array[EP] vector[P] ep_inv_x;
+
+  // Structural bridge prior.
+  // 0 = no bridge
+  // 1 = state-dependent x-scale drift for selected parties
+  // 2 = reserved for constant-gain convex attractor
+  // 3 = reserved for drift-plus-attractor hybrid
+  // R-side validation currently allows only types 0 and 1.
+  int<lower=0, upper=3> structural_bridge_type;
+
+  // Whether the bridge applies at latent time t. This should be 1 only for
+  // unknown latent states inside the bridge window. Known states should always
+  // be 0.
+  array[T] int<lower=0, upper=1> structural_bridge_active_t;
+
+  // Number of parties receiving direct x-scale drift. Use 1 as the no-bridge
+  // default.
+  int<lower=1, upper=P> structural_bridge_B;
+
+  // Party indices receiving direct x-scale drift.
+  array[structural_bridge_B] int<lower=1, upper=P> structural_bridge_party;
+
+  // Stepwise vote-share drift for each pushed party. For pushed party b at
+  // time t, delta_x[t,b] is added to the current latent vote share before
+  // mapping back to eta.
+  matrix[T, structural_bridge_B] structural_bridge_delta_x;
+
+  // Numerical floor used to keep the implied vote-share mean inside the
+  // simplex.
+  real<lower=0> structural_bridge_epsilon;
+
+  // Bridge-specific row scaling of the Cholesky factor during active bridge
+  // steps. If lambda_p < 1, the bridge is tighter for eta coordinate p. If
+  // lambda_p = 1, the bridge uses the ordinary latent innovation variance. If
+  // lambda_p > 1, the bridge is softer.
+  vector<lower=0>[P] structural_bridge_sigma_scale;
 }
 
 transformed data {
@@ -370,16 +476,33 @@ transformed parameters {
           eta_z[t,] = to_row_vector((inverse(L_Sigma[s_t_Omega[t]]) / step_scale_t[t]) * to_vector((eta[t,] - eta[t-1,])));
         }
       } else {
+        row_vector[P] eta_mean_t;
+        matrix[P, P] L_t;
+
+        eta_mean_t = eta[t-1,];
         if(election_period[t] > 0){
           if(use_sigma_ep == 1)
             L_Sigma_ep[1] = diag_pre_multiply((ep_inv_x[election_period[t]] * sigma_ep[1] + sigma_x), L_Omega_x[s_t_Omega[t]]);
           if(use_sigma_ep == 2)
             L_Sigma_ep[1] = diag_pre_multiply((ep_inv_x[election_period[t]] .* sigma_ep + sigma_x), L_Omega_x[s_t_Omega[t]]);
 
-          eta[t,] = eta[t-1,] + step_scale_t[t] * to_row_vector(L_Sigma_ep[1] * to_vector(eta_z[t,]));
+          L_t = L_Sigma_ep[1];
         } else {
-          eta[t,] = eta[t-1,] + step_scale_t[t] * to_row_vector(L_Sigma[s_t_Omega[t]] * to_vector(eta_z[t,]));
+          L_t = L_Sigma[s_t_Omega[t]];
         }
+
+        if(structural_bridge_type == 1 && structural_bridge_active_t[t] == 1){
+          eta_mean_t = structural_bridge_eta_mean(
+            eta[t-1,],
+            structural_bridge_B,
+            structural_bridge_party,
+            structural_bridge_delta_x[t,],
+            structural_bridge_epsilon
+          );
+          L_t = diag_pre_multiply(structural_bridge_sigma_scale, L_t);
+        }
+
+        eta[t,] = eta_mean_t + step_scale_t[t] * to_row_vector(L_t * to_vector(eta_z[t,]));
       }
     }
 

@@ -199,7 +199,7 @@ pop2 <- refit_poll_of_polls(pop, polls_data = updated_polls)
 - `R/`: package functions, S3 methods, Stan data builders, diagnostics,
   plotting, backend adapters, save/load, and refit helpers.
 - `inst/stan_models/`: bundled Stan models. The current checked-in model files
-  include `model8k1`-`model8k5` and `model8m1`-`model8m5`.
+  include `model8k1`-`model8k9` and `model8m1`-`model8m10`.
 - `data/`: packaged `.rda` data, including curated poll and election datasets.
 - `data-raw/`: scripts and source files used to create package data.
 - `tests/testthat/`: unit tests plus optional Stan integration and backend
