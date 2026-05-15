@@ -34,21 +34,24 @@
 #' the backend fit after serialization.
 #'
 #' For `model8m10`, `hyper_parameters` can include `structural_bridge_type`,
-#' `structural_bridge_x_drift`, `structural_bridge_sigma_scale`, and
-#' `structural_bridge_epsilon`. Type 0 means no bridge, type 1 enables a
-#' state-dependent x-scale drift for selected parties, and types 2 and 3 are
-#' reserved but rejected until implemented. The bridge is applied only to
-#' unknown latent states; known states are not modified. High-level bridge
-#' windows fail if a known latent state falls in the active interior
-#' (`from_t < t < to_t`). Sigma scaling applies only during active bridge steps
-#' and scales eta coordinates, not vote-share points directly.
+#' `structural_bridge_window`, `structural_bridge_x_drift`,
+#' `structural_bridge_sigma_scale`, and `structural_bridge_epsilon`. Type 0
+#' means no bridge, type 1 enables a state-dependent x-scale drift for selected
+#' parties, and types 2 and 3 are reserved but rejected until implemented.
+#' `structural_bridge_window` supplies one global inclusive date range for both
+#' x-scale drift and bridge-specific sigma scaling. The bridge is applied only
+#' to unknown latent states; known states and zero-day steps are forced inactive.
+#' Sigma scaling must be strictly positive, applies only during active bridge
+#' steps, and scales eta coordinates, not vote-share points directly.
 #'
 #' Example `model8m10` bridge hyperparameters:
 #'
 #' \preformatted{hyper_parameters <- list(
+#'   structural_bridge_window = c(
+#'     as.Date("2026-06-04"),
+#'     as.Date("2026-09-13")
+#'   ),
 #'   structural_bridge_x_drift = data.frame(
-#'     from = as.Date("2026-06-04"),
-#'     to = as.Date("2026-09-13"),
 #'     y = "L",
 #'     from_x = 0.025,
 #'     to_x = 0.043

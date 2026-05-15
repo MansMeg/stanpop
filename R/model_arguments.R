@@ -776,7 +776,10 @@ assert_model_argument_value <- function(arg, value, x, stan_data){
     }
   } else if (arg %in% c("structural_bridge_sigma_scale")) {
     P <- if(!is.null(stan_data$P)) stan_data$P else length(value)
-    checkmate::assert_numeric(value, lower = 0, len = P, any.missing = FALSE, .var.name = arg)
+    checkmate::assert_numeric(value, len = P, any.missing = FALSE, .var.name = arg)
+    if(any(value < 1e-12)){
+      stop("structural_bridge_sigma_scale must be at least 1e-12 for every eta coordinate.", call. = FALSE)
+    }
   } else {
     stop(arg, " is not implemented.")
   }
