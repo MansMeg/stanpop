@@ -32,6 +32,7 @@ make_bridge_parser_case <- function() {
 }
 
 test_that("model8m10 is registered and uses the model8m data path", {
+  supported_pop_models <- get_internal("supported_pop_models")
   expect_true("model8m10" %in% supported_pop_models())
   expect_true(get_internal("model_supports_time_scale_overrides")("model8m10"))
 
@@ -85,6 +86,7 @@ test_that("model8m10 no-bridge defaults are Stan-ready", {
   expect_length(sd$structural_bridge_sigma_scale, sd$P)
   expect_true(all(sd$structural_bridge_sigma_scale == 1))
 })
+
 
 test_that("direct structural bridge active vectors cannot cover known states", {
   case <- make_model8_mixed_smoke_case(npolls = 20)
@@ -265,7 +267,7 @@ test_that("reserved structural bridge types are rejected on the R side", {
   )
 })
 
-test_that("model8m10 Stan model compiles", {
+test_that("model8m10 Stan model compiles with rstan", {
   skip_if_no_stan_tests()
   skip_if_no_rstan_tests()
   testthat::skip_if_not_installed("rstan")
