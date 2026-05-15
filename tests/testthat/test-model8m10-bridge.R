@@ -445,6 +445,28 @@ test_that("structural bridge parser allows only one global bridge window", {
   )
 })
 
+test_that("structural bridge parser rejects windows with no active unknown steps", {
+  parse_structural_bridge <- get_internal("parse_structural_bridge")
+  case <- make_bridge_parser_case()
+
+  expect_error(
+    parse_structural_bridge(
+      list(
+        structural_bridge_window = c(as.Date("2026-06-05"), as.Date("2026-06-06")),
+        structural_bridge_x_drift = data.frame(
+          y = "L",
+          from_x = 0.025,
+          to_x = 0.043
+        )
+      ),
+      case$time_line,
+      case$y_name,
+      case$stan_data
+    ),
+    "no active unknown bridge steps"
+  )
+})
+
 test_that("structural bridge window dates must be latent anchor dates", {
   parse_structural_bridge <- get_internal("parse_structural_bridge")
   case <- make_bridge_parser_case()
@@ -501,6 +523,15 @@ test_that("structural bridge sigma scale is ordered and validated", {
       case$stan_data
     ),
     "Names"
+  )
+  expect_error(
+    parse_structural_bridge(
+      list(structural_bridge_sigma_scale = c(M = 1, 0.5, C = 3)),
+      case$time_line,
+      case$y_name,
+      case$stan_data
+    ),
+    "fully named"
   )
   expect_error(
     parse_structural_bridge(
