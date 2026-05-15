@@ -25,9 +25,13 @@
 #' global inclusive date range for both x-scale drift and bridge-specific sigma
 #' scaling. The high-level `structural_bridge_x_drift` data frame should
 #' contain `y`, `from_x`, and `to_x`; party names are matched through `y_name`,
-#' and stepwise drift is scaled by `delta_days_t`. The bridge is applied only to
-#' unknown latent states in the inclusive bridge window; known states and
-#' zero-day steps are forced inactive. `structural_bridge_sigma_scale` is
+#' and stepwise drift is scaled by `delta_days_t`. `from_x` and `to_x` define
+#' the total drift size, `to_x - from_x`; they are not an attractor endpoint.
+#' For example, if the sampled party vote share at the bridge start is 0.028
+#' and `from_x = 0.025`, `to_x = 0.043`, the bridge adds 0.018, so absent
+#' innovations the drift points toward 0.046, not 0.043. The bridge is applied
+#' only to unknown latent states in the inclusive bridge window; known states
+#' and zero-day steps are forced inactive. `structural_bridge_sigma_scale` is
 #' ordered by `y_name` when named, must be strictly positive, applies only
 #' during active bridge steps, and scales eta-coordinate innovations rather than
 #' vote-share points directly.
@@ -1839,6 +1843,9 @@ parse_election_period <- function(x, tl){
 #' `y_name`, date bounds are mapped through `time_line`, and stepwise drift is
 #' allocated in proportion to `delta_days_t`. Active bridge steps are defined by
 #' `from_t <= t <= to_t`; known states and zero-day steps are forced inactive.
+#' The `from_x` and `to_x` columns define the total drift amount,
+#' `to_x - from_x`, not an attractor endpoint. The drift is added to the
+#' sampled current vote share path before the helper maps back to eta.
 #' Direct Stan bridge arguments are left in `hyper_parameters` for
 #' `model_config()` to validate; in particular, `structural_bridge_active_t`
 #' must be zero at known states before data are supplied to Stan.
@@ -1983,6 +1990,37 @@ assert_structural_bridge_x_drift <- function(x, y_name){
   checkmate::assert_numeric(x$to_x, lower = 0, upper = 1, any.missing = FALSE)
 }
 
+#' Parse the global structural bridge date window
+#'
+#' @description
+#' Normalize the user-facing bridge window into a single inclusive pair of
+#' `Date` values used by `build_structural_bridge_x_drift()`.
+#'
+#' @details
+#' The preferred API supplies `structural_bridge_window` as either a length-two
+#' date vector, interpreted as `c(from, to)`, or a one-row data frame with
+#' columns `from` and `to`. For compatibility with the first bridge interface,
+#' callers may omit `structural_bridge_window` and include `from` and `to`
+#' columns in `structural_bridge_x_drift`; in that case every drift row must
+#' share the same dates, because model8m10 has one global bridge window for
+#' both x-scale drift and bridge-specific sigma scaling. Supplying both
+#' `structural_bridge_window` and row-level `from`/`to` columns is rejected to
+#' avoid ambiguity.
+#'
+#' This helper only parses and validates the date range. It does not decide
+#' which latent time points are active; known states and zero-day steps are
+#' forced inactive later when the parsed dates are mapped through the model time
+#' line.
+#'
+#' @param structural_bridge_window `NULL`, a length-two date vector, or a
+#'   one-row data frame with columns `from` and `to`.
+#' @param structural_bridge_x_drift a bridge drift data frame, optionally with
+#'   compatibility `from` and `to` columns.
+#'
+#' @return A list with `from` and `to` as scalar `Date` values.
+#'
+#' @keywords internal
+#' @noRd
 parse_structural_bridge_window <- function(structural_bridge_window,
                                            structural_bridge_x_drift){
   has_row_dates <- all(c("from", "to") %in% names(structural_bridge_x_drift))

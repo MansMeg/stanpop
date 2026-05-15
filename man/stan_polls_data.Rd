@@ -159,9 +159,13 @@ are rejected until implemented. `structural_bridge_window` supplies one
 global inclusive date range for both x-scale drift and bridge-specific sigma
 scaling. The high-level `structural_bridge_x_drift` data frame should
 contain `y`, `from_x`, and `to_x`; party names are matched through `y_name`,
-and stepwise drift is scaled by `delta_days_t`. The bridge is applied only to
-unknown latent states in the inclusive bridge window; known states and
-zero-day steps are forced inactive. `structural_bridge_sigma_scale` is
+and stepwise drift is scaled by `delta_days_t`. `from_x` and `to_x` define
+the total drift size, `to_x - from_x`; they are not an attractor endpoint.
+For example, if the sampled party vote share at the bridge start is 0.028
+and `from_x = 0.025`, `to_x = 0.043`, the bridge adds 0.018, so absent
+innovations the drift points toward 0.046, not 0.043. The bridge is applied
+only to unknown latent states in the inclusive bridge window; known states
+and zero-day steps are forced inactive. `structural_bridge_sigma_scale` is
 ordered by `y_name` when named, must be strictly positive, applies only
 during active bridge steps, and scales eta-coordinate innovations rather than
 vote-share points directly.
