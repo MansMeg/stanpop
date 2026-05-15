@@ -15,6 +15,20 @@
 #'        Example: If only 2010-01-15 is used, all dates up to and including 2010-01-15, will have s=1,
 #'                 Dates after 2010-01-15 will have s=2.
 #' @details
+#' For `model8m10`, `hyper_parameters` can include `structural_bridge_type`,
+#' `structural_bridge_x_drift`, `structural_bridge_sigma_scale`, and
+#' `structural_bridge_epsilon`. `structural_bridge_type = 0` means no bridge,
+#' while `structural_bridge_type = 1` enables a state-dependent x-scale drift
+#' for selected parties. Types 2 and 3 are reserved for future bridge variants
+#' and are rejected until implemented. The high-level `structural_bridge_x_drift`
+#' data frame should contain `from`, `to`, `y`, `from_x`, and `to_x`; dates are
+#' mapped to the model time line, party names are matched through `y_name`, and
+#' stepwise drift is scaled by `delta_days_t`. The bridge is applied only to
+#' unknown latent states inside the bridge window; known states are not modified.
+#' `structural_bridge_sigma_scale` is ordered by `y_name` when named, applies
+#' only during active bridge steps, and scales eta-coordinate innovations rather
+#' than vote-share points directly.
+#'
 #' The returned object keeps the existing [stan_data] and [time_line] fields
 #' unchanged for current models. A parallel future path is attached in
 #' [stan_data_with_overrides] and [time_line_with_overrides], built using
@@ -1596,6 +1610,9 @@ stan_data_finalize_model8m <- function(stan_data,
   hyper_parameters <- parse_obs_x(hyper_parameters, time_line, y_name)
   hyper_parameters <- parse_election_period(hyper_parameters, time_line)
   if(is.null(hyper_parameters$EP)) hyper_parameters$EP <- as.integer(max(hyper_parameters$election_period))
+  if(identical(model, "model8m10")){
+    hyper_parameters <- parse_structural_bridge(hyper_parameters, time_line, y_name, stan_data)
+  }
 
   mc <- model_config(model, hyper_parameters, stan_data)
   stan_data <- c(stan_data, mc)
@@ -1834,6 +1851,22 @@ assert_stan_data_model.model8m <- function(x){
   checkmate::assert_list(x$stan_data$ep_inv_x, len = x$stan_data$EP)
   for(i in seq_along(x$stan_data$ep_inv_x)){
     checkmate::assert_numeric(x$stan_data$ep_inv_x[[i]], lower = 0, len = x$stan_data$P)
+  }
+  if(!is.null(x$stan_data$structural_bridge_type)){
+    checkmate::assert_integerish(x$stan_data$structural_bridge_type, lower = 0L, upper = 1L, len = 1L)
+    checkmate::assert_integerish(x$stan_data$structural_bridge_active_t, lower = 0L, upper = 1L, len = x$stan_data$T)
+    checkmate::assert_int(x$stan_data$structural_bridge_B, lower = 1L, upper = x$stan_data$P)
+    checkmate::assert_integerish(x$stan_data$structural_bridge_party,
+                                 lower = 1L,
+                                 upper = x$stan_data$P,
+                                 len = x$stan_data$structural_bridge_B)
+    checkmate::assert_matrix(x$stan_data$structural_bridge_delta_x,
+                             nrows = x$stan_data$T,
+                             ncols = x$stan_data$structural_bridge_B)
+    checkmate::assert_number(x$stan_data$structural_bridge_epsilon, lower = 0)
+    checkmate::assert_numeric(x$stan_data$structural_bridge_sigma_scale,
+                              lower = 0,
+                              len = x$stan_data$P)
   }
   assert_model_arguments(x)
 }
