@@ -42,6 +42,23 @@
 #' only during active bridge steps and scales eta coordinates, not vote-share
 #' points directly.
 #'
+#' Example `model8m10` bridge hyperparameters:
+#'
+#' \preformatted{hyper_parameters <- list(
+#'   structural_bridge_x_drift = data.frame(
+#'     from = as.Date("2026-06-04"),
+#'     to = as.Date("2026-09-13"),
+#'     y = "L",
+#'     from_x = 0.025,
+#'     to_x = 0.043
+#'   ),
+#'   structural_bridge_sigma_scale = c(
+#'     M = 1, L = 0.5, C = 1, KD = 1,
+#'     S = 1, V = 1, MP = 1, SD = 1
+#'   ),
+#'   structural_bridge_epsilon = 1e-6
+#' )}
+#'
 #'
 #' @export
 poll_of_polls <- function(y,

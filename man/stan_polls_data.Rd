@@ -149,6 +149,37 @@ Example: If only 2010-01-15 is used, all dates up to and including 2010-01-15, w
 Generate Stan Data from [polls_data] objects
 }
 \details{
+For `model8m10`, `hyper_parameters` can include `structural_bridge_type`,
+`structural_bridge_x_drift`, `structural_bridge_sigma_scale`, and
+`structural_bridge_epsilon`. `structural_bridge_type = 0` means no bridge,
+while `structural_bridge_type = 1` enables a state-dependent x-scale drift
+for selected parties. Types 2 and 3 are reserved for future bridge variants
+and are rejected until implemented. The high-level `structural_bridge_x_drift`
+data frame should contain `from`, `to`, `y`, `from_x`, and `to_x`; dates are
+mapped to the model time line, party names are matched through `y_name`, and
+stepwise drift is scaled by `delta_days_t`. The bridge is applied only to
+unknown latent states inside the bridge window; known states are not modified.
+`structural_bridge_sigma_scale` is ordered by `y_name` when named, applies
+only during active bridge steps, and scales eta-coordinate innovations rather
+than vote-share points directly.
+
+Example `model8m10` bridge hyperparameters:
+
+\preformatted{hyper_parameters <- list(
+  structural_bridge_x_drift = data.frame(
+    from = as.Date("2026-06-04"),
+    to = as.Date("2026-09-13"),
+    y = "L",
+    from_x = 0.025,
+    to_x = 0.043
+  ),
+  structural_bridge_sigma_scale = c(
+    M = 1, L = 0.5, C = 1, KD = 1,
+    S = 1, V = 1, MP = 1, SD = 1
+  ),
+  structural_bridge_epsilon = 1e-6
+)}
+
 The returned object keeps the existing [stan_data] and [time_line] fields
 unchanged for current models. A parallel future path is attached in
 [stan_data_with_overrides] and [time_line_with_overrides], built using
