@@ -78,9 +78,10 @@ test_that("model8m10 no-bridge defaults are Stan-ready", {
 
   expect_identical(sd$structural_bridge_type, 0L)
   expect_length(sd$structural_bridge_active_t, sd$T)
+  expect_true(is.array(sd$structural_bridge_active_t))
   expect_true(all(sd$structural_bridge_active_t == 0L))
   expect_identical(sd$structural_bridge_B, 1L)
-  expect_identical(sd$structural_bridge_party, 1L)
+  expect_identical(sd$structural_bridge_party, as.array(1L))
   expect_identical(dim(sd$structural_bridge_delta_x), c(sd$T, 1L))
   expect_true(all(sd$structural_bridge_delta_x == 0))
   expect_length(sd$structural_bridge_sigma_scale, sd$P)
@@ -354,15 +355,18 @@ test_that("positive bridge drift raises and tightens the pushed party", {
   skip_if_no_rstan_tests()
 
   case <- make_model8_mixed_smoke_case(npolls = 20)
-  bridge_from <- case$known_state$date[1] - 28L
-  bridge_to <- case$known_state$date[1] + 28L
+  bridge_from <- case$known_state$date[1] - 56L
+  bridge_to <- case$known_state$date[1] - 7L
   target_date <- bridge_to - 7L
   base_cfg <- list(
     use_industry_bias = 0L,
     use_house_bias = 0L,
     use_design_effects = 0L,
     use_multivariate_version = 2L,
-    use_softmax = 1L
+    use_softmax = 1L,
+    election_period = list(c("2010-05-03", "2010-05-20")),
+    use_sigma_ep = 2L,
+    ep_inv_x = list(c(3.984064, 3.937008))
   )
   bridge_drift <- data.frame(
     from = bridge_from,

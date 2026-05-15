@@ -1637,6 +1637,10 @@ stan_data_finalize_model8m <- function(stan_data,
   stan_data$alpha_kappa_known <- array(stan_data$alpha_kappa_known, dim = 1)
   stan_data$alpha_beta_mu_known <- array(stan_data$alpha_beta_mu_known, dim = 1)
   stan_data$alpha_beta_sigma_known <- array(stan_data$alpha_beta_sigma_known, dim = 1)
+  if(identical(model, "model8m10")){
+    stan_data$structural_bridge_active_t <- as.array(as.integer(stan_data$structural_bridge_active_t))
+    stan_data$structural_bridge_party <- as.array(as.integer(stan_data$structural_bridge_party))
+  }
 
   stan_data
 }
