@@ -624,6 +624,26 @@ set_default_model_argument_value <- function(arg, x = NULL, stan_data = NULL){
   stop(arg, " is not implemented.")
 }
 
+#' Normalize a structural bridge type identifier
+#'
+#' @description
+#' Convert the user-facing `model8m10` structural bridge type value to the
+#' integer id used in Stan data.
+#'
+#' @details
+#' Character values are accepted for the public/high-level API:
+#' `"none"` and `"no_bridge"` map to `0L`, `"x_drift"` maps to `1L`, and
+#' `"constant_gain_pull"` maps to `2L`. Integerish values are returned as
+#' integers after validation. The helper is intentionally small and shared by
+#' `model_config()` and bridge parsing so direct Stan-data arguments and
+#' high-level bridge arguments use the same type vocabulary.
+#'
+#' @param value a scalar character or integerish bridge type.
+#'
+#' @return An integer bridge type id: `0L`, `1L`, or `2L`.
+#'
+#' @keywords internal
+#' @noRd
 normalize_structural_bridge_type <- function(value){
   checkmate::assert_atomic(value, len = 1L, any.missing = FALSE, .var.name = "structural_bridge_type")
   if(is.character(value)){

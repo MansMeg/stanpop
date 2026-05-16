@@ -2040,6 +2040,42 @@ build_structural_bridge_x_drift <- function(structural_bridge_x_drift,
   )
 }
 
+#' Build Stan data for the constant-gain structural bridge
+#'
+#' @description
+#' Convert the high-level selected-party bridge input into the Stan data used by
+#' `structural_bridge_type = "constant_gain_pull"`.
+#'
+#' @details
+#' This builder reuses the common bridge window and active-step machinery shared
+#' with the x-drift bridge. It creates a full `T x P` matrix of selected-party
+#' structural targets, `structural_bridge_x_target_t`, by linearly
+#' interpolating from `from_x` at the bridge origin to `to_x` at the bridge end
+#' in elapsed latent-grid days. The active transition set remains
+#' `from_t < t <= to_t`, with known states and zero-day transitions forced
+#' inactive. The returned party mask identifies the selected eta coordinates;
+#' non-selected parties and the reference category are rescaled in Stan.
+#'
+#' The selected target path is validated to have row sums below one throughout
+#' the bridge window, leaving positive mass for non-selected parties and the
+#' reference category.
+#'
+#' @param structural_bridge_x_drift high-level bridge data with columns `y`,
+#'   `from_x`, and `to_x`, optionally with compatibility `from` and `to`
+#'   columns when `structural_bridge_window` is `NULL`.
+#' @param structural_bridge_window `NULL`, a length-two date vector, or a
+#'   one-row data frame with columns `from` and `to`.
+#' @param time_line a [time_line] object used to map bridge dates to latent
+#'   time points.
+#' @param y_name party/category names in Stan data order.
+#' @param stan_data the partly-built Stan data list. Must include `T`, `P`,
+#'   `x_known_t`, and, when available, `delta_days_t`.
+#'
+#' @return A list with `active_t`, `B`, `party`, `x_target_t`, and
+#'   `party_active_p`.
+#'
+#' @keywords internal
+#' @noRd
 build_structural_bridge_constant_gain_pull <- function(structural_bridge_x_drift,
                                                        structural_bridge_window = NULL,
                                                        time_line,
@@ -2081,6 +2117,39 @@ build_structural_bridge_constant_gain_pull <- function(structural_bridge_x_drift
   )
 }
 
+#' Build shared structural bridge parsing state
+#'
+#' @description
+#' Normalize and validate the user-facing structural bridge inputs that are
+#' common to all high-level `model8m10` bridge builders.
+#'
+#' @details
+#' This helper centralizes the behavior that must remain identical across bridge
+#' types: selected-party input normalization, bridge-window parsing, exact
+#' latent-anchor date validation, party ordering, latent step length extraction,
+#' and construction of the active transition set. Active bridge transitions are
+#' always `from_t < t <= to_t`, with known eta states and zero-day transitions
+#' removed. The helper also computes both total active days, used by the
+#' additive x-drift bridge, and total bridge-window days, used by the structural
+#' target path for the constant-gain bridge.
+#'
+#' @param structural_bridge_x_drift high-level bridge data with columns `y`,
+#'   `from_x`, and `to_x`, optionally with compatibility `from` and `to`
+#'   columns when `structural_bridge_window` is `NULL`.
+#' @param structural_bridge_window `NULL`, a length-two date vector, or a
+#'   one-row data frame with columns `from` and `to`.
+#' @param time_line a [time_line] object used to map bridge dates to latent
+#'   time points.
+#' @param y_name party/category names in Stan data order.
+#' @param stan_data the partly-built Stan data list. Must include `T`,
+#'   `x_known_t`, and, when available, `delta_days_t`.
+#'
+#' @return A list containing normalized bridge input, selected parties,
+#'   `delta_days_t`, bridge endpoint indices, active/window row masks, and day
+#'   totals.
+#'
+#' @keywords internal
+#' @noRd
 build_structural_bridge_common <- function(structural_bridge_x_drift,
                                            structural_bridge_window = NULL,
                                            time_line,
@@ -2262,6 +2331,28 @@ parse_structural_bridge_sigma_scale <- function(x, y_name){
   unname(x[y_name])
 }
 
+#' Convert weekly bridge gain to latent-step gain
+#'
+#' @description
+#' Compute the constant-gain pull strength for arbitrary latent-grid step
+#' lengths.
+#'
+#' @details
+#' `alpha_week` is the fraction of the current selected-party gap that should
+#' be closed over a seven-day step. For a transition of length `delta_days`,
+#' the corresponding step gain is
+#' `1 - (1 - alpha_week)^(delta_days / 7)`. This makes the bridge strength
+#' invariant to daily, weekly, or mixed latent grids.
+#'
+#' @param alpha_week scalar weekly gap-closing fraction. Must satisfy
+#'   `0 < alpha_week <= 1`.
+#' @param delta_days numeric vector of non-negative transition lengths in days.
+#'
+#' @return A numeric vector of per-step gains with the same length as
+#'   `delta_days`.
+#'
+#' @keywords internal
+#' @noRd
 structural_bridge_step_alpha <- function(alpha_week, delta_days){
   checkmate::assert_number(alpha_week, lower = 0, upper = 1)
   checkmate::assert_true(alpha_week > 0)
@@ -2269,6 +2360,39 @@ structural_bridge_step_alpha <- function(alpha_week, delta_days){
   1 - (1 - alpha_week)^(delta_days / 7)
 }
 
+#' Apply the constant-gain structural bridge on the simplex
+#'
+#' @description
+#' Compute the vote-share-scale transition mean implied by the constant-gain
+#' convex-pull bridge.
+#'
+#' @details
+#' Selected parties are moved toward their structural targets by the per-step
+#' gain from [structural_bridge_step_alpha()]. All non-selected parties and the
+#' reference category are then rescaled proportionally so the returned full
+#' simplex sums to one. This helper mirrors the Stan-side simplex calculation
+#' and is used by tests for alpha conversion, selected-party motion, and
+#' proportional rescaling.
+#'
+#' `x_prev` is the full simplex, including the reference category as its last
+#' element. `x_target` and `party_active_p` cover only the explicit eta
+#' coordinates, so their length must be `length(x_prev) - 1`.
+#'
+#' @param x_prev numeric full simplex at the previous latent state, including
+#'   the reference category in the final element.
+#' @param x_target numeric target vector for the explicit eta coordinates.
+#'   Entries for non-selected parties are ignored.
+#' @param party_active_p integerish `0/1` mask for selected explicit eta
+#'   coordinates.
+#' @param alpha_week scalar weekly gap-closing fraction. Must satisfy
+#'   `0 < alpha_week <= 1`.
+#' @param delta_days scalar non-negative transition length in days.
+#'
+#' @return A numeric full simplex after the constant-gain pull and proportional
+#'   non-selected-party rescaling.
+#'
+#' @keywords internal
+#' @noRd
 structural_bridge_constant_gain_pull_x <- function(x_prev,
                                                    x_target,
                                                    party_active_p,
