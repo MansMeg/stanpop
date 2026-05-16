@@ -17,19 +17,26 @@
 #' @details
 #' For `model8m10`, `hyper_parameters` can include `structural_bridge_type`,
 #' `structural_bridge_window`, `structural_bridge_x_drift`,
-#' `structural_bridge_sigma_scale`, and `structural_bridge_epsilon`.
+#' `structural_bridge_alpha_week`, `structural_bridge_sigma_scale`, and
+#' `structural_bridge_epsilon`.
 #' `structural_bridge_type = 0` means no bridge, while
-#' `structural_bridge_type = 1` enables a state-dependent x-scale drift for
-#' selected parties. Types 2 and 3 are reserved for future bridge variants and
-#' are rejected until implemented. `structural_bridge_window` supplies one
+#' `structural_bridge_type = 1` or `"x_drift"` enables a state-dependent
+#' x-scale drift for selected parties. `structural_bridge_type = 2` or
+#' `"constant_gain_pull"` enables a constant-gain convex pull toward the
+#' structural vote-share path for selected parties. `structural_bridge_window` supplies one
 #' global inclusive calendar date range for both x-scale drift and bridge-specific sigma
 #' scaling. The high-level `structural_bridge_x_drift` data frame should
 #' contain `y`, `from_x`, and `to_x`; party names are matched through `y_name`,
-#' and stepwise drift is scaled by `delta_days_t`. `from_x` and `to_x` define
-#' the total drift size, `to_x - from_x`; they are not an attractor endpoint.
+#' and stepwise drift is scaled by `delta_days_t`. For `"x_drift"`, `from_x`
+#' and `to_x` define the total drift size, `to_x - from_x`; they are not an
+#' attractor endpoint.
 #' For example, if the sampled party vote share at the bridge start is 0.028
 #' and `from_x = 0.025`, `to_x = 0.043`, the bridge adds 0.018, so absent
-#' innovations the drift points toward 0.046, not 0.043. The bridge window is
+#' innovations the drift points toward 0.046, not 0.043. For
+#' `"constant_gain_pull"`, `from_x` and `to_x` define the selected-party
+#' structural target path, and `structural_bridge_alpha_week` is the weekly
+#' gap-closing fraction. A half-life of `H` days corresponds to
+#' `1 - 2^(-7 / H)`. The bridge window is
 #' inclusive in calendar time; drift is applied to latent transitions after
 #' `from` and through `to`. The `from` and `to` dates must be exact latent
 #' anchor dates in `time_line$time_line$date`; use `time_scale_overrides` when
@@ -151,7 +158,10 @@ stan_polls_data <- function(x,
                        "structural_bridge_active_t",
                        "structural_bridge_B",
                        "structural_bridge_party",
+                       "structural_bridge_party_active_p",
                        "structural_bridge_delta_x",
+                       "structural_bridge_x_target_t",
+                       "structural_bridge_alpha_week",
                        "structural_bridge_epsilon",
                        "structural_bridge_sigma_scale")
       if(!is.null(initial_hyper_parameters)){
@@ -1677,6 +1687,7 @@ stan_data_finalize_model8m <- function(stan_data,
   if(identical(model, "model8m10")){
     stan_data$structural_bridge_active_t <- as.array(as.integer(stan_data$structural_bridge_active_t))
     stan_data$structural_bridge_party <- as.array(as.integer(stan_data$structural_bridge_party))
+    stan_data$structural_bridge_party_active_p <- as.array(as.integer(stan_data$structural_bridge_party_active_p))
   }
 
   stan_data
@@ -1864,8 +1875,9 @@ parse_election_period <- function(x, tl){
 #' data arguments consumed by `model8m10.stan`.
 #'
 #' @details
-#' `structural_bridge_x_drift` is the high-level interface for bridge type 1.
-#' It is a data frame with columns `y`, `from_x`, and `to_x`. A single global
+#' `structural_bridge_x_drift` is the high-level selected-party input for
+#' bridge type 1 (`"x_drift"`) and type 2 (`"constant_gain_pull"`). It is a
+#' data frame with columns `y`, `from_x`, and `to_x`. A single global
 #' `structural_bridge_window` supplies the inclusive calendar bridge dates. For
 #' compatibility, `from` and `to` may be included in `structural_bridge_x_drift`,
 #' but all rows must share the same dates. Party names in `y` are mapped through
@@ -1877,9 +1889,11 @@ parse_election_period <- function(x, tl){
 #' `time_line$time_line$date`; use `time_scale_overrides` to add exact endpoint
 #' anchors on a coarser latent grid. Known states and zero-day steps are forced
 #' inactive.
-#' The `from_x` and `to_x` columns define the total drift amount,
-#' `to_x - from_x`, not an attractor endpoint. The drift is added to the
-#' sampled current vote share path before the helper maps back to eta.
+#' For `"x_drift"`, the `from_x` and `to_x` columns define the total drift
+#' amount, `to_x - from_x`, not an attractor endpoint. The drift is added to
+#' the sampled current vote share path before the helper maps back to eta.
+#' For `"constant_gain_pull"`, they define the structural target path and
+#' `structural_bridge_alpha_week` defines the weekly gap-closing fraction.
 #' Direct Stan bridge arguments are left in `hyper_parameters` for
 #' `model_config()` to validate; in particular, `structural_bridge_active_t`
 #' must be zero at known states before data are supplied to Stan.
@@ -1908,6 +1922,11 @@ parse_structural_bridge <- function(hyper_parameters, time_line, y_name, stan_da
   assert_time_line(time_line)
   checkmate::assert_character(y_name, any.missing = FALSE)
   checkmate::assert_list(stan_data)
+  if(!is.null(hyper_parameters$structural_bridge_type)){
+    hyper_parameters$structural_bridge_type <- normalize_structural_bridge_type(
+      hyper_parameters$structural_bridge_type
+    )
+  }
 
   has_x_drift <- !is.null(hyper_parameters$structural_bridge_x_drift)
   has_bridge_window <- !is.null(hyper_parameters$structural_bridge_window)
@@ -1917,33 +1936,65 @@ parse_structural_bridge <- function(hyper_parameters, time_line, y_name, stan_da
   }
 
   if(has_x_drift){
-    if(!is.null(hyper_parameters$structural_bridge_type) &&
-       as.integer(hyper_parameters$structural_bridge_type) != 1L){
-      stop("structural_bridge_x_drift requires structural_bridge_type = 1.", call. = FALSE)
+    bridge_type <- if(is.null(hyper_parameters$structural_bridge_type)){
+      1L
+    } else {
+      as.integer(hyper_parameters$structural_bridge_type)
+    }
+    if(!(bridge_type %in% c(1L, 2L))){
+      stop("structural_bridge_x_drift requires structural_bridge_type = 'x_drift' or 'constant_gain_pull'.", call. = FALSE)
     }
     direct_args <- c("structural_bridge_active_t",
                      "structural_bridge_B",
                      "structural_bridge_party",
-                     "structural_bridge_delta_x")
+                     "structural_bridge_party_active_p",
+                     "structural_bridge_delta_x",
+                     "structural_bridge_x_target_t")
     direct_args_set <- direct_args[vapply(hyper_parameters[direct_args], Negate(is.null), logical(1))]
     if(length(direct_args_set) > 0){
       stop("structural_bridge_x_drift cannot be combined with direct bridge Stan arguments: ",
            paste(direct_args_set, collapse = ", "), call. = FALSE)
     }
 
-    parsed <- build_structural_bridge_x_drift(
-      structural_bridge_x_drift = hyper_parameters$structural_bridge_x_drift,
-      structural_bridge_window = hyper_parameters$structural_bridge_window,
-      time_line = time_line,
-      y_name = y_name,
-      stan_data = stan_data
-    )
+    if(bridge_type == 1L){
+      parsed <- build_structural_bridge_x_drift(
+        structural_bridge_x_drift = hyper_parameters$structural_bridge_x_drift,
+        structural_bridge_window = hyper_parameters$structural_bridge_window,
+        time_line = time_line,
+        y_name = y_name,
+        stan_data = stan_data
+      )
+    } else {
+      if(is.null(hyper_parameters$structural_bridge_alpha_week)){
+        stop("structural_bridge_alpha_week is required when structural_bridge_type = 'constant_gain_pull'.", call. = FALSE)
+      }
+      checkmate::assert_number(
+        hyper_parameters$structural_bridge_alpha_week,
+        lower = 0,
+        upper = 1,
+        .var.name = "structural_bridge_alpha_week"
+      )
+      if(!(hyper_parameters$structural_bridge_alpha_week > 0)){
+        stop("structural_bridge_alpha_week must be greater than 0.", call. = FALSE)
+      }
+      parsed <- build_structural_bridge_constant_gain_pull(
+        structural_bridge_x_drift = hyper_parameters$structural_bridge_x_drift,
+        structural_bridge_window = hyper_parameters$structural_bridge_window,
+        time_line = time_line,
+        y_name = y_name,
+        stan_data = stan_data
+      )
+      hyper_parameters$structural_bridge_x_target_t <- parsed$x_target_t
+      hyper_parameters$structural_bridge_party_active_p <- parsed$party_active_p
+    }
 
-    hyper_parameters$structural_bridge_type <- 1L
+    hyper_parameters$structural_bridge_type <- bridge_type
     hyper_parameters$structural_bridge_active_t <- parsed$active_t
     hyper_parameters$structural_bridge_B <- parsed$B
     hyper_parameters$structural_bridge_party <- parsed$party
-    hyper_parameters$structural_bridge_delta_x <- parsed$delta_x
+    if(bridge_type == 1L){
+      hyper_parameters$structural_bridge_delta_x <- parsed$delta_x
+    }
   } else if(is.null(hyper_parameters$structural_bridge_type)){
     hyper_parameters$structural_bridge_type <- 0L
   }
@@ -1965,6 +2016,76 @@ build_structural_bridge_x_drift <- function(structural_bridge_x_drift,
                                             time_line,
                                             y_name,
                                             stan_data){
+  bridge <- build_structural_bridge_common(
+    structural_bridge_x_drift = structural_bridge_x_drift,
+    structural_bridge_window = structural_bridge_window,
+    time_line = time_line,
+    y_name = y_name,
+    stan_data = stan_data
+  )
+  delta_x <- matrix(0.0, nrow = bridge$T, ncol = length(bridge$parties))
+
+  for(i in seq_len(nrow(bridge$x_drift))){
+    b <- match(bridge$x_drift$y[i], bridge$parties)
+    total_drift <- bridge$x_drift$to_x[i] - bridge$x_drift$from_x[i]
+    delta_x[bridge$row_active, b] <- delta_x[bridge$row_active, b] +
+      total_drift * bridge$delta_days_t[bridge$row_active] / bridge$total_active_days
+  }
+
+  list(
+    active_t = as.integer(bridge$row_active),
+    B = length(bridge$parties),
+    party = match(bridge$parties, y_name),
+    delta_x = delta_x
+  )
+}
+
+build_structural_bridge_constant_gain_pull <- function(structural_bridge_x_drift,
+                                                       structural_bridge_window = NULL,
+                                                       time_line,
+                                                       y_name,
+                                                       stan_data){
+  bridge <- build_structural_bridge_common(
+    structural_bridge_x_drift = structural_bridge_x_drift,
+    structural_bridge_window = structural_bridge_window,
+    time_line = time_line,
+    y_name = y_name,
+    stan_data = stan_data
+  )
+  x_target_t <- matrix(0.0, nrow = bridge$T, ncol = length(y_name))
+  party_active_p <- rep(0L, length(y_name))
+  party_active_p[match(bridge$parties, y_name)] <- 1L
+
+  elapsed_days <- cumsum(ifelse(bridge$row_window, bridge$delta_days_t, 0))
+  progress <- elapsed_days / bridge$total_window_days
+  target_rows <- seq_len(bridge$T) >= bridge$from_t & seq_len(bridge$T) <= bridge$to_t
+  progress[bridge$from_t] <- 0
+
+  for(i in seq_len(nrow(bridge$x_drift))){
+    p <- match(bridge$x_drift$y[i], y_name)
+    x_target_t[target_rows, p] <- bridge$x_drift$from_x[i] +
+      (bridge$x_drift$to_x[i] - bridge$x_drift$from_x[i]) * progress[target_rows]
+  }
+
+  target_sums <- rowSums(x_target_t[target_rows, party_active_p == 1L, drop = FALSE])
+  if(any(target_sums >= 1)){
+    stop("For selected structural bridge parties, the constant-gain target path must sum to less than 1 at every bridge step.", call. = FALSE)
+  }
+
+  list(
+    active_t = as.integer(bridge$row_active),
+    B = length(bridge$parties),
+    party = match(bridge$parties, y_name),
+    x_target_t = x_target_t,
+    party_active_p = party_active_p
+  )
+}
+
+build_structural_bridge_common <- function(structural_bridge_x_drift,
+                                           structural_bridge_window = NULL,
+                                           time_line,
+                                           y_name,
+                                           stan_data){
   structural_bridge_x_drift <- normalize_structural_bridge_x_drift(structural_bridge_x_drift)
   assert_structural_bridge_x_drift(structural_bridge_x_drift, y_name)
   bridge_window <- parse_structural_bridge_window(
@@ -1975,8 +2096,6 @@ build_structural_bridge_x_drift <- function(structural_bridge_x_drift,
 
   T <- stan_data$T
   parties <- unique(structural_bridge_x_drift$y)
-  active_t <- rep(0L, T)
-  delta_x <- matrix(0.0, nrow = T, ncol = length(parties))
   if(is.null(stan_data$delta_days_t)){
     delta_days_t <- c(0, as.numeric(diff(time_line$time_line$date)))
   } else {
@@ -1997,29 +2116,32 @@ build_structural_bridge_x_drift <- function(structural_bridge_x_drift,
   }
   from_t <- get_time_points_from_time_line(bridge_window$from, time_line)
   to_t <- get_time_points_from_time_line(bridge_window$to, time_line)
-  row_active <- seq_len(T) > from_t & seq_len(T) <= to_t
+  row_window <- seq_len(T) > from_t & seq_len(T) <= to_t
+  row_active <- row_window
   if(length(known_t) > 0){
     row_active[known_t] <- FALSE
   }
   row_active[delta_days_t == 0] <- FALSE
-  total_days <- sum(delta_days_t[row_active])
-  if(!(total_days > 0)){
+  total_active_days <- sum(delta_days_t[row_active])
+  total_window_days <- sum(delta_days_t[row_window])
+  if(!(total_active_days > 0)){
     stop("structural_bridge_window has no active unknown bridge steps after from and through to.", call. = FALSE)
   }
-
-  for(i in seq_len(nrow(structural_bridge_x_drift))){
-    b <- match(structural_bridge_x_drift$y[i], parties)
-    total_drift <- structural_bridge_x_drift$to_x[i] - structural_bridge_x_drift$from_x[i]
-    delta_x[row_active, b] <- delta_x[row_active, b] +
-      total_drift * delta_days_t[row_active] / total_days
-    active_t[row_active] <- 1L
+  if(!(total_window_days > 0)){
+    stop("structural_bridge_window has no positive-length bridge steps after from and through to.", call. = FALSE)
   }
 
   list(
-    active_t = active_t,
-    B = length(parties),
-    party = match(parties, y_name),
-    delta_x = delta_x
+    x_drift = structural_bridge_x_drift,
+    T = T,
+    parties = parties,
+    delta_days_t = delta_days_t,
+    from_t = from_t,
+    to_t = to_t,
+    row_window = row_window,
+    row_active = row_active,
+    total_active_days = total_active_days,
+    total_window_days = total_window_days
   )
 }
 
@@ -2045,6 +2167,9 @@ assert_structural_bridge_x_drift <- function(x, y_name){
   }
   checkmate::assert_numeric(x$from_x, lower = 0, upper = 1, any.missing = FALSE)
   checkmate::assert_numeric(x$to_x, lower = 0, upper = 1, any.missing = FALSE)
+  if(any(x$from_x <= 0) || any(x$to_x <= 0)){
+    stop("structural_bridge_x_drift from_x and to_x must be positive.", call. = FALSE)
+  }
 }
 
 #' Parse the global structural bridge date window
@@ -2137,6 +2262,36 @@ parse_structural_bridge_sigma_scale <- function(x, y_name){
   unname(x[y_name])
 }
 
+structural_bridge_step_alpha <- function(alpha_week, delta_days){
+  checkmate::assert_number(alpha_week, lower = 0, upper = 1)
+  checkmate::assert_true(alpha_week > 0)
+  checkmate::assert_numeric(delta_days, lower = 0, any.missing = FALSE)
+  1 - (1 - alpha_week)^(delta_days / 7)
+}
+
+structural_bridge_constant_gain_pull_x <- function(x_prev,
+                                                   x_target,
+                                                   party_active_p,
+                                                   alpha_week,
+                                                   delta_days){
+  checkmate::assert_numeric(x_prev, lower = 0, upper = 1, any.missing = FALSE)
+  checkmate::assert_numeric(x_target, lower = 0, upper = 1, len = length(x_prev) - 1L, any.missing = FALSE)
+  checkmate::assert_integerish(party_active_p, lower = 0L, upper = 1L, len = length(x_target), any.missing = FALSE)
+  assert_simplex(x_prev)
+  alpha_t <- structural_bridge_step_alpha(alpha_week, delta_days)
+  x_bar <- x_prev
+  active_p <- as.integer(party_active_p) == 1L
+  R_prev <- 1 - sum(x_prev[seq_along(x_target)][active_p])
+
+  x_bar[seq_along(x_target)[active_p]] <-
+    (1 - alpha_t) * x_prev[seq_along(x_target)[active_p]] +
+    alpha_t * x_target[active_p]
+  R_bar <- 1 - sum(x_bar[seq_along(x_target)][active_p])
+  x_bar[c(seq_along(x_target)[!active_p], length(x_prev))] <-
+    x_prev[c(seq_along(x_target)[!active_p], length(x_prev))] * R_bar / R_prev
+  x_bar
+}
+
 
 stan_polls_data_model8m <- function(x, y_name, time_scale = "week", known_state = NULL, model_time_range = NULL, latent_time_ranges = NULL, hyper_parameters = NULL, slow_scales = NULL, model){
   assert_polls_data(x)
@@ -2191,16 +2346,28 @@ assert_stan_data_model.model8m <- function(x){
     checkmate::assert_numeric(x$stan_data$ep_inv_x[[i]], lower = 0, len = x$stan_data$P)
   }
   if(!is.null(x$stan_data$structural_bridge_type)){
-    checkmate::assert_integerish(x$stan_data$structural_bridge_type, lower = 0L, upper = 1L, len = 1L)
+    checkmate::assert_integerish(x$stan_data$structural_bridge_type, lower = 0L, upper = 2L, len = 1L)
     checkmate::assert_integerish(x$stan_data$structural_bridge_active_t, lower = 0L, upper = 1L, len = x$stan_data$T)
     checkmate::assert_int(x$stan_data$structural_bridge_B, lower = 1L, upper = x$stan_data$P)
     checkmate::assert_integerish(x$stan_data$structural_bridge_party,
                                  lower = 1L,
                                  upper = x$stan_data$P,
                                  len = x$stan_data$structural_bridge_B)
+    checkmate::assert_integerish(x$stan_data$structural_bridge_party_active_p,
+                                 lower = 0L,
+                                 upper = 1L,
+                                 len = x$stan_data$P)
     checkmate::assert_matrix(x$stan_data$structural_bridge_delta_x,
                              nrows = x$stan_data$T,
                              ncols = x$stan_data$structural_bridge_B)
+    checkmate::assert_matrix(x$stan_data$structural_bridge_x_target_t,
+                             nrows = x$stan_data$T,
+                             ncols = x$stan_data$P)
+    checkmate::assert_number(x$stan_data$structural_bridge_alpha_week,
+                             lower = 0,
+                             upper = 1)
+    checkmate::assert_true(x$stan_data$structural_bridge_alpha_week > 0,
+                           .var.name = "structural_bridge_alpha_week")
     checkmate::assert_number(x$stan_data$structural_bridge_epsilon, lower = 0)
     checkmate::assert_numeric(x$stan_data$structural_bridge_sigma_scale,
                               len = x$stan_data$P,
