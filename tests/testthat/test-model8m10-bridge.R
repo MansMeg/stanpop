@@ -144,7 +144,7 @@ test_that("model8m10 accepts high-level bridge hyperparameters in stan_polls_dat
   known_date <- case$known_state$date[1]
   hp <- list(
     structural_bridge_window = c(known_date - 28L, known_date - 7L),
-    structural_bridge_x_drift = data.frame(
+    structural_bridge_x_target_path = data.frame(
       y = case$parties[2],
       from_x = 0.025,
       to_x = 0.043
@@ -185,7 +185,7 @@ test_that("model8m10 accepts constant-gain bridge hyperparameters in stan_polls_
     structural_bridge_type = "constant_gain_pull",
     structural_bridge_alpha_week = 0.10,
     structural_bridge_window = c(known_date - 28L, known_date - 7L),
-    structural_bridge_x_drift = list(
+    structural_bridge_x_target_path = list(
       y = case$parties[2],
       from_x = 0.026,
       to_x = 0.044
@@ -241,7 +241,7 @@ test_that("high-level bridge windows containing known states keep those states i
         known_state = case$known_state,
         hyper_parameters = list(
           structural_bridge_window = c(known_date - 14L, known_date + 14L),
-          structural_bridge_x_drift = data.frame(
+          structural_bridge_x_target_path = data.frame(
             y = case$parties[2],
             from_x = 0.025,
             to_x = 0.043
@@ -261,7 +261,7 @@ test_that("structural bridge parser applies drift after from and through to", {
   case <- make_bridge_parser_case()
   hp <- list(
     structural_bridge_window = c(as.Date("2026-06-04"), as.Date("2026-06-08")),
-    structural_bridge_x_drift = data.frame(
+    structural_bridge_x_target_path = data.frame(
       y = "L",
       from_x = 0.025,
       to_x = 0.043
@@ -297,7 +297,7 @@ test_that("constant-gain bridge parser builds target path and active set", {
     structural_bridge_type = "constant_gain_pull",
     structural_bridge_alpha_week = 0.10,
     structural_bridge_window = c(as.Date("2026-06-04"), as.Date("2026-06-08")),
-    structural_bridge_x_drift = list(
+    structural_bridge_x_target_path = list(
       y = c("L", "C"),
       from_x = c(0.026, 0.049),
       to_x = c(0.044, 0.054)
@@ -326,6 +326,7 @@ test_that("constant-gain bridge parser builds target path and active set", {
   expect_identical(res$structural_bridge_party_active_p, c(0L, 1L, 1L))
   expect_equal(res$structural_bridge_alpha_week, 0.10)
   expect_identical(dim(res$structural_bridge_x_target_t), c(case$stan_data$T, case$stan_data$P))
+  expect_equal(res$structural_bridge_x_target_t[from_t, 2], 0.026)
   expect_equal(res$structural_bridge_x_target_t[target_rows, 2], expected_l[target_rows])
   expect_equal(res$structural_bridge_x_target_t[target_rows, 3], expected_c[target_rows])
   expect_true(all(res$structural_bridge_x_target_t[!target_rows, , drop = FALSE] == 0))
@@ -341,7 +342,7 @@ test_that("constant-gain bridge validates alpha and target path", {
   base_hp <- list(
     structural_bridge_type = "constant_gain_pull",
     structural_bridge_window = c(as.Date("2026-06-04"), as.Date("2026-06-08")),
-    structural_bridge_x_drift = data.frame(
+    structural_bridge_x_target_path = data.frame(
       y = "L",
       from_x = 0.026,
       to_x = 0.044
@@ -361,7 +362,7 @@ test_that("constant-gain bridge validates alpha and target path", {
     {
       zero_hp <- base_hp
       zero_hp$structural_bridge_alpha_week <- 0.1
-      zero_hp$structural_bridge_x_drift <- data.frame(y = "L", from_x = 0, to_x = 0.044)
+      zero_hp$structural_bridge_x_target_path <- data.frame(y = "L", from_x = 0, to_x = 0.044)
       parse_structural_bridge(zero_hp,
                               case$time_line, case$y_name, case$stan_data)
     },
@@ -371,7 +372,7 @@ test_that("constant-gain bridge validates alpha and target path", {
     {
       sum_hp <- base_hp
       sum_hp$structural_bridge_alpha_week <- 0.1
-      sum_hp$structural_bridge_x_drift <- data.frame(
+      sum_hp$structural_bridge_x_target_path <- data.frame(
         y = c("L", "C"),
         from_x = c(0.70, 0.20),
         to_x = c(0.80, 0.25)
@@ -422,7 +423,7 @@ test_that("constant-gain convex pull preserves the simplex", {
   expect_equal(sum(high_bar), 1)
 })
 
-test_that("structural bridge parser requires drift when a window is supplied", {
+test_that("structural bridge parser requires target path when a window is supplied", {
   parse_structural_bridge <- get_internal("parse_structural_bridge")
   case <- make_bridge_parser_case()
 
@@ -435,7 +436,55 @@ test_that("structural bridge parser requires drift when a window is supplied", {
       case$y_name,
       case$stan_data
     ),
-    "structural_bridge_window requires structural_bridge_x_drift"
+    "structural_bridge_window requires structural_bridge_x_target_path"
+  )
+})
+
+test_that("old structural bridge x input name is no longer accepted", {
+  parse_structural_bridge <- get_internal("parse_structural_bridge")
+  case <- make_bridge_parser_case()
+  old_name <- paste0("structural_bridge_x", "_drift")
+  hp <- list(
+    structural_bridge_window = c(as.Date("2026-06-04"), as.Date("2026-06-08"))
+  )
+  hp[[old_name]] <- data.frame(
+    y = "L",
+    from_x = 0.025,
+    to_x = 0.043
+  )
+
+  expect_error(
+    parse_structural_bridge(hp, case$time_line, case$y_name, case$stan_data),
+    "structural_bridge_window requires structural_bridge_x_target_path"
+  )
+})
+
+test_that("direct target path may contain inactive rows", {
+  assert_model_argument_value <- get_internal("assert_model_argument_value")
+  x <- list(
+    structural_bridge_type = 2L,
+    structural_bridge_active_t = c(0L, 1L, 0L),
+    structural_bridge_B = 1L,
+    structural_bridge_party = 2L,
+    structural_bridge_party_active_p = c(0L, 1L, 0L)
+  )
+  x_target_t <- matrix(
+    c(
+      0, 0.026, 0,
+      0, 0.030, 0,
+      0, 0.044, 0
+    ),
+    nrow = 3L,
+    byrow = TRUE
+  )
+
+  expect_silent(
+    assert_model_argument_value(
+      "structural_bridge_x_target_t",
+      x_target_t,
+      x = x,
+      stan_data = list(T = 3L, P = 3L)
+    )
   )
 })
 
@@ -444,7 +493,7 @@ test_that("structural bridge parser can derive delta days from the time line", {
   case <- make_bridge_parser_case()
   hp <- list(
     structural_bridge_window = c(as.Date("2026-06-04"), as.Date("2026-06-08")),
-    structural_bridge_x_drift = data.frame(
+    structural_bridge_x_target_path = data.frame(
       y = "L",
       from_x = 0.025,
       to_x = 0.043
@@ -467,21 +516,21 @@ test_that("structural bridge parser can derive delta days from the time line", {
                    res_with_delta_days$structural_bridge_active_t)
 })
 
-test_that("structural bridge parser normalizes named list x-drift input", {
+test_that("structural bridge parser normalizes named list target-path input", {
   parse_structural_bridge <- get_internal("parse_structural_bridge")
   case <- make_bridge_parser_case()
   common_hp <- list(
     structural_bridge_window = c(as.Date("2026-06-04"), as.Date("2026-06-08"))
   )
   list_hp <- c(common_hp, list(
-    structural_bridge_x_drift = list(
+    structural_bridge_x_target_path = list(
       y = c("L", "C"),
       from_x = c(0.026, 0.049),
       to_x = c(0.044, 0.054)
     )
   ))
   data_frame_hp <- c(common_hp, list(
-    structural_bridge_x_drift = data.frame(
+    structural_bridge_x_target_path = data.frame(
       y = c("L", "C"),
       from_x = c(0.026, 0.049),
       to_x = c(0.044, 0.054)
@@ -504,7 +553,7 @@ test_that("structural bridge parser accepts one-row data frame window input", {
       from = as.Date("2026-06-04"),
       to = as.Date("2026-06-08")
     ),
-    structural_bridge_x_drift = data.frame(
+    structural_bridge_x_target_path = data.frame(
       y = "L",
       from_x = 0.025,
       to_x = 0.043
@@ -522,7 +571,7 @@ test_that("structural bridge parser accepts one-row data frame window input", {
           start = as.Date("2026-06-04"),
           to = as.Date("2026-06-08")
         ),
-        structural_bridge_x_drift = data.frame(
+        structural_bridge_x_target_path = data.frame(
           y = "L",
           from_x = 0.025,
           to_x = 0.043
@@ -547,7 +596,7 @@ test_that("structural bridge parser allows only one global bridge window", {
           from = as.Date(c("2026-06-04", "2026-06-09")),
           to = as.Date(c("2026-06-08", "2026-06-15"))
         ),
-        structural_bridge_x_drift = data.frame(
+        structural_bridge_x_target_path = data.frame(
           y = "L",
           from_x = 0.025,
           to_x = 0.043
@@ -564,7 +613,7 @@ test_that("structural bridge parser allows only one global bridge window", {
     parse_structural_bridge(
       list(
         structural_bridge_window = c(as.Date("2026-06-04"), as.Date("2026-06-08")),
-        structural_bridge_x_drift = data.frame(
+        structural_bridge_x_target_path = data.frame(
           from = as.Date("2026-06-04"),
           to = as.Date("2026-06-08"),
           y = "L",
@@ -580,7 +629,7 @@ test_that("structural bridge parser allows only one global bridge window", {
   )
 
   hp <- list(
-    structural_bridge_x_drift = data.frame(
+    structural_bridge_x_target_path = data.frame(
       from = as.Date(c("2026-06-04", "2026-06-09")),
       to = as.Date(c("2026-06-08", "2026-06-15")),
       y = c("L", "C"),
@@ -598,7 +647,7 @@ test_that("structural bridge parser allows only one global bridge window", {
     parse_structural_bridge(
       list(
         structural_bridge_window = c(as.Date("2026-06-04"), as.Date("2026-06-08")),
-        structural_bridge_x_drift = data.frame(
+        structural_bridge_x_target_path = data.frame(
           y = c("L", "L"),
           from_x = c(0.025, 0.026),
           to_x = c(0.043, 0.044)
@@ -615,7 +664,7 @@ test_that("structural bridge parser allows only one global bridge window", {
     parse_structural_bridge(
       list(
         structural_bridge_window = c(as.Date("2026-06-04"), as.Date("2026-06-08")),
-        structural_bridge_x_drift = list(
+        structural_bridge_x_target_path = list(
           y = c("L", "C"),
           from_x = c(0.025, 0.30)
         )
@@ -636,7 +685,7 @@ test_that("structural bridge parser rejects windows with no active unknown steps
     parse_structural_bridge(
       list(
         structural_bridge_window = c(as.Date("2026-06-05"), as.Date("2026-06-06")),
-        structural_bridge_x_drift = data.frame(
+        structural_bridge_x_target_path = data.frame(
           y = "L",
           from_x = 0.025,
           to_x = 0.043
@@ -655,7 +704,7 @@ test_that("structural bridge window dates must be latent anchor dates", {
   case <- make_bridge_parser_case()
   hp <- list(
     structural_bridge_window = c(as.Date("2026-06-04"), as.Date("2026-06-09")),
-    structural_bridge_x_drift = data.frame(
+    structural_bridge_x_target_path = data.frame(
       y = "L",
       from_x = 0.025,
       to_x = 0.043
@@ -846,7 +895,7 @@ test_that("positive bridge drift raises and tightens the pushed party", {
     use_sigma_ep = 2L,
     ep_inv_x = list(c(3.984064, 3.937008))
   )
-  bridge_drift <- data.frame(
+  target_path <- data.frame(
     y = "x4",
     from_x = 0.02,
     to_x = 0.12
@@ -882,12 +931,12 @@ test_that("positive bridge drift raises and tightens the pushed party", {
   no_bridge <- fit_pop(base_cfg, 501)
   loose_bridge <- fit_pop(c(base_cfg, list(
     structural_bridge_window = c(bridge_from, bridge_to),
-    structural_bridge_x_drift = bridge_drift,
+    structural_bridge_x_target_path = target_path,
     structural_bridge_sigma_scale = c(x3 = 1, x4 = 1)
   )), 502)
   tight_bridge <- fit_pop(c(base_cfg, list(
     structural_bridge_window = c(bridge_from, bridge_to),
-    structural_bridge_x_drift = bridge_drift,
+    structural_bridge_x_target_path = target_path,
     structural_bridge_sigma_scale = c(x3 = 1, x4 = 0.2)
   )), 503)
 

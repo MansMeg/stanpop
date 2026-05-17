@@ -342,6 +342,10 @@ data {
   matrix[T, structural_bridge_B] structural_bridge_delta_x;
 
   // Structural vote-share target path used by the constant-gain pull.
+  // This is a full target-path matrix on the latent time grid. It may contain
+  // target values at dates where structural_bridge_active_t[t] == 0, especially
+  // the bridge origin. structural_bridge_active_t is the source of truth for
+  // whether the bridge prior is applied in the state equation at time t.
   // Only columns with structural_bridge_party_active_p[p] == 1 are used.
   matrix<lower=0, upper=1>[T, P] structural_bridge_x_target_t;
 

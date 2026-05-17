@@ -16,28 +16,44 @@
 #'                 Dates after 2010-01-15 will have s=2.
 #' @details
 #' For `model8m10`, `hyper_parameters` can include `structural_bridge_type`,
-#' `structural_bridge_window`, `structural_bridge_x_drift`,
+#' `structural_bridge_window`, `structural_bridge_x_target_path`,
 #' `structural_bridge_alpha_week`, `structural_bridge_sigma_scale`, and
 #' `structural_bridge_epsilon`.
 #' `structural_bridge_type = 0` means no bridge, while
 #' `structural_bridge_type = 1` or `"x_drift"` enables a state-dependent
 #' x-scale drift for selected parties. `structural_bridge_type = 2` or
 #' `"constant_gain_pull"` enables a constant-gain convex pull toward the
-#' structural vote-share path for selected parties. `structural_bridge_window` supplies one
-#' global inclusive calendar date range for both x-scale drift and bridge-specific sigma
-#' scaling. The high-level `structural_bridge_x_drift` data frame should
-#' contain `y`, `from_x`, and `to_x`; party names are matched through `y_name`,
-#' and stepwise drift is scaled by `delta_days_t`. For `"x_drift"`, `from_x`
-#' and `to_x` define the total drift size, `to_x - from_x`; they are not an
-#' attractor endpoint.
+#' structural vote-share path for selected parties. `structural_bridge_window`
+#' supplies one global inclusive calendar date range for both x-scale drift and
+#' bridge-specific sigma scaling. The high-level
+#' `structural_bridge_x_target_path` data frame should contain `y`, `from_x`,
+#' and `to_x`; party names are matched through `y_name`. For `"x_drift"`,
+#' `from_x` and `to_x` define the total x-scale drift size, `to_x - from_x`,
+#' which is allocated over active bridge steps in proportion to `delta_days_t`.
+#' They are not an attractor endpoint.
 #' For example, if the sampled party vote share at the bridge start is 0.028
 #' and `from_x = 0.025`, `to_x = 0.043`, the bridge adds 0.018, so absent
 #' innovations the drift points toward 0.046, not 0.043. For
 #' `"constant_gain_pull"`, `from_x` and `to_x` define the selected-party
 #' structural target path, and `structural_bridge_alpha_week` is the weekly
 #' gap-closing fraction. A half-life of `H` days corresponds to
-#' `1 - 2^(-7 / H)`. The bridge window is
-#' inclusive in calendar time; drift is applied to latent transitions after
+#' `1 - 2^(-7 / H)`. The derived low-level `structural_bridge_x_target_t`
+#' is a full target-path matrix on the latent time grid. It can contain target
+#' values at rows where `structural_bridge_active_t == 0`, especially the
+#' bridge origin. `structural_bridge_active_t` is the source of truth for where
+#' the bridge prior is applied in the state equation. Since the state
+#' transition is from `t - 1` into `t`, the bridge origin usually has
+#' `active_t = 0`, while dates after the origin and up to the target date have
+#' `active_t = 1`. For example:
+#'
+#' \preformatted{date          active_t   x_target_t[L]
+#' 2026-06-08       0          0.026
+#' 2026-06-09       1          0.0262
+#' ...
+#' 2026-09-13       1          0.044}
+#'
+#' The bridge window is
+#' inclusive in calendar time; the bridge prior is applied to latent transitions after
 #' `from` and through `to`. The `from` and `to` dates must be exact latent
 #' anchor dates in `time_line$time_line$date`; use `time_scale_overrides` when
 #' bridge endpoints need to be represented exactly on a coarser latent grid.
@@ -59,7 +75,7 @@
 #'     as.Date("2026-06-04"),
 #'     as.Date("2026-09-13")
 #'   ),
-#'   structural_bridge_x_drift = data.frame(
+#'   structural_bridge_x_target_path = data.frame(
 #'     y = "L",
 #'     from_x = 0.025,
 #'     to_x = 0.043
@@ -154,7 +170,7 @@ stan_polls_data <- function(x,
       # override-aware grid, where time_scale_overrides may add exact anchors.
       bridge_args <- c("structural_bridge_type",
                        "structural_bridge_window",
-                       "structural_bridge_x_drift",
+                       "structural_bridge_x_target_path",
                        "structural_bridge_active_t",
                        "structural_bridge_B",
                        "structural_bridge_party",
@@ -1875,25 +1891,30 @@ parse_election_period <- function(x, tl){
 #' data arguments consumed by `model8m10.stan`.
 #'
 #' @details
-#' `structural_bridge_x_drift` is the high-level selected-party input for
+#' `structural_bridge_x_target_path` is the high-level selected-party input for
 #' bridge type 1 (`"x_drift"`) and type 2 (`"constant_gain_pull"`). It is a
 #' data frame with columns `y`, `from_x`, and `to_x`. A single global
-#' `structural_bridge_window` supplies the inclusive calendar bridge dates. For
-#' compatibility, `from` and `to` may be included in `structural_bridge_x_drift`,
-#' but all rows must share the same dates. Party names in `y` are mapped through
-#' `y_name`, date bounds are mapped through `time_line`, and stepwise drift is
-#' allocated in proportion to `delta_days_t`. The bridge window is inclusive in
-#' calendar time; drift is applied to latent transitions after `from` and
-#' through `to`, so active bridge steps are defined by `from_t < t <= to_t`.
+#' `structural_bridge_window` supplies the inclusive calendar bridge dates. If
+#' `structural_bridge_window` is omitted, `from` and `to` may be included in
+#' `structural_bridge_x_target_path`; all rows must share the same dates.
+#' Party names in `y` are mapped through `y_name`, and date bounds are mapped
+#' through `time_line`. The bridge window is inclusive in calendar time; the
+#' bridge prior is applied to latent transitions after `from` and through `to`,
+#' so active bridge steps are defined by `from_t < t <= to_t`.
 #' The `from` and `to` dates must be exact latent anchor dates in
 #' `time_line$time_line$date`; use `time_scale_overrides` to add exact endpoint
 #' anchors on a coarser latent grid. Known states and zero-day steps are forced
 #' inactive.
 #' For `"x_drift"`, the `from_x` and `to_x` columns define the total drift
-#' amount, `to_x - from_x`, not an attractor endpoint. The drift is added to
+#' amount, `to_x - from_x`, not an attractor endpoint. That drift is allocated
+#' in proportion to `delta_days_t` over active bridge transitions and added to
 #' the sampled current vote share path before the helper maps back to eta.
 #' For `"constant_gain_pull"`, they define the structural target path and
 #' `structural_bridge_alpha_week` defines the weekly gap-closing fraction.
+#' The resulting `structural_bridge_x_target_t` is a full target-path matrix on
+#' the latent time grid and can contain values on inactive rows such as the
+#' bridge origin. `structural_bridge_active_t` remains the source of truth for
+#' whether the bridge prior is applied at time `t`.
 #' Direct Stan bridge arguments are left in `hyper_parameters` for
 #' `model_config()` to validate; in particular, `structural_bridge_active_t`
 #' must be zero at known states before data are supplied to Stan.
@@ -1910,7 +1931,7 @@ parse_election_period <- function(x, tl){
 #' @param stan_data the partly-built Stan data list. Must include `T`, `P`,
 #'   `x_known_t`, and, when available, `delta_days_t`.
 #'
-#' @return A hyperparameter list with `structural_bridge_x_drift` and
+#' @return A hyperparameter list with `structural_bridge_x_target_path` and
 #'   `structural_bridge_window` removed and the corresponding direct Stan bridge
 #'   arguments added.
 #'
@@ -1928,21 +1949,21 @@ parse_structural_bridge <- function(hyper_parameters, time_line, y_name, stan_da
     )
   }
 
-  has_x_drift <- !is.null(hyper_parameters$structural_bridge_x_drift)
+  has_target_path <- !is.null(hyper_parameters$structural_bridge_x_target_path)
   has_bridge_window <- !is.null(hyper_parameters$structural_bridge_window)
 
-  if(!has_x_drift && has_bridge_window){
-    stop("structural_bridge_window requires structural_bridge_x_drift.", call. = FALSE)
+  if(!has_target_path && has_bridge_window){
+    stop("structural_bridge_window requires structural_bridge_x_target_path.", call. = FALSE)
   }
 
-  if(has_x_drift){
+  if(has_target_path){
     bridge_type <- if(is.null(hyper_parameters$structural_bridge_type)){
       1L
     } else {
       as.integer(hyper_parameters$structural_bridge_type)
     }
     if(!(bridge_type %in% c(1L, 2L))){
-      stop("structural_bridge_x_drift requires structural_bridge_type = 'x_drift' or 'constant_gain_pull'.", call. = FALSE)
+      stop("structural_bridge_x_target_path requires structural_bridge_type = 'x_drift' or 'constant_gain_pull'.", call. = FALSE)
     }
     direct_args <- c("structural_bridge_active_t",
                      "structural_bridge_B",
@@ -1952,13 +1973,13 @@ parse_structural_bridge <- function(hyper_parameters, time_line, y_name, stan_da
                      "structural_bridge_x_target_t")
     direct_args_set <- direct_args[vapply(hyper_parameters[direct_args], Negate(is.null), logical(1))]
     if(length(direct_args_set) > 0){
-      stop("structural_bridge_x_drift cannot be combined with direct bridge Stan arguments: ",
+      stop("structural_bridge_x_target_path cannot be combined with direct bridge Stan arguments: ",
            paste(direct_args_set, collapse = ", "), call. = FALSE)
     }
 
     if(bridge_type == 1L){
-      parsed <- build_structural_bridge_x_drift(
-        structural_bridge_x_drift = hyper_parameters$structural_bridge_x_drift,
+      parsed <- build_structural_bridge_delta_x_from_target_path(
+        structural_bridge_x_target_path = hyper_parameters$structural_bridge_x_target_path,
         structural_bridge_window = hyper_parameters$structural_bridge_window,
         time_line = time_line,
         y_name = y_name,
@@ -1978,7 +1999,7 @@ parse_structural_bridge <- function(hyper_parameters, time_line, y_name, stan_da
         stop("structural_bridge_alpha_week must be greater than 0.", call. = FALSE)
       }
       parsed <- build_structural_bridge_constant_gain_pull(
-        structural_bridge_x_drift = hyper_parameters$structural_bridge_x_drift,
+        structural_bridge_x_target_path = hyper_parameters$structural_bridge_x_target_path,
         structural_bridge_window = hyper_parameters$structural_bridge_window,
         time_line = time_line,
         y_name = y_name,
@@ -2006,18 +2027,18 @@ parse_structural_bridge <- function(hyper_parameters, time_line, y_name, stan_da
     )
   }
 
-  hyper_parameters$structural_bridge_x_drift <- NULL
+  hyper_parameters$structural_bridge_x_target_path <- NULL
   hyper_parameters$structural_bridge_window <- NULL
   hyper_parameters
 }
 
-build_structural_bridge_x_drift <- function(structural_bridge_x_drift,
-                                            structural_bridge_window = NULL,
-                                            time_line,
-                                            y_name,
-                                            stan_data){
+build_structural_bridge_delta_x_from_target_path <- function(structural_bridge_x_target_path,
+                                                            structural_bridge_window = NULL,
+                                                            time_line,
+                                                            y_name,
+                                                            stan_data){
   bridge <- build_structural_bridge_common(
-    structural_bridge_x_drift = structural_bridge_x_drift,
+    structural_bridge_x_target_path = structural_bridge_x_target_path,
     structural_bridge_window = structural_bridge_window,
     time_line = time_line,
     y_name = y_name,
@@ -2025,9 +2046,9 @@ build_structural_bridge_x_drift <- function(structural_bridge_x_drift,
   )
   delta_x <- matrix(0.0, nrow = bridge$T, ncol = length(bridge$parties))
 
-  for(i in seq_len(nrow(bridge$x_drift))){
-    b <- match(bridge$x_drift$y[i], bridge$parties)
-    total_drift <- bridge$x_drift$to_x[i] - bridge$x_drift$from_x[i]
+  for(i in seq_len(nrow(bridge$target_path))){
+    b <- match(bridge$target_path$y[i], bridge$parties)
+    total_drift <- bridge$target_path$to_x[i] - bridge$target_path$from_x[i]
     delta_x[bridge$row_active, b] <- delta_x[bridge$row_active, b] +
       total_drift * bridge$delta_days_t[bridge$row_active] / bridge$total_active_days
   }
@@ -2060,9 +2081,9 @@ build_structural_bridge_x_drift <- function(structural_bridge_x_drift,
 #' the bridge window, leaving positive mass for non-selected parties and the
 #' reference category.
 #'
-#' @param structural_bridge_x_drift high-level bridge data with columns `y`,
-#'   `from_x`, and `to_x`, optionally with compatibility `from` and `to`
-#'   columns when `structural_bridge_window` is `NULL`.
+#' @param structural_bridge_x_target_path high-level bridge data with columns `y`,
+#'   `from_x`, and `to_x`, optionally with row-level `from` and `to` columns
+#'   when `structural_bridge_window` is `NULL`.
 #' @param structural_bridge_window `NULL`, a length-two date vector, or a
 #'   one-row data frame with columns `from` and `to`.
 #' @param time_line a [time_line] object used to map bridge dates to latent
@@ -2076,13 +2097,13 @@ build_structural_bridge_x_drift <- function(structural_bridge_x_drift,
 #'
 #' @keywords internal
 #' @noRd
-build_structural_bridge_constant_gain_pull <- function(structural_bridge_x_drift,
+build_structural_bridge_constant_gain_pull <- function(structural_bridge_x_target_path,
                                                        structural_bridge_window = NULL,
                                                        time_line,
                                                        y_name,
                                                        stan_data){
   bridge <- build_structural_bridge_common(
-    structural_bridge_x_drift = structural_bridge_x_drift,
+    structural_bridge_x_target_path = structural_bridge_x_target_path,
     structural_bridge_window = structural_bridge_window,
     time_line = time_line,
     y_name = y_name,
@@ -2097,10 +2118,10 @@ build_structural_bridge_constant_gain_pull <- function(structural_bridge_x_drift
   target_rows <- seq_len(bridge$T) >= bridge$from_t & seq_len(bridge$T) <= bridge$to_t
   progress[bridge$from_t] <- 0
 
-  for(i in seq_len(nrow(bridge$x_drift))){
-    p <- match(bridge$x_drift$y[i], y_name)
-    x_target_t[target_rows, p] <- bridge$x_drift$from_x[i] +
-      (bridge$x_drift$to_x[i] - bridge$x_drift$from_x[i]) * progress[target_rows]
+  for(i in seq_len(nrow(bridge$target_path))){
+    p <- match(bridge$target_path$y[i], y_name)
+    x_target_t[target_rows, p] <- bridge$target_path$from_x[i] +
+      (bridge$target_path$to_x[i] - bridge$target_path$from_x[i]) * progress[target_rows]
   }
 
   target_sums <- rowSums(x_target_t[target_rows, party_active_p == 1L, drop = FALSE])
@@ -2133,9 +2154,9 @@ build_structural_bridge_constant_gain_pull <- function(structural_bridge_x_drift
 #' additive x-drift bridge, and total bridge-window days, used by the structural
 #' target path for the constant-gain bridge.
 #'
-#' @param structural_bridge_x_drift high-level bridge data with columns `y`,
-#'   `from_x`, and `to_x`, optionally with compatibility `from` and `to`
-#'   columns when `structural_bridge_window` is `NULL`.
+#' @param structural_bridge_x_target_path high-level bridge data with columns `y`,
+#'   `from_x`, and `to_x`, optionally with row-level `from` and `to` columns
+#'   when `structural_bridge_window` is `NULL`.
 #' @param structural_bridge_window `NULL`, a length-two date vector, or a
 #'   one-row data frame with columns `from` and `to`.
 #' @param time_line a [time_line] object used to map bridge dates to latent
@@ -2150,21 +2171,21 @@ build_structural_bridge_constant_gain_pull <- function(structural_bridge_x_drift
 #'
 #' @keywords internal
 #' @noRd
-build_structural_bridge_common <- function(structural_bridge_x_drift,
+build_structural_bridge_common <- function(structural_bridge_x_target_path,
                                            structural_bridge_window = NULL,
                                            time_line,
                                            y_name,
                                            stan_data){
-  structural_bridge_x_drift <- normalize_structural_bridge_x_drift(structural_bridge_x_drift)
-  assert_structural_bridge_x_drift(structural_bridge_x_drift, y_name)
+  structural_bridge_x_target_path <- normalize_structural_bridge_x_target_path(structural_bridge_x_target_path)
+  assert_structural_bridge_x_target_path(structural_bridge_x_target_path, y_name)
   bridge_window <- parse_structural_bridge_window(
     structural_bridge_window = structural_bridge_window,
-    structural_bridge_x_drift = structural_bridge_x_drift
+    structural_bridge_x_target_path = structural_bridge_x_target_path
   )
-  structural_bridge_x_drift$y <- as.character(structural_bridge_x_drift$y)
+  structural_bridge_x_target_path$y <- as.character(structural_bridge_x_target_path$y)
 
   T <- stan_data$T
-  parties <- unique(structural_bridge_x_drift$y)
+  parties <- unique(structural_bridge_x_target_path$y)
   if(is.null(stan_data$delta_days_t)){
     delta_days_t <- c(0, as.numeric(diff(time_line$time_line$date)))
   } else {
@@ -2201,7 +2222,7 @@ build_structural_bridge_common <- function(structural_bridge_x_drift,
   }
 
   list(
-    x_drift = structural_bridge_x_drift,
+    target_path = structural_bridge_x_target_path,
     T = T,
     parties = parties,
     delta_days_t = delta_days_t,
@@ -2214,7 +2235,7 @@ build_structural_bridge_common <- function(structural_bridge_x_drift,
   )
 }
 
-normalize_structural_bridge_x_drift <- function(x){
+normalize_structural_bridge_x_target_path <- function(x){
   if(is.data.frame(x)){
     return(x)
   }
@@ -2225,19 +2246,19 @@ normalize_structural_bridge_x_drift <- function(x){
   x
 }
 
-assert_structural_bridge_x_drift <- function(x, y_name){
+assert_structural_bridge_x_target_path <- function(x, y_name){
   checkmate::assert_data_frame(x, min.rows = 1L)
   has_row_dates <- all(c("from", "to") %in% names(x))
   expected_names <- if(has_row_dates) c("from", "to", "y", "from_x", "to_x") else c("y", "from_x", "to_x")
   checkmate::assert_names(names(x), identical.to = expected_names)
   checkmate::assert_names(as.character(x$y), subset.of = y_name)
   if(anyDuplicated(as.character(x$y))){
-    stop("structural_bridge_x_drift can include each party only once in the single global bridge prior.", call. = FALSE)
+    stop("structural_bridge_x_target_path can include each party only once in the single global bridge prior.", call. = FALSE)
   }
   checkmate::assert_numeric(x$from_x, lower = 0, upper = 1, any.missing = FALSE)
   checkmate::assert_numeric(x$to_x, lower = 0, upper = 1, any.missing = FALSE)
   if(any(x$from_x <= 0) || any(x$to_x <= 0)){
-    stop("structural_bridge_x_drift from_x and to_x must be positive.", call. = FALSE)
+    stop("structural_bridge_x_target_path from_x and to_x must be positive.", call. = FALSE)
   }
 }
 
@@ -2245,14 +2266,14 @@ assert_structural_bridge_x_drift <- function(x, y_name){
 #'
 #' @description
 #' Normalize the user-facing bridge window into a single inclusive calendar pair
-#' of `Date` values used by `build_structural_bridge_x_drift()`.
+#' of `Date` values used by the high-level structural bridge builders.
 #'
 #' @details
 #' The preferred API supplies `structural_bridge_window` as either a length-two
 #' date vector, interpreted as `c(from, to)`, or a one-row data frame with
-#' columns `from` and `to`. For compatibility with the first bridge interface,
-#' callers may omit `structural_bridge_window` and include `from` and `to`
-#' columns in `structural_bridge_x_drift`; in that case every drift row must
+#' columns `from` and `to`. Callers may instead omit
+#' `structural_bridge_window` and include `from` and `to` columns in
+#' `structural_bridge_x_target_path`; in that case every target row must
 #' share the same dates, because model8m10 has one global bridge window for
 #' both x-scale drift and bridge-specific sigma scaling. Supplying both
 #' `structural_bridge_window` and row-level `from`/`to` columns is rejected to
@@ -2260,25 +2281,25 @@ assert_structural_bridge_x_drift <- function(x, y_name){
 #'
 #' This helper only parses and validates the date range. It does not decide
 #' which latent transitions are active; the parsed dates are mapped through the
-#' model time line later, where drift is applied to transitions after `from` and
-#' through `to`, with known states and zero-day steps forced inactive.
+#' model time line later, where the bridge prior is applied to transitions after
+#' `from` and through `to`, with known states and zero-day steps forced inactive.
 #'
 #' @param structural_bridge_window `NULL`, a length-two date vector, or a
 #'   one-row data frame with columns `from` and `to`.
-#' @param structural_bridge_x_drift a bridge drift data frame, optionally with
-#'   compatibility `from` and `to` columns.
+#' @param structural_bridge_x_target_path a bridge target-path data frame,
+#'   optionally with row-level `from` and `to` columns.
 #'
 #' @return A list with `from` and `to` as scalar `Date` values.
 #'
 #' @keywords internal
 #' @noRd
 parse_structural_bridge_window <- function(structural_bridge_window,
-                                           structural_bridge_x_drift){
-  has_row_dates <- all(c("from", "to") %in% names(structural_bridge_x_drift))
+                                           structural_bridge_x_target_path){
+  has_row_dates <- all(c("from", "to") %in% names(structural_bridge_x_target_path))
 
   if(!is.null(structural_bridge_window)){
     if(has_row_dates){
-      stop("Do not include from/to in structural_bridge_x_drift when structural_bridge_window is supplied.", call. = FALSE)
+      stop("Do not include from/to in structural_bridge_x_target_path when structural_bridge_window is supplied.", call. = FALSE)
     }
     if(is.data.frame(structural_bridge_window)){
       checkmate::assert_data_frame(structural_bridge_window, nrows = 1L)
@@ -2293,14 +2314,14 @@ parse_structural_bridge_window <- function(structural_bridge_window,
     }
   } else {
     if(!has_row_dates){
-      stop("structural_bridge_x_drift requires a single global structural_bridge_window with from/to dates.", call. = FALSE)
+      stop("structural_bridge_x_target_path requires a single global structural_bridge_window with from/to dates.", call. = FALSE)
     }
-    from_by_row <- as.Date(structural_bridge_x_drift$from)
-    to_by_row <- as.Date(structural_bridge_x_drift$to)
-    checkmate::assert_date(from_by_row, any.missing = FALSE, .var.name = "structural_bridge_x_drift$from")
-    checkmate::assert_date(to_by_row, any.missing = FALSE, .var.name = "structural_bridge_x_drift$to")
+    from_by_row <- as.Date(structural_bridge_x_target_path$from)
+    to_by_row <- as.Date(structural_bridge_x_target_path$to)
+    checkmate::assert_date(from_by_row, any.missing = FALSE, .var.name = "structural_bridge_x_target_path$from")
+    checkmate::assert_date(to_by_row, any.missing = FALSE, .var.name = "structural_bridge_x_target_path$to")
     if(length(unique(from_by_row)) != 1L || length(unique(to_by_row)) != 1L){
-      stop("Only one global structural bridge window is supported; all structural_bridge_x_drift rows must share the same from/to dates.", call. = FALSE)
+      stop("Only one global structural bridge window is supported; all structural_bridge_x_target_path rows must share the same from/to dates.", call. = FALSE)
     }
     from <- from_by_row[1]
     to <- to_by_row[1]
