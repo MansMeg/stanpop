@@ -73,3 +73,29 @@ test_that("g_scale is computed correctly", {
   expect_message(mc1 <- model_config(model = "model8k2", cfg1, stan_data))
   expect_equal(mc1$g_scale, 5)
 })
+
+test_that("model8m10 bridge defaults work without stan data", {
+  expect_message(
+    mc <- model_config(model = "model8m10", x = list(use_softmax = 1L)),
+    "structural_bridge_x_target_t"
+  )
+
+  expect_identical(mc$structural_bridge_party_active_p, 0L)
+  expect_equal(mc$structural_bridge_delta_x, matrix(0.0, nrow = 1L, ncol = 1L))
+  expect_equal(mc$structural_bridge_x_target_t, matrix(0.0, nrow = 1L, ncol = 1L))
+})
+
+test_that("model8m10 direct constant-gain bridge requires alpha", {
+  expect_error(
+    suppressMessages(
+      model_config(
+        model = "model8m10",
+        x = list(
+          use_softmax = 1L,
+          structural_bridge_type = "constant_gain_pull"
+        )
+      )
+    ),
+    "structural_bridge_alpha_week is required"
+  )
+})

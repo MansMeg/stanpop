@@ -440,6 +440,74 @@ test_that("structural bridge parser requires target path when a window is suppli
   )
 })
 
+test_that("stan_polls_data rejects target path with inactive bridge type", {
+  case <- make_model8_mixed_smoke_case(npolls = 20)
+  known_date <- case$known_state$date[1]
+
+  expect_error(
+    suppressWarnings(
+      suppressMessages(
+        stan_polls_data(
+          x = case$polls_data,
+          y_name = case$parties,
+          model = "model8m10",
+          time_scale = case$time_scale,
+          time_scale_overrides = tibble::tibble(
+            from = known_date - 28L,
+            to = known_date - 7L,
+            time_scale = "day"
+          ),
+          known_state = case$known_state,
+          hyper_parameters = list(
+            structural_bridge_type = "none",
+            structural_bridge_window = c(known_date - 28L, known_date - 7L),
+            structural_bridge_x_target_path = data.frame(
+              y = case$parties[2],
+              from_x = 0.025,
+              to_x = 0.043
+            )
+          )
+        )
+      )
+    ),
+    "structural_bridge_x_target_path requires structural_bridge_type"
+  )
+})
+
+test_that("stan_polls_data rejects target path combined with direct bridge data", {
+  case <- make_model8_mixed_smoke_case(npolls = 20)
+  known_date <- case$known_state$date[1]
+
+  expect_error(
+    suppressWarnings(
+      suppressMessages(
+        stan_polls_data(
+          x = case$polls_data,
+          y_name = case$parties,
+          model = "model8m10",
+          time_scale = case$time_scale,
+          time_scale_overrides = tibble::tibble(
+            from = known_date - 28L,
+            to = known_date - 7L,
+            time_scale = "day"
+          ),
+          known_state = case$known_state,
+          hyper_parameters = list(
+            structural_bridge_window = c(known_date - 28L, known_date - 7L),
+            structural_bridge_x_target_path = data.frame(
+              y = case$parties[2],
+              from_x = 0.025,
+              to_x = 0.043
+            ),
+            structural_bridge_active_t = 0L
+          )
+        )
+      )
+    ),
+    "structural_bridge_x_target_path cannot be combined with direct bridge Stan arguments"
+  )
+})
+
 test_that("old structural bridge x input name is no longer accepted", {
   parse_structural_bridge <- get_internal("parse_structural_bridge")
   case <- make_bridge_parser_case()
