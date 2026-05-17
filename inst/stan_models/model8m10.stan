@@ -124,6 +124,54 @@ functions {
     return eta_bar;
   }
 
+  /**
+   * Return the eta-scale transition mean implied by a constant-gain convex
+   * pull toward a structural vote-share path.
+   *
+   * Selected parties are moved toward their structural targets with gain
+   * alpha_t. All non-selected eta coordinates and the reference/other category
+   * are rescaled proportionally so the full simplex is preserved.
+   */
+  row_vector structural_bridge_constant_gain_eta_mean(
+      row_vector eta_prev,
+      row_vector structural_bridge_x_target_t,
+      array[] int structural_bridge_party_active_p,
+      real structural_bridge_alpha_week,
+      int delta_days_t) {
+    int P_bridge = cols(eta_prev);
+    int P_full = P_bridge + 1;
+    vector[P_full] x_prev = softmax(to_vector(append_col(eta_prev, 0)));
+    vector[P_full] x_bar = rep_vector(0.0, P_full);
+    real alpha_t = 1 - pow(1 - structural_bridge_alpha_week, delta_days_t / 7.0);
+    real R_prev = 1.0;
+    real pushed_sum = 0.0;
+    real R_bar;
+    row_vector[P_bridge] eta_bar;
+
+    for(p in 1:P_bridge) {
+      if(structural_bridge_party_active_p[p] == 1) {
+        x_bar[p] = (1 - alpha_t) * x_prev[p] +
+          alpha_t * structural_bridge_x_target_t[p];
+        R_prev -= x_prev[p];
+        pushed_sum += x_bar[p];
+      }
+    }
+
+    R_bar = 1.0 - pushed_sum;
+
+    for(p in 1:P_bridge) {
+      if(structural_bridge_party_active_p[p] == 0) {
+        x_bar[p] = x_prev[p] * R_bar / R_prev;
+      }
+    }
+    x_bar[P_full] = x_prev[P_full] * R_bar / R_prev;
+
+    for(p in 1:P_bridge)
+      eta_bar[p] = log(x_bar[p]) - log(x_bar[P_full]);
+
+    return eta_bar;
+  }
+
 }
 
 // The same model but more efficiently reparametrized
@@ -269,10 +317,8 @@ data {
   // Structural bridge prior.
   // 0 = no bridge
   // 1 = state-dependent x-scale drift for selected parties
-  // 2 = reserved for constant-gain convex attractor
-  // 3 = reserved for drift-plus-attractor hybrid
-  // R-side validation currently allows only types 0 and 1.
-  int<lower=0, upper=3> structural_bridge_type;
+  // 2 = constant-gain convex pull toward a structural x-scale path
+  int<lower=0, upper=2> structural_bridge_type;
 
   // Whether the bridge applies at latent time t. This should be 1 only for
   // unknown latent states in the inclusive global bridge window. Known states
@@ -286,10 +332,26 @@ data {
   // Party indices receiving direct x-scale drift.
   array[structural_bridge_B] int<lower=1, upper=P> structural_bridge_party;
 
+  // Party mask for the constant-gain pull. The reference/other category is
+  // never directly selected; it is rescaled with the non-selected parties.
+  array[P] int<lower=0, upper=1> structural_bridge_party_active_p;
+
   // Stepwise vote-share drift for each pushed party. For pushed party b at
   // time t, delta_x[t,b] is added to the current latent vote share before
   // mapping back to eta.
   matrix[T, structural_bridge_B] structural_bridge_delta_x;
+
+  // Structural vote-share target path used by the constant-gain pull.
+  // This is a full target-path matrix on the latent time grid. It may contain
+  // target values at dates where structural_bridge_active_t[t] == 0, especially
+  // the bridge origin. structural_bridge_active_t is the source of truth for
+  // whether the bridge prior is applied in the state equation at time t.
+  // Only columns with structural_bridge_party_active_p[p] == 1 are used.
+  matrix<lower=0, upper=1>[T, P] structural_bridge_x_target_t;
+
+  // Weekly gap-closing fraction for the constant-gain pull. The per-step gain
+  // is 1 - (1 - alpha_week)^(delta_days_t / 7).
+  real<lower=1e-12, upper=1> structural_bridge_alpha_week;
 
   // Numerical floor used to keep the implied vote-share mean inside the
   // simplex.
@@ -491,14 +553,24 @@ transformed parameters {
           L_t = L_Sigma[s_t_Omega[t]];
         }
 
-        if(structural_bridge_type == 1 && structural_bridge_active_t[t] == 1){
-          eta_mean_t = structural_bridge_eta_mean(
-            eta[t-1,],
-            structural_bridge_B,
-            structural_bridge_party,
-            structural_bridge_delta_x[t,],
-            structural_bridge_epsilon
-          );
+        if(structural_bridge_active_t[t] == 1 && structural_bridge_type > 0){
+          if(structural_bridge_type == 1) {
+            eta_mean_t = structural_bridge_eta_mean(
+              eta[t-1,],
+              structural_bridge_B,
+              structural_bridge_party,
+              structural_bridge_delta_x[t,],
+              structural_bridge_epsilon
+            );
+          } else if(structural_bridge_type == 2) {
+            eta_mean_t = structural_bridge_constant_gain_eta_mean(
+              eta[t-1,],
+              structural_bridge_x_target_t[t,],
+              structural_bridge_party_active_p,
+              structural_bridge_alpha_week,
+              delta_days_t[t]
+            );
+          }
           L_t = diag_pre_multiply(structural_bridge_sigma_scale, L_t);
         }
 
