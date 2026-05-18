@@ -2391,9 +2391,11 @@ structural_bridge_step_alpha <- function(alpha_week, delta_days){
 #' Selected parties are moved toward their structural targets by the per-step
 #' gain from [structural_bridge_step_alpha()]. All non-selected parties and the
 #' reference category are then rescaled proportionally so the returned full
-#' simplex sums to one. This helper mirrors the Stan-side simplex calculation
-#' and is used by tests for alpha conversion, selected-party motion, and
-#' proportional rescaling.
+#' simplex sums to one. Near the simplex boundary, the implied full-simplex
+#' mean is clipped so every component is at least
+#' `structural_bridge_epsilon`. This helper mirrors the Stan-side simplex
+#' calculation and is used by tests for alpha conversion, selected-party motion,
+#' and proportional rescaling.
 #'
 #' `x_prev` is the full simplex, including the reference category as its last
 #' element. `x_target` and `party_active_p` cover only the explicit eta
@@ -2408,6 +2410,8 @@ structural_bridge_step_alpha <- function(alpha_week, delta_days){
 #' @param alpha_week scalar weekly gap-closing fraction. Must satisfy
 #'   `0 < alpha_week <= 1`.
 #' @param delta_days scalar non-negative transition length in days.
+#' @param structural_bridge_epsilon scalar lower bound for every component of
+#'   the implied full simplex transition mean.
 #'
 #' @return A numeric full simplex after the constant-gain pull and proportional
 #'   non-selected-party rescaling.
@@ -2418,22 +2422,71 @@ structural_bridge_constant_gain_pull_x <- function(x_prev,
                                                    x_target,
                                                    party_active_p,
                                                    alpha_week,
-                                                   delta_days){
+                                                   delta_days,
+                                                   structural_bridge_epsilon = 1e-6){
   checkmate::assert_numeric(x_prev, lower = 0, upper = 1, any.missing = FALSE)
   checkmate::assert_numeric(x_target, lower = 0, upper = 1, len = length(x_prev) - 1L, any.missing = FALSE)
   checkmate::assert_integerish(party_active_p, lower = 0L, upper = 1L, len = length(x_target), any.missing = FALSE)
+  checkmate::assert_number(structural_bridge_epsilon, lower = 0, .var.name = "structural_bridge_epsilon")
+  checkmate::assert_true(structural_bridge_epsilon > 0, .var.name = "structural_bridge_epsilon")
+  checkmate::assert_true(structural_bridge_epsilon < 1 / length(x_prev), .var.name = "structural_bridge_epsilon")
   assert_simplex(x_prev)
   alpha_t <- structural_bridge_step_alpha(alpha_week, delta_days)
-  x_bar <- x_prev
+  x_bar <- numeric(length(x_prev))
+  x_pulled <- numeric(length(x_prev))
+  names(x_bar) <- names(x_prev)
+  names(x_pulled) <- names(x_prev)
   active_p <- as.integer(party_active_p) == 1L
-  R_prev <- 1 - sum(x_prev[seq_along(x_target)][active_p])
+  is_selected <- c(active_p, FALSE)
+  selected_count <- sum(active_p)
+  non_selected_count <- length(x_prev) - selected_count
+  selected_idx <- seq_along(x_target)[active_p]
 
-  x_bar[seq_along(x_target)[active_p]] <-
-    (1 - alpha_t) * x_prev[seq_along(x_target)[active_p]] +
-    alpha_t * x_target[active_p]
-  R_bar <- 1 - sum(x_bar[seq_along(x_target)][active_p])
-  x_bar[c(seq_along(x_target)[!active_p], length(x_prev))] <-
-    x_prev[c(seq_along(x_target)[!active_p], length(x_prev))] * R_bar / R_prev
+  if(selected_count > 0L){
+    x_pulled[selected_idx] <- pmax(
+      (1 - alpha_t) * x_prev[selected_idx] + alpha_t * x_target[active_p],
+      structural_bridge_epsilon
+    )
+  }
+  pulled_sum <- sum(x_pulled[selected_idx])
+  max_pulled_sum <- 1 - structural_bridge_epsilon * non_selected_count
+
+  if(pulled_sum > max_pulled_sum){
+    pulled_floor <- structural_bridge_epsilon * selected_count
+    available_pulled <- max_pulled_sum - pulled_floor
+    x_pulled[selected_idx] <- structural_bridge_epsilon +
+      (x_pulled[selected_idx] - structural_bridge_epsilon) *
+      available_pulled / (pulled_sum - pulled_floor)
+    pulled_sum <- max_pulled_sum
+  }
+
+  x_bar[selected_idx] <- x_pulled[selected_idx]
+  non_selected_idx <- seq_along(x_prev)[!is_selected]
+  non_selected_prev_sum <- sum(x_prev[non_selected_idx])
+  remaining_mass <- 1 - pulled_sum
+
+  if(non_selected_prev_sum > 0){
+    x_bar[non_selected_idx] <-
+      remaining_mass * x_prev[non_selected_idx] / non_selected_prev_sum
+  } else {
+    x_bar[non_selected_idx] <- remaining_mass / non_selected_count
+  }
+
+  if(any(x_bar[non_selected_idx] < structural_bridge_epsilon)){
+    available_non_selected <- max(
+      0,
+      remaining_mass - structural_bridge_epsilon * non_selected_count
+    )
+    if(non_selected_prev_sum > 0){
+      x_bar[non_selected_idx] <- structural_bridge_epsilon +
+        available_non_selected * x_prev[non_selected_idx] /
+        non_selected_prev_sum
+    } else {
+      x_bar[non_selected_idx] <- structural_bridge_epsilon +
+        available_non_selected / non_selected_count
+    }
+  }
+
   x_bar
 }
 

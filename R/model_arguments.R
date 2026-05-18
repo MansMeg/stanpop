@@ -872,8 +872,8 @@ assert_model_argument_value <- function(arg, value, x, stan_data){
     checkmate::assert_true(value > 0, .var.name = arg)
   } else if (arg %in% c("structural_bridge_epsilon")) {
     checkmate::assert_number(value, lower = 0, .var.name = arg)
-    if(!is.null(x$structural_bridge_type) && as.integer(x$structural_bridge_type) == 1L){
-      checkmate::assert_true(value > 0, .var.name = paste0(arg, " when structural_bridge_type == 1"))
+    if(!is.null(x$structural_bridge_type) && as.integer(x$structural_bridge_type) %in% c(1L, 2L)){
+      checkmate::assert_true(value > 0, .var.name = paste0(arg, " when structural_bridge_type > 0"))
     }
     if(!is.null(stan_data$P)){
       checkmate::assert_true(value < 1 / (stan_data$P + 1), .var.name = arg)

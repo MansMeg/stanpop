@@ -130,41 +130,105 @@ functions {
    *
    * Selected parties are moved toward their structural targets with gain
    * alpha_t. All non-selected eta coordinates and the reference/other category
-   * are rescaled proportionally so the full simplex is preserved.
+   * are rescaled proportionally so the full simplex is preserved. Near the
+   * simplex boundary, the implied full-simplex mean is clipped to keep every
+   * component at or above structural_bridge_epsilon before taking logs.
    */
   row_vector structural_bridge_constant_gain_eta_mean(
       row_vector eta_prev,
       row_vector structural_bridge_x_target_t,
       array[] int structural_bridge_party_active_p,
       real structural_bridge_alpha_week,
-      int delta_days_t) {
+      int delta_days_t,
+      real structural_bridge_epsilon) {
     int P_bridge = cols(eta_prev);
     int P_full = P_bridge + 1;
     vector[P_full] x_prev = softmax(to_vector(append_col(eta_prev, 0)));
     vector[P_full] x_bar = rep_vector(0.0, P_full);
+    vector[P_full] x_pulled = rep_vector(0.0, P_full);
+    array[P_full] int is_selected = rep_array(0, P_full);
     real alpha_t = 1 - pow(1 - structural_bridge_alpha_week, delta_days_t / 7.0);
-    real R_prev = 1.0;
-    real pushed_sum = 0.0;
-    real R_bar;
+    int selected_count = 0;
+    int non_selected_count;
+    real pulled_sum = 0.0;
+    real max_pulled_sum;
+    real non_selected_prev_sum = 0.0;
+    real remaining_mass;
+    int non_selected_needs_floor = 0;
     row_vector[P_bridge] eta_bar;
 
     for(p in 1:P_bridge) {
       if(structural_bridge_party_active_p[p] == 1) {
-        x_bar[p] = (1 - alpha_t) * x_prev[p] +
-          alpha_t * structural_bridge_x_target_t[p];
-        R_prev -= x_prev[p];
-        pushed_sum += x_bar[p];
+        is_selected[p] = 1;
+        selected_count += 1;
+        x_pulled[p] = fmax(
+          (1 - alpha_t) * x_prev[p] +
+            alpha_t * structural_bridge_x_target_t[p],
+          structural_bridge_epsilon
+        );
+        pulled_sum += x_pulled[p];
       }
     }
 
-    R_bar = 1.0 - pushed_sum;
+    non_selected_count = P_full - selected_count;
+    max_pulled_sum = 1.0 -
+      structural_bridge_epsilon * non_selected_count;
 
-    for(p in 1:P_bridge) {
-      if(structural_bridge_party_active_p[p] == 0) {
-        x_bar[p] = x_prev[p] * R_bar / R_prev;
+    if(pulled_sum > max_pulled_sum) {
+      real pulled_floor = structural_bridge_epsilon * selected_count;
+      real available_pulled = max_pulled_sum - pulled_floor;
+
+      for(p in 1:P_bridge) {
+        if(is_selected[p] == 1) {
+          x_pulled[p] = structural_bridge_epsilon +
+            (x_pulled[p] - structural_bridge_epsilon) *
+            available_pulled / (pulled_sum - pulled_floor);
+        }
+      }
+      pulled_sum = max_pulled_sum;
+    }
+
+    for(p in 1:P_bridge)
+      if(is_selected[p] == 1)
+        x_bar[p] = x_pulled[p];
+
+    for(p in 1:P_full)
+      if(is_selected[p] == 0)
+        non_selected_prev_sum += x_prev[p];
+
+    remaining_mass = 1.0 - pulled_sum;
+
+    for(p in 1:P_full) {
+      if(is_selected[p] == 0) {
+        if(non_selected_prev_sum > 0) {
+          x_bar[p] = remaining_mass * x_prev[p] / non_selected_prev_sum;
+        } else {
+          x_bar[p] = remaining_mass / non_selected_count;
+        }
+        if(x_bar[p] < structural_bridge_epsilon)
+          non_selected_needs_floor = 1;
       }
     }
-    x_bar[P_full] = x_prev[P_full] * R_bar / R_prev;
+
+    if(non_selected_needs_floor == 1) {
+      real available_non_selected = fmax(
+        0.0,
+        remaining_mass -
+          structural_bridge_epsilon * non_selected_count
+      );
+
+      for(p in 1:P_full) {
+        if(is_selected[p] == 0) {
+          if(non_selected_prev_sum > 0) {
+            x_bar[p] = structural_bridge_epsilon +
+              available_non_selected * x_prev[p] / non_selected_prev_sum;
+          } else {
+            x_bar[p] = structural_bridge_epsilon +
+              available_non_selected / non_selected_count;
+          }
+        }
+      }
+    }
 
     for(p in 1:P_bridge)
       eta_bar[p] = log(x_bar[p]) - log(x_bar[P_full]);
@@ -390,6 +454,13 @@ transformed data {
   row_vector[P] t1_prior_mu;
   row_vector[P] t1_prior_sigma;
 
+  if(structural_bridge_type > 0) {
+    if(!(structural_bridge_epsilon > 0))
+      reject("structural_bridge_epsilon must be positive when structural_bridge_type > 0.");
+    if(!(structural_bridge_epsilon < 1.0 / (P + 1)))
+      reject("structural_bridge_epsilon must be less than 1 / (P + 1).");
+  }
+
   if(use_multivariate_version > 0)
     use_multivariate_model = 1;
 
@@ -568,7 +639,8 @@ transformed parameters {
               structural_bridge_x_target_t[t,],
               structural_bridge_party_active_p,
               structural_bridge_alpha_week,
-              delta_days_t[t]
+              delta_days_t[t],
+              structural_bridge_epsilon
             );
           }
           L_t = diag_pre_multiply(structural_bridge_sigma_scale, L_t);

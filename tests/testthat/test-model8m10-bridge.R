@@ -423,6 +423,60 @@ test_that("constant-gain convex pull preserves the simplex", {
   expect_equal(sum(high_bar), 1)
 })
 
+test_that("constant-gain convex pull is epsilon-safe with an extreme reference category", {
+  structural_bridge_constant_gain_pull_x <- get_internal("structural_bridge_constant_gain_pull_x")
+  parties <- c("M", "L", "C", "KD", "S", "V", "MP", "SD")
+  eta_prev <- stats::setNames(rep(700, length(parties)), parties)
+  eta_full <- c(eta_prev, other = 0)
+  x_prev <- exp(eta_full - max(eta_full))
+  x_prev <- x_prev / sum(x_prev)
+  x_target <- stats::setNames(rep(0, length(parties)), parties)
+  x_target[c("L", "KD")] <- c(0.18, 0.09)
+  active_p <- as.integer(parties %in% c("L", "KD"))
+  structural_bridge_epsilon <- 1e-6
+
+  expect_lt(unname(x_prev["other"]), structural_bridge_epsilon)
+  expect_gt(unname(x_prev["other"]), 0)
+
+  x_bar <- structural_bridge_constant_gain_pull_x(
+    x_prev = x_prev,
+    x_target = x_target,
+    party_active_p = active_p,
+    alpha_week = 0.10,
+    delta_days = 7,
+    structural_bridge_epsilon = structural_bridge_epsilon
+  )
+  eta_bar <- log(x_bar[parties]) - log(x_bar["other"])
+
+  expect_true(all(is.finite(x_bar)))
+  expect_true(all(x_bar >= structural_bridge_epsilon))
+  expect_equal(sum(x_bar), 1)
+  expect_gt(unname(x_bar["other"]), 0)
+  expect_true(all(is.finite(eta_bar)))
+})
+
+test_that("structural bridge epsilon must be positive for active bridge types", {
+  assert_model_argument_value <- get_internal("assert_model_argument_value")
+
+  expect_silent(
+    assert_model_argument_value(
+      "structural_bridge_epsilon",
+      1e-6,
+      x = list(structural_bridge_type = 2L),
+      stan_data = list(P = 3L)
+    )
+  )
+  expect_error(
+    assert_model_argument_value(
+      "structural_bridge_epsilon",
+      0,
+      x = list(structural_bridge_type = 2L),
+      stan_data = list(P = 3L)
+    ),
+    "structural_bridge_type > 0"
+  )
+})
+
 test_that("structural bridge parser requires target path when a window is supplied", {
   parse_structural_bridge <- get_internal("parse_structural_bridge")
   case <- make_bridge_parser_case()
