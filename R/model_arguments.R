@@ -18,6 +18,29 @@ model_config <- function(model, x = NULL, stan_data = NULL){
   if(!is.null(x$structural_bridge_type)){
     x$structural_bridge_type <- normalize_structural_bridge_type(x$structural_bridge_type)
   }
+  if(identical(model, "model8m9")){
+    model8m9_unsupported_bridge_args <- intersect(
+      names(x),
+      c("structural_bridge_party_active_p",
+        "structural_bridge_x_target_t",
+        "structural_bridge_alpha_week")
+    )
+    if(length(model8m9_unsupported_bridge_args) > 0L){
+      stop(
+        "model8m9 is the 0.9.1 drift-only bridge model and does not accept: ",
+        paste(model8m9_unsupported_bridge_args, collapse = ", "),
+        ".",
+        call. = FALSE
+      )
+    }
+    if(!is.null(x$structural_bridge_type) &&
+       !(as.integer(x$structural_bridge_type) %in% c(0L, 1L))){
+      stop(
+        "model8m9 only supports structural_bridge_type = 0/'none' or 1/'x_drift'.",
+        call. = FALSE
+      )
+    }
+  }
 
   mp <- model_arguments(model)
   mc <- as.character(names(x))
@@ -401,18 +424,21 @@ model_arguments <- function(model){
              "use_sigma_ep", "election_period", "sigma_ep_mean", "sigma_ep_sd", "sigma_ep_mean_vector", "sigma_ep_sd_vector",
              "EP", "ep_inv_x"
     )
-    if(identical(model, "model8m10")){
+    if(model %in% c("model8m9", "model8m10")){
       args <- c(args,
                 "structural_bridge_type",
                 "structural_bridge_active_t",
                 "structural_bridge_B",
                 "structural_bridge_party",
-                "structural_bridge_party_active_p",
                 "structural_bridge_delta_x",
-                "structural_bridge_x_target_t",
-                "structural_bridge_alpha_week",
                 "structural_bridge_epsilon",
                 "structural_bridge_sigma_scale")
+      if(identical(model, "model8m10")){
+        args <- c(args,
+                  "structural_bridge_party_active_p",
+                  "structural_bridge_x_target_t",
+                  "structural_bridge_alpha_week")
+      }
     }
     return(args)
   } else if(model %in% c("model10d", "model10e")) {
