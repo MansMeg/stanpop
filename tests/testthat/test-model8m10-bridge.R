@@ -222,6 +222,61 @@ test_that("model8m10 accepts constant-gain bridge hyperparameters in stan_polls_
   expect_equal(sd$structural_bridge_alpha_week, 0.10)
 })
 
+test_that("x-drift target-path API preserves 2026 low-level bridge data", {
+  parse_structural_bridge <- get_internal("parse_structural_bridge")
+  set_default_model_argument_value <- get_internal("set_default_model_argument_value")
+  time_line_with_overrides <- get_internal("time_line_with_overrides")
+  y_name <- c("M", "L", "C", "KD", "S", "V", "MP", "SD")
+  tl <- time_line_with_overrides(
+    model_time_range = time_range(c("2026-06-01", "2026-09-13")),
+    time_scale = "week",
+    time_scale_overrides = tibble::tibble(
+      from = as.Date("2026-08-24"),
+      to = as.Date("2026-09-13"),
+      time_scale = "day"
+    )
+  )
+  stan_data <- list(
+    T = nrow(tl$time_line),
+    P = length(y_name),
+    x_known_t = integer(0),
+    delta_days_t = as.array(ifelse(is.na(tl$time_line$delta_days), 0L, tl$time_line$delta_days))
+  )
+  hp <- list(
+    structural_bridge_type = "x_drift",
+    structural_bridge_window = c(as.Date("2026-06-08"), as.Date("2026-09-13")),
+    structural_bridge_x_target_path = data.frame(
+      y = c("L", "KD"),
+      from_x = c(0.026, 0.049),
+      to_x = c(0.044, 0.054)
+    )
+  )
+
+  res <- parse_structural_bridge(hp, tl, y_name, stan_data)
+  active_dates <- as.Date(tl$time_line$date[as.integer(res$structural_bridge_active_t) == 1L])
+  expected_active_dates <- c(
+    seq(as.Date("2026-06-15"), as.Date("2026-08-17"), by = "week"),
+    seq(as.Date("2026-08-24"), as.Date("2026-09-13"), by = "day")
+  )
+
+  expect_identical(res$structural_bridge_type, 1L)
+  expect_identical(res$structural_bridge_B, 2L)
+  expect_identical(res$structural_bridge_party, c(2L, 4L))
+  expect_identical(active_dates, expected_active_dates)
+  expect_equal(colSums(res$structural_bridge_delta_x), c(0.018, 0.005))
+  expect_true(all(res$structural_bridge_delta_x[res$structural_bridge_active_t == 0L, , drop = FALSE] == 0))
+  expect_true(all(res$structural_bridge_active_t[stan_data$delta_days_t == 0L] == 0L))
+  expect_identical(
+    set_default_model_argument_value("structural_bridge_party_active_p", res, stan_data),
+    rep(0L, length(y_name))
+  )
+  x_target_t <- set_default_model_argument_value("structural_bridge_x_target_t", res, stan_data)
+  expect_identical(dim(x_target_t), c(stan_data$T, stan_data$P))
+  expect_true(all(x_target_t == 0))
+  expect_identical(set_default_model_argument_value("structural_bridge_alpha_week", res, stan_data), 1)
+  expect_true(all(set_default_model_argument_value("structural_bridge_sigma_scale", res, stan_data) == 1))
+})
+
 test_that("high-level bridge windows containing known states keep those states inactive", {
   case <- make_model8_mixed_smoke_case(npolls = 20)
   known_date <- case$known_state$date[1]
@@ -421,6 +476,60 @@ test_that("constant-gain convex pull preserves the simplex", {
   )
   expect_equal(high_bar[2], 0.0584)
   expect_equal(sum(high_bar), 1)
+})
+
+test_that("constant-gain convex pull is epsilon-safe with an extreme reference category", {
+  structural_bridge_constant_gain_pull_x <- get_internal("structural_bridge_constant_gain_pull_x")
+  parties <- c("M", "L", "C", "KD", "S", "V", "MP", "SD")
+  eta_prev <- stats::setNames(rep(700, length(parties)), parties)
+  eta_full <- c(eta_prev, other = 0)
+  x_prev <- exp(eta_full - max(eta_full))
+  x_prev <- x_prev / sum(x_prev)
+  x_target <- stats::setNames(rep(0, length(parties)), parties)
+  x_target[c("L", "KD")] <- c(0.18, 0.09)
+  active_p <- as.integer(parties %in% c("L", "KD"))
+  structural_bridge_epsilon <- 1e-6
+
+  expect_lt(unname(x_prev["other"]), structural_bridge_epsilon)
+  expect_gt(unname(x_prev["other"]), 0)
+
+  x_bar <- structural_bridge_constant_gain_pull_x(
+    x_prev = x_prev,
+    x_target = x_target,
+    party_active_p = active_p,
+    alpha_week = 0.10,
+    delta_days = 7,
+    structural_bridge_epsilon = structural_bridge_epsilon
+  )
+  eta_bar <- log(x_bar[parties]) - log(x_bar["other"])
+
+  expect_true(all(is.finite(x_bar)))
+  expect_true(all(x_bar >= structural_bridge_epsilon))
+  expect_equal(sum(x_bar), 1)
+  expect_gt(unname(x_bar["other"]), 0)
+  expect_true(all(is.finite(eta_bar)))
+})
+
+test_that("structural bridge epsilon must be positive for active bridge types", {
+  assert_model_argument_value <- get_internal("assert_model_argument_value")
+
+  expect_silent(
+    assert_model_argument_value(
+      "structural_bridge_epsilon",
+      1e-6,
+      x = list(structural_bridge_type = 2L),
+      stan_data = list(P = 3L)
+    )
+  )
+  expect_error(
+    assert_model_argument_value(
+      "structural_bridge_epsilon",
+      0,
+      x = list(structural_bridge_type = 2L),
+      stan_data = list(P = 3L)
+    ),
+    "structural_bridge_type > 0"
+  )
 })
 
 test_that("structural bridge parser requires target path when a window is supplied", {
