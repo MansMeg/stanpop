@@ -54,6 +54,32 @@ functions {
    }
 
   /**
+   * Return the eta-scale transition scale implied by an additive election-period
+   * increase on the local vote-share scale.
+   */
+  vector election_period_transition_scale(row_vector eta_center,
+                                          vector sigma_x,
+                                          int use_sigma_ep,
+                                          vector sigma_ep) {
+    int P_scale = rows(sigma_x);
+    real epsilon_inv_x = 0.01;
+    vector[P_scale + 1] x_center =
+      softmax(to_vector(append_col(eta_center, 0)));
+    vector[P_scale] transition_scale = sigma_x;
+    vector[P_scale] inv_x;
+
+    for(p in 1:P_scale)
+      inv_x[p] = inv(fmax(x_center[p], epsilon_inv_x));
+
+    if(use_sigma_ep == 1)
+      transition_scale += inv_x * sigma_ep[1];
+    if(use_sigma_ep == 2)
+      transition_scale += inv_x .* sigma_ep;
+
+    return transition_scale;
+  }
+
+  /**
    * Return the eta-scale transition mean implied by a state-dependent
    * vote-share-scale drift.
    *
@@ -599,10 +625,7 @@ transformed parameters {
     for(t in t_start_all:t_end_all){
       if(x_t_is_known[t]){ // then eta_z_t is also known (see derivation)
         if(election_period[t] > 0){
-          if(use_sigma_ep == 1)
-            L_Sigma_ep[1] = diag_pre_multiply((ep_inv_x[election_period[t]] * sigma_ep[1] + sigma_x), L_Omega_x[s_t_Omega[t]]);
-          if(use_sigma_ep == 2)
-            L_Sigma_ep[1] = diag_pre_multiply((ep_inv_x[election_period[t]] .* sigma_ep + sigma_x), L_Omega_x[s_t_Omega[t]]);
+          L_Sigma_ep[1] = diag_pre_multiply(election_period_transition_scale(eta[t-1,], sigma_x, use_sigma_ep, sigma_ep), L_Omega_x[s_t_Omega[t]]);
 
           eta_z[t,] = to_row_vector((inverse(L_Sigma_ep[1]) / step_scale_t[t]) * to_vector((eta[t,] - eta[t-1,])));
         } else {
@@ -613,17 +636,6 @@ transformed parameters {
         matrix[P, P] L_t;
 
         eta_mean_t = eta[t-1,];
-        if(election_period[t] > 0){
-          if(use_sigma_ep == 1)
-            L_Sigma_ep[1] = diag_pre_multiply((ep_inv_x[election_period[t]] * sigma_ep[1] + sigma_x), L_Omega_x[s_t_Omega[t]]);
-          if(use_sigma_ep == 2)
-            L_Sigma_ep[1] = diag_pre_multiply((ep_inv_x[election_period[t]] .* sigma_ep + sigma_x), L_Omega_x[s_t_Omega[t]]);
-
-          L_t = L_Sigma_ep[1];
-        } else {
-          L_t = L_Sigma[s_t_Omega[t]];
-        }
-
         if(structural_bridge_active_t[t] == 1 && structural_bridge_type > 0){
           if(structural_bridge_type == 1) {
             eta_mean_t = structural_bridge_eta_mean(
@@ -643,6 +655,17 @@ transformed parameters {
               structural_bridge_epsilon
             );
           }
+        }
+
+        if(election_period[t] > 0){
+          L_Sigma_ep[1] = diag_pre_multiply(election_period_transition_scale(eta_mean_t, sigma_x, use_sigma_ep, sigma_ep), L_Omega_x[s_t_Omega[t]]);
+
+          L_t = L_Sigma_ep[1];
+        } else {
+          L_t = L_Sigma[s_t_Omega[t]];
+        }
+
+        if(structural_bridge_active_t[t] == 1 && structural_bridge_type > 0){
           L_t = diag_pre_multiply(structural_bridge_sigma_scale, L_t);
         }
 

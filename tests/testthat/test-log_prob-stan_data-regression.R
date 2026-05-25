@@ -747,7 +747,7 @@ test_that("model8m10 log_prob matches model8m5 on mixed override-aware stan_data
   )
 })
 
-test_that("model8m11 log_prob matches model8m10 on mixed bridge stan_data", {
+test_that("model8m11 log_prob differs from model8m10 with x-scale election sigma", {
   skip_if_no_stan_tests()
   skip_if_no_rstan_tests()
 
@@ -805,12 +805,17 @@ test_that("model8m11 log_prob matches model8m10 on mixed bridge stan_data", {
     model8m11$stan_data$stan_data_with_overrides,
     model8m10$stan_data$stan_data_with_overrides
   )
-  expect_log_prob_match(
-    lhs = model8m10,
-    rhs = model8m11,
-    lhs_label = "model8m10",
-    rhs_label = "model8m11"
-  )
+
+  nu_m10 <- rstan::get_num_upars(model8m10$stan_fit)
+  nu_m11 <- rstan::get_num_upars(model8m11$stan_fit)
+  probe <- seq(from = -0.15, to = 0.15, length.out = nu_m10)
+
+  expect_equal(nu_m11, nu_m10)
+  expect_false(isTRUE(all.equal(
+    rstan::log_prob(model8m10$stan_fit, probe),
+    rstan::log_prob(model8m11$stan_fit, probe),
+    tolerance = 1e-8
+  )))
 })
 
 
