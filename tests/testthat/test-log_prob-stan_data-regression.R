@@ -747,5 +747,71 @@ test_that("model8m10 log_prob matches model8m5 on mixed override-aware stan_data
   )
 })
 
+test_that("model8m11 log_prob matches model8m10 on mixed bridge stan_data", {
+  skip_if_no_stan_tests()
+  skip_if_no_rstan_tests()
+
+  case <- make_simple_mixed_log_prob_regression_case()
+  cfg <- list(
+    sigma_kappa_hyper_sd = 0.03,
+    use_industry_bias = 1L,
+    use_house_bias = 0L,
+    use_design_effects = 0L,
+    use_multivariate_version = 2L,
+    use_softmax = 1L,
+    election_period = list(c("2010-05-03", "2010-05-20")),
+    use_sigma_ep = 2L,
+    ep_inv_x = list(c(3.984064, 3.937008)),
+    structural_bridge_type = "x_drift",
+    structural_bridge_window = c("2010-05-05", "2010-05-10"),
+    structural_bridge_x_target_path = data.frame(
+      y = "x3",
+      from_x = 0.30,
+      to_x = 0.34
+    ),
+    structural_bridge_sigma_scale = c(x3 = 1, x4 = 0.8)
+  )
+
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          model8m10 <- fit_from_stan_data(
+            model = "model8m10",
+            cfg = cfg,
+            case = case,
+            stan_data_name = "stan_data_with_overrides"
+          )
+        )
+      )
+    )
+  )
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          model8m11 <- fit_from_stan_data(
+            model = "model8m11",
+            cfg = cfg,
+            case = case,
+            stan_data_name = "stan_data_with_overrides"
+          )
+        )
+      )
+    )
+  )
+
+  expect_equal(
+    model8m11$stan_data$stan_data_with_overrides,
+    model8m10$stan_data$stan_data_with_overrides
+  )
+  expect_log_prob_match(
+    lhs = model8m10,
+    rhs = model8m11,
+    lhs_label = "model8m10",
+    rhs_label = "model8m11"
+  )
+})
+
 
 if(run_stan_tests) Sys.setenv(STANPOP_RUN_STAN_TESTS = "false")
