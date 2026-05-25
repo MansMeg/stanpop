@@ -368,7 +368,7 @@ supported_pop_models <- function() {
   # d. Update latent_state.stanfit() with info on how the latent state is extracted
   # e. Update compute_prediction_error()
   c(paste0("model8k", 1:9),
-    paste0("model8m", 1:10))
+    paste0("model8m", 1:11))
 }
 
 get_pop_stan_model_file_path <-function(model){
