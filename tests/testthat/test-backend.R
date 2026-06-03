@@ -75,6 +75,34 @@ test_that("validate_backend_sample_arguments leaves rstan arguments to rstan", {
   )
 })
 
+test_that("backend_prepare_cmdstanr_sample_arguments supplies a stable output directory", {
+  backend_prepare_cmdstanr_sample_arguments <- get_internal("backend_prepare_cmdstanr_sample_arguments")
+
+  first <- backend_prepare_cmdstanr_sample_arguments(list(chains = 1))
+  second <- backend_prepare_cmdstanr_sample_arguments(list(chains = 1))
+  on.exit(unlink(c(first$output_dir, second$output_dir), recursive = TRUE), add = TRUE)
+
+  expect_true(dir.exists(first$output_dir))
+  expect_true(dir.exists(second$output_dir))
+  expect_match(basename(first$output_dir), "^stanpop-cmdstanr-output-")
+  expect_false(identical(first$output_dir, second$output_dir))
+})
+
+test_that("backend_prepare_cmdstanr_sample_arguments preserves explicit output directory", {
+  backend_prepare_cmdstanr_sample_arguments <- get_internal("backend_prepare_cmdstanr_sample_arguments")
+
+  output_dir <- tempfile("cmdstanr-output-")
+  dir.create(output_dir)
+  on.exit(unlink(output_dir, recursive = TRUE), add = TRUE)
+
+  res <- backend_prepare_cmdstanr_sample_arguments(list(
+    chains = 1,
+    output_dir = output_dir
+  ))
+
+  expect_identical(res$output_dir, output_dir)
+})
+
 backend_draws_fixture_path <- function(backend) {
   testthat::test_path("files", paste0("test_pop_v0_7_3_", backend, ".rds"))
 }

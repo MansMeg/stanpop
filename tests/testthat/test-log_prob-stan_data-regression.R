@@ -65,10 +65,20 @@ fit_from_stan_data <- function(model, cfg, case, stan_data_name = "stan_data") {
     known_state = case$known_state,
     hyper_parameters = cfg
   )
+  stan_data <- sd[[stan_data_name]]
+  if(isTRUE(stan_data$use_sigma_ep == 0L) &&
+     !is.null(stan_data$EP) &&
+     identical(stan_data$EP, 0L) &&
+     !is.null(stan_data$ep_inv_x)) {
+    # RStan does not reliably pass zero-length arrays of vectors. EP is unused
+    # when use_sigma_ep = 0, so this keeps the likelihood unchanged.
+    stan_data$EP <- 1L
+    stan_data$ep_inv_x <- list(rep(1.0, stan_data$P))
+  }
 
   fit <- rstan::stan(
     file = get_pop_stan_model_file_path(model),
-    data = sd[[stan_data_name]],
+    data = stan_data,
     warmup = 0,
     iter = 3,
     chains = 1,
@@ -745,6 +755,141 @@ test_that("model8m10 log_prob matches model8m5 on mixed override-aware stan_data
     lhs_label = "model8m5",
     rhs_label = "model8m10"
   )
+})
+
+test_that("model8m11 log_prob matches model8m10 when election sigma is unused", {
+  skip_if_no_stan_tests()
+  skip_if_no_rstan_tests()
+
+  case <- make_simple_mixed_log_prob_regression_case()
+  cfg <- list(
+    sigma_kappa_hyper_sd = 0.03,
+    use_industry_bias = 1L,
+    use_house_bias = 0L,
+    use_design_effects = 0L,
+    use_multivariate_version = 2L,
+    use_softmax = 1L,
+    use_sigma_ep = 0L,
+    structural_bridge_type = "x_drift",
+    structural_bridge_window = c("2010-05-05", "2010-05-10"),
+    structural_bridge_x_target_path = data.frame(
+      y = "x3",
+      from_x = 0.30,
+      to_x = 0.34
+    ),
+    structural_bridge_sigma_scale = c(x3 = 1, x4 = 0.8)
+  )
+
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          model8m10 <- fit_from_stan_data(
+            model = "model8m10",
+            cfg = cfg,
+            case = case,
+            stan_data_name = "stan_data_with_overrides"
+          )
+        )
+      )
+    )
+  )
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          model8m11 <- fit_from_stan_data(
+            model = "model8m11",
+            cfg = cfg,
+            case = case,
+            stan_data_name = "stan_data_with_overrides"
+          )
+        )
+      )
+    )
+  )
+
+  expect_equal(
+    model8m11$stan_data$stan_data_with_overrides,
+    model8m10$stan_data$stan_data_with_overrides
+  )
+  expect_log_prob_match(
+    lhs = model8m10,
+    rhs = model8m11,
+    lhs_label = "model8m10",
+    rhs_label = "model8m11"
+  )
+})
+
+test_that("model8m11 log_prob differs from model8m10 with x-scale election sigma", {
+  skip_if_no_stan_tests()
+  skip_if_no_rstan_tests()
+
+  case <- make_simple_mixed_log_prob_regression_case()
+  cfg <- list(
+    sigma_kappa_hyper_sd = 0.03,
+    use_industry_bias = 1L,
+    use_house_bias = 0L,
+    use_design_effects = 0L,
+    use_multivariate_version = 2L,
+    use_softmax = 1L,
+    election_period = list(c("2010-05-03", "2010-05-20")),
+    use_sigma_ep = 2L,
+    ep_inv_x = list(c(3.984064, 3.937008)),
+    structural_bridge_type = "x_drift",
+    structural_bridge_window = c("2010-05-05", "2010-05-10"),
+    structural_bridge_x_target_path = data.frame(
+      y = "x3",
+      from_x = 0.30,
+      to_x = 0.34
+    ),
+    structural_bridge_sigma_scale = c(x3 = 1, x4 = 0.8)
+  )
+
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          model8m10 <- fit_from_stan_data(
+            model = "model8m10",
+            cfg = cfg,
+            case = case,
+            stan_data_name = "stan_data_with_overrides"
+          )
+        )
+      )
+    )
+  )
+  expect_silent(
+    capture.output(
+      suppressWarnings(
+        suppressMessages(
+          model8m11 <- fit_from_stan_data(
+            model = "model8m11",
+            cfg = cfg,
+            case = case,
+            stan_data_name = "stan_data_with_overrides"
+          )
+        )
+      )
+    )
+  )
+
+  expect_equal(
+    model8m11$stan_data$stan_data_with_overrides,
+    model8m10$stan_data$stan_data_with_overrides
+  )
+
+  nu_m10 <- rstan::get_num_upars(model8m10$stan_fit)
+  nu_m11 <- rstan::get_num_upars(model8m11$stan_fit)
+  probe <- seq(from = -0.15, to = 0.15, length.out = nu_m10)
+
+  expect_equal(nu_m11, nu_m10)
+  expect_false(isTRUE(all.equal(
+    rstan::log_prob(model8m10$stan_fit, probe),
+    rstan::log_prob(model8m11$stan_fit, probe),
+    tolerance = 1e-8
+  )))
 })
 
 

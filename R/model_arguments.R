@@ -395,7 +395,7 @@ model_arguments <- function(model){
              "use_sigma_ep", "election_period", "sigma_ep_mean", "sigma_ep_sd",
              "EP", "ep_inv_x"
     ))
-  } else if(grepl(model, pattern = "^model8m([3-9]|10)$")) {
+  } else if(grepl(model, pattern = "^model8m([3-9]|1[01])$")) {
     args <- c("sigma_kappa_hyper_sd", "sigma_kappa_hyper_mean", "kappa_1_sigma_hyper",
              "g_scale",
              "use_industry_bias", "use_house_bias", "use_design_effects",
@@ -424,7 +424,7 @@ model_arguments <- function(model){
              "use_sigma_ep", "election_period", "sigma_ep_mean", "sigma_ep_sd", "sigma_ep_mean_vector", "sigma_ep_sd_vector",
              "EP", "ep_inv_x"
     )
-    if(model %in% c("model8m9", "model8m10")){
+    if(model %in% c("model8m9", "model8m10", "model8m11")){
       args <- c(args,
                 "structural_bridge_type",
                 "structural_bridge_active_t",
@@ -433,7 +433,7 @@ model_arguments <- function(model){
                 "structural_bridge_delta_x",
                 "structural_bridge_epsilon",
                 "structural_bridge_sigma_scale")
-      if(identical(model, "model8m10")){
+      if(model %in% c("model8m10", "model8m11")){
         args <- c(args,
                   "structural_bridge_party_active_p",
                   "structural_bridge_x_target_t",

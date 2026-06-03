@@ -219,6 +219,7 @@ backend_sample_cmdstanr <- function(sample_arguments,
      !isTRUE(sample_arguments$fixed_param)) {
     sample_arguments$adapt_engaged <- FALSE
   }
+  sample_arguments <- backend_prepare_cmdstanr_sample_arguments(sample_arguments)
 
   model <- do.call(
     cmdstanr::cmdstan_model,
@@ -231,6 +232,30 @@ backend_sample_cmdstanr <- function(sample_arguments,
     )
   )
   do.call(model$sample, sample_arguments)
+}
+
+#' @keywords internal
+backend_prepare_cmdstanr_sample_arguments <- function(sample_arguments) {
+  checkmate::assert_list(sample_arguments)
+
+  if(is.null(sample_arguments$output_dir)) {
+    # A non-NULL output_dir keeps CmdStanR from treating the CSVs as
+    # finalizer-owned temp files.
+    sample_arguments$output_dir <- backend_new_cmdstanr_output_dir()
+  }
+
+  sample_arguments
+}
+
+#' @keywords internal
+backend_new_cmdstanr_output_dir <- function() {
+  output_dir <- tempfile(
+    pattern = "stanpop-cmdstanr-output-",
+    tmpdir = tempdir(check = TRUE)
+  )
+  dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+  checkmate::assert_directory_exists(output_dir, access = "rw")
+  output_dir
 }
 
 #' Compute diagnostics for a backend fit object

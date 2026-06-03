@@ -162,7 +162,7 @@ stan_polls_data <- function(x,
     spd <- stan_polls_data_model8l(x, y_name, time_scale, known_state, model_time_range, latent_time_ranges, hyper_parameters, slow_scales, model)
   } else if(grepl(model, pattern = "^model8m[0-9]+$")) {
     initial_hyper_parameters <- hyper_parameters
-    if(model %in% c("model8m9", "model8m10") &&
+    if(model %in% c("model8m9", "model8m10", "model8m11") &&
        !is.null(time_scale_overrides) &&
        nrow(time_scale_overrides) > 0){
       # The first pass builds a legacy grid only so the override-aware data path
@@ -221,7 +221,7 @@ use_override_aware_stan_data_by_default <- function(model) {
 
 model_supports_time_scale_overrides <- function(model) {
   checkmate::assert_string(model)
-  grepl(pattern = "^model8k[56]$|^model8m(5|6|9|10)$", x = model)
+  grepl(pattern = "^model8k[56]$|^model8m(5|6|9|10|11)$", x = model)
 }
 
 
@@ -1693,7 +1693,7 @@ stan_data_finalize_model8m <- function(stan_data,
   if(is.null(hyper_parameters$EP)) hyper_parameters$EP <- as.integer(max(hyper_parameters$election_period))
   if(identical(model, "model8m9")){
     hyper_parameters <- parse_structural_bridge_x_drift_only(hyper_parameters, time_line, y_name, stan_data)
-  } else if(identical(model, "model8m10")){
+  } else if(model %in% c("model8m10", "model8m11")){
     hyper_parameters <- parse_structural_bridge(hyper_parameters, time_line, y_name, stan_data)
   }
 
@@ -1703,11 +1703,11 @@ stan_data_finalize_model8m <- function(stan_data,
   stan_data$alpha_kappa_known <- array(stan_data$alpha_kappa_known, dim = 1)
   stan_data$alpha_beta_mu_known <- array(stan_data$alpha_beta_mu_known, dim = 1)
   stan_data$alpha_beta_sigma_known <- array(stan_data$alpha_beta_sigma_known, dim = 1)
-  if(model %in% c("model8m9", "model8m10")){
+  if(model %in% c("model8m9", "model8m10", "model8m11")){
     stan_data$structural_bridge_active_t <- as.array(as.integer(stan_data$structural_bridge_active_t))
     stan_data$structural_bridge_party <- as.array(as.integer(stan_data$structural_bridge_party))
   }
-  if(identical(model, "model8m10")){
+  if(model %in% c("model8m10", "model8m11")){
     stan_data$structural_bridge_party_active_p <- as.array(as.integer(stan_data$structural_bridge_party_active_p))
   }
 
