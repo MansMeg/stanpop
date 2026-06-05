@@ -225,6 +225,49 @@ geom_polls_time_weights <- function(x, y, ...){
   ggplot2::geom_point(data = df, ggplot2::aes(x=date, y = y), ...)
 }
 
+#' Compute Display Dates for Latent States
+#'
+#' @description
+#' Compute the calendar dates used to display latent-state points in plots.
+#' Period-start display uses the latent anchor/start dates stored in the
+#' [time_line] object.
+#' Period-end display uses the last daily date mapped to each latent time point,
+#' which makes the result aware of mixed time-scale timelines created by
+#' `time_scale_overrides`.
+#'
+#' @param time_line A [time_line] object.
+#' @param position Where to display latent-state dates. `"period_start"` uses
+#'   the latent anchor/start dates stored in [time_line]. `"period_end"` uses
+#'   the last daily date mapped to each latent time point.
+#'
+#' @return A named `Date` vector, with names corresponding to latent `t` values.
+#'
+#' @keywords internal
+latent_state_display_dates <- function(time_line, position = c("period_start", "period_end")){
+  checkmate::assert_class(time_line, "time_line")
+  position <- match.arg(position)
+
+  if(identical(position, "period_start")){
+    display_dates <- time_line$time_line$date
+  } else {
+    # Collapse the daily mapping to one display date per latent time point:
+    # the last calendar date whose daily row maps to each time_line_t.
+    period_ends <- stats::aggregate(
+      date ~ time_line_t,
+      data = time_line$daily[, c("date", "time_line_t"), drop = FALSE],
+      FUN = max
+    )
+    period_end_idx <- match(time_line$time_line$t, period_ends$time_line_t)
+    if(anyNA(period_end_idx)){
+      stop("Unable to compute display dates for every latent time point.", call. = FALSE)
+    }
+    display_dates <- period_ends$date[period_end_idx]
+  }
+
+  names(display_dates) <- as.character(time_line$time_line$t)
+  display_dates
+}
+
 
 #' Plot a [poll_of_polls] object
 #'
@@ -238,21 +281,32 @@ geom_polls_time_weights <- function(x, y, ...){
 #' @param shift_latent_days Shift the latent series right, this number of days.
 #' @param house only plot the following polling houses
 #' @param include_latent_state include latent state in plot
+#' @param latent_date_position Where to display latent-state dates.
+#'   `"period_start"` uses the latent anchor/start dates stored in the timeline.
+#'   `"period_end"` uses the last daily date mapped to each latent time point,
+#'   which is aware of mixed time-scale timelines.
 #'
 #' @export
-plot_poll_of_polls <- function(x, y = NULL, from = NULL, to = NULL, publish_date = TRUE, collection_period = FALSE, shift_latent_days = 0, house = NULL, include_latent_state = TRUE, ...){
+plot_poll_of_polls <- function(x, y = NULL, from = NULL, to = NULL, publish_date = TRUE, collection_period = FALSE, shift_latent_days = 0, house = NULL, include_latent_state = TRUE, latent_date_position = c("period_start", "period_end"), ...){
   checkmate::assert_class(x, "poll_of_polls")
   checkmate::assert_flag(publish_date)
   checkmate::assert_flag(collection_period)
   checkmate::assert_flag(include_latent_state)
+  checkmate::assert_number(shift_latent_days)
+  latent_date_position <- match.arg(latent_date_position)
 
   if(is.null(y)) y <- x$y[1]
   checkmate::assert_choice(y, x$y, null.ok = TRUE)
 
+  latent_display_dates <- latent_state_display_dates(x$time_line, position = latent_date_position)
   ls <- latent_state(x, time_line = x$time_line)
   if(!is.null(y)) ls <- ls[, ,y]
   ls <- subset_latent_state_dates(x = ls, from, to)
-  ls$time_line$time_line$date <- ls$time_line$time_line$date + lubridate::days(shift_latent_days)
+  latent_display_dates <- latent_display_dates[as.character(ls$time_line$time_line$t)]
+  if(anyNA(latent_display_dates)){
+    stop("Unable to match display dates to the plotted latent time points.", call. = FALSE)
+  }
+  ls$time_line$time_line$date <- latent_display_dates + lubridate::days(shift_latent_days)
 
   pd <- x$polls_data
   if(!is.null(house)){

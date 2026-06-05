@@ -1,0 +1,1032 @@
+// Built from model 8m5
+
+functions {
+  /**
+   * Return the unit diagnonal cholesky factor of a covariance matrix
+   * according to Pourahmadi (2011). That is L in Eq. (14) of Pourahmadi (2011).
+   *
+   * @reference
+   * Pourahmadi (2011) Covariance Estimation: The GLM and regularization
+   * perspectives, Statistical Science.
+   *
+   * @param P The dimension of L
+   * @param phi Regression coefficient in Eq. (16) of Pourahmadi (2011) row-wise
+   * of Eq. (18) (i.e phi[1] is phi_{2,1}, phi[2] is phi_{3,1}, and
+   * phi[3] is phi_{3,2}).
+   *
+   * @return A cholesky factor L with unit diagonal.
+   */
+  matrix cov_reg_to_chol(int P, vector phi) {
+    matrix[P,P] T; // This is actually a cholesky for a precision matrix
+    matrix[P,P] L;
+    {
+    int counter = 1;
+      T[1,1]=1;
+      for(i in 2:P){
+        T[i, i]=1;
+        for(j in 1:(i-1)){
+          T[i, j] = phi[counter];
+          T[j, i] = 0;
+          counter += 1;
+        }
+      }
+    }
+    L = inverse(T);
+    // L = chol2inv(T);
+    for(i in 2:P){
+      for(j in 1:(i-1)){
+        L[j, i] = 0;
+      }
+    }
+    return L;
+  }
+
+   /**
+   * Return exp(logsumexp(eta) - eta)
+   *
+   * @param eta a vector of values on the log scale
+   *
+   * @return a vector
+   */
+   vector exp_logsumexp_minus_eta(row_vector eta) {
+     real lse = log_sum_exp(append_col(eta, 0));
+     return (exp(lse - to_vector(eta)));
+   }
+
+  /**
+   * Return the eta-scale transition scale implied by an additive election-period
+   * increase on the local vote-share scale.
+   */
+  vector election_period_transition_scale(row_vector eta_center,
+                                          vector sigma_x,
+                                          int use_sigma_ep,
+                                          vector sigma_ep) {
+    int P_scale = rows(sigma_x);
+    real epsilon_inv_x = 0.01;
+    vector[P_scale + 1] x_center =
+      softmax(to_vector(append_col(eta_center, 0)));
+    vector[P_scale] transition_scale = sigma_x;
+    vector[P_scale] inv_x;
+
+    for(p in 1:P_scale)
+      inv_x[p] = inv(fmax(x_center[p], epsilon_inv_x));
+
+    if(use_sigma_ep == 1)
+      transition_scale += inv_x * sigma_ep[1];
+    if(use_sigma_ep == 2)
+      transition_scale += inv_x .* sigma_ep;
+
+    return transition_scale;
+  }
+
+  /**
+   * Return the eta-scale transition mean implied by a state-dependent
+   * vote-share-scale drift.
+   *
+   * The previous eta state is mapped to the full simplex with the implicit
+   * reference/other category, selected parties receive direct x-scale drift,
+   * and all non-pushed categories (including other) absorb the remaining mass.
+   */
+  row_vector structural_bridge_eta_mean(row_vector eta_prev,
+                                        int structural_bridge_B,
+                                        array[] int structural_bridge_party,
+                                        row_vector structural_bridge_delta_x_t,
+                                        real structural_bridge_epsilon) {
+    int P_bridge = cols(eta_prev);
+    int P_full = P_bridge + 1;
+    vector[P_full] x_prev = softmax(to_vector(append_col(eta_prev, 0)));
+    vector[P_full] x_bar = rep_vector(0.0, P_full);
+    vector[P_full] x_pushed = rep_vector(0.0, P_full);
+    array[P_full] int is_pushed = rep_array(0, P_full);
+    int non_pushed_count = P_full - structural_bridge_B;
+    real pushed_sum = 0.0;
+    real max_pushed_sum = 1.0 - structural_bridge_epsilon * non_pushed_count;
+    real non_pushed_prev_sum = 0.0;
+    real remaining_mass;
+    real available_non_pushed;
+    row_vector[P_bridge] eta_bar;
+
+    for(b in 1:structural_bridge_B) {
+      int p = structural_bridge_party[b];
+      is_pushed[p] = 1;
+      x_pushed[p] = fmax(x_prev[p] + structural_bridge_delta_x_t[b],
+                         structural_bridge_epsilon);
+      pushed_sum += x_pushed[p];
+    }
+
+    if(pushed_sum > max_pushed_sum) {
+      real pushed_floor = structural_bridge_epsilon * structural_bridge_B;
+      real available_pushed = max_pushed_sum - pushed_floor;
+
+      for(b in 1:structural_bridge_B) {
+        int p = structural_bridge_party[b];
+        x_pushed[p] = structural_bridge_epsilon +
+          (x_pushed[p] - structural_bridge_epsilon) *
+          available_pushed / (pushed_sum - pushed_floor);
+      }
+      pushed_sum = max_pushed_sum;
+    }
+
+    for(b in 1:structural_bridge_B) {
+      int p = structural_bridge_party[b];
+      x_bar[p] = x_pushed[p];
+    }
+
+    for(p in 1:P_full)
+      if(is_pushed[p] == 0)
+        non_pushed_prev_sum += x_prev[p];
+
+    remaining_mass = 1.0 - pushed_sum;
+    available_non_pushed = remaining_mass -
+      structural_bridge_epsilon * non_pushed_count;
+    for(p in 1:P_full)
+      if(is_pushed[p] == 0)
+        x_bar[p] = structural_bridge_epsilon +
+          available_non_pushed * x_prev[p] / non_pushed_prev_sum;
+
+    for(p in 1:P_bridge)
+      eta_bar[p] = log(x_bar[p]) - log(x_bar[P_full]);
+
+    return eta_bar;
+  }
+
+  /**
+   * Return the eta-scale transition mean implied by a constant-gain convex
+   * pull toward a structural vote-share path.
+   *
+   * Selected parties are moved toward their structural targets with gain
+   * alpha_t. All non-selected eta coordinates and the reference/other category
+   * are rescaled proportionally so the full simplex is preserved. Near the
+   * simplex boundary, the implied full-simplex mean is clipped to keep every
+   * component at or above structural_bridge_epsilon before taking logs.
+   */
+  row_vector structural_bridge_constant_gain_eta_mean(
+      row_vector eta_prev,
+      row_vector structural_bridge_x_target_t,
+      array[] int structural_bridge_party_active_p,
+      real structural_bridge_alpha_week,
+      int delta_days_t,
+      real structural_bridge_epsilon) {
+    int P_bridge = cols(eta_prev);
+    int P_full = P_bridge + 1;
+    vector[P_full] x_prev = softmax(to_vector(append_col(eta_prev, 0)));
+    vector[P_full] x_bar = rep_vector(0.0, P_full);
+    vector[P_full] x_pulled = rep_vector(0.0, P_full);
+    array[P_full] int is_selected = rep_array(0, P_full);
+    real alpha_t = 1 - pow(1 - structural_bridge_alpha_week, delta_days_t / 7.0);
+    int selected_count = 0;
+    int non_selected_count;
+    real pulled_sum = 0.0;
+    real max_pulled_sum;
+    real non_selected_prev_sum = 0.0;
+    real remaining_mass;
+    int non_selected_needs_floor = 0;
+    row_vector[P_bridge] eta_bar;
+
+    for(p in 1:P_bridge) {
+      if(structural_bridge_party_active_p[p] == 1) {
+        is_selected[p] = 1;
+        selected_count += 1;
+        x_pulled[p] = fmax(
+          (1 - alpha_t) * x_prev[p] +
+            alpha_t * structural_bridge_x_target_t[p],
+          structural_bridge_epsilon
+        );
+        pulled_sum += x_pulled[p];
+      }
+    }
+
+    non_selected_count = P_full - selected_count;
+    max_pulled_sum = 1.0 -
+      structural_bridge_epsilon * non_selected_count;
+
+    if(pulled_sum > max_pulled_sum) {
+      real pulled_floor = structural_bridge_epsilon * selected_count;
+      real available_pulled = max_pulled_sum - pulled_floor;
+
+      for(p in 1:P_bridge) {
+        if(is_selected[p] == 1) {
+          x_pulled[p] = structural_bridge_epsilon +
+            (x_pulled[p] - structural_bridge_epsilon) *
+            available_pulled / (pulled_sum - pulled_floor);
+        }
+      }
+      pulled_sum = max_pulled_sum;
+    }
+
+    for(p in 1:P_bridge)
+      if(is_selected[p] == 1)
+        x_bar[p] = x_pulled[p];
+
+    for(p in 1:P_full)
+      if(is_selected[p] == 0)
+        non_selected_prev_sum += x_prev[p];
+
+    remaining_mass = 1.0 - pulled_sum;
+
+    for(p in 1:P_full) {
+      if(is_selected[p] == 0) {
+        if(non_selected_prev_sum > 0) {
+          x_bar[p] = remaining_mass * x_prev[p] / non_selected_prev_sum;
+        } else {
+          x_bar[p] = remaining_mass / non_selected_count;
+        }
+        if(x_bar[p] < structural_bridge_epsilon)
+          non_selected_needs_floor = 1;
+      }
+    }
+
+    if(non_selected_needs_floor == 1) {
+      real available_non_selected = fmax(
+        0.0,
+        remaining_mass -
+          structural_bridge_epsilon * non_selected_count
+      );
+
+      for(p in 1:P_full) {
+        if(is_selected[p] == 0) {
+          if(non_selected_prev_sum > 0) {
+            x_bar[p] = structural_bridge_epsilon +
+              available_non_selected * x_prev[p] / non_selected_prev_sum;
+          } else {
+            x_bar[p] = structural_bridge_epsilon +
+              available_non_selected / non_selected_count;
+          }
+        }
+      }
+    }
+
+    for(p in 1:P_bridge)
+      eta_bar[p] = log(x_bar[p]) - log(x_bar[P_full]);
+
+    return eta_bar;
+  }
+
+}
+
+// The same model but more efficiently reparametrized
+data {
+  int<lower=1> T; // no of time points
+  int<lower=1> N; // no of polls
+  int<lower=1> L; // no of poll time points
+  int<lower=1> P; // no of parties/categories
+  int<lower=1> Pp; // number of elements in a lower triagonal matrix of size P*P
+  int<lower=1> S; // no of slower moving time periods
+  int<lower=1> H; // no of houses
+  matrix<lower=0, upper=1>[N,P] y; // poll estimate
+  matrix<lower=0, upper=1>[N,P] sigma_y; // poll_estimate standard error
+
+  // Indicate use of measurements
+  int<lower=0, upper=1> use_industry_bias;
+  int<lower=0, upper=1> use_multiplicative_industry_bias;
+  int<lower=0, upper=1> use_house_bias;
+  int<lower=0, upper=1> use_design_effects;
+
+  int<lower=0, upper=1> use_constrained_party_house_bias;
+  int<lower=0, upper=1> use_constrained_house_house_bias;
+  int<lower=0, upper=1> use_constrained_party_kappa;
+  int<lower=0, upper=1> use_ar_kappa;
+  int<lower=0, upper=1> use_t_dist_industry_bias;
+
+  // use a prop latent state
+  // in the reparametrized model only the standard latent state is implemented
+  int<lower=0, upper=0> use_latent_state_version;
+
+  // missing values
+  matrix<lower=0, upper=1>[N,P] y_missing; // indicator of missing values
+  array[P] int<lower=1, upper=T> t_start; // starting point for latent state
+  array[P] int<lower=1, upper=T> t_end; // end point of latent state
+
+  // time weights
+  array[L] real<lower=0, upper=1> tw;
+  array[L] int<lower=1> tw_t; // time point (t) of time weights
+  array[L] int<lower=1> tw_i; // poll idx of tw
+
+  // Time scale length (month = 30, week = 7, day = 1)
+  real time_scale_length;
+  array[T] int<lower=0> delta_days_t;
+  array[T] real<lower=0> step_scale_t;
+
+  // known states
+  int<lower=0, upper=T> T_known; // no of known latent states
+  array[T_known] int<lower=1> x_known_t; // time points where x is known
+  array[T - T_known] int<lower=1> x_unknown_t; // time points where x is known
+  matrix<lower=0, upper=1>[T_known, P] x_known; // known x
+
+  // Add (prior) t-dist direct observations of x
+  // Used for predictions or other direct observations of x without polls
+  int<lower=0, upper=1> use_obs_of_x;
+  int<lower=0> R;
+  array[R] int<lower=1, upper=T> obs_of_x_t; // Time point of the observation
+  array[R] int<lower=1, upper=P> obs_of_x_p; // Category of the observation
+  array[R] real obs_of_x_mu; // mu in student_t_lpdf of observation
+  array[R] real<lower=0> obs_of_x_sigma; // sigma in student_t_lpdf of observation
+  array[R] real<lower=2> obs_of_x_nu; // nu in student_t_lpdf of observation
+
+  // Industry bias
+  array[T] real<lower=0> g_t; // years since last election
+  array[N] real<lower=0> g_i; // g for each poll
+  array[N] int<lower=1, upper=T_known + 1> next_known_state_poll_index; // The index of the next known state
+  array[T] int<lower=1, upper=T_known + 1> next_known_state_t_index; // The index of the next known state
+
+
+  // House bias and design effects
+  // slower time s and house of polls
+  array[N] int<lower=1, upper=S> s_i;
+  array[N] int<lower=1, upper=H> h_i;
+
+  // slower time s by time point
+  array[T] int<lower=1, upper=S> s_t;
+
+  // The industry bias sigma_kappa prior
+  // It depends on the length between known states
+  real<lower=0> sigma_beta_mu_sigma_hyper;
+  real<lower=0> beta_mu_1_sigma_hyper;
+  int<lower=0, upper=1> estimate_alpha_beta_mu;
+  array[1] real<lower=-1, upper=1> alpha_beta_mu_known;
+
+  real<lower=0> sigma_beta_sigma_sigma_hyper;
+  real<lower=0> beta_sigma_1_sigma_hyper;
+  int<lower=0, upper=1> estimate_alpha_beta_sigma;
+  array[1] real<lower=-1, upper=1> alpha_beta_sigma_known;
+
+  real<lower=0> sigma_kappa_hyper_sd;
+  real<lower=0> sigma_kappa_hyper_mean;
+  real<lower=0> kappa_1_sigma_hyper;
+  int<lower=0, upper=1> estimate_alpha_kappa;
+  array[1] real<lower=-1, upper=1> alpha_kappa_known;
+
+  real<lower=0> psi_sigma_hyper;
+
+  // Contraint priors
+  real<lower=0> kappa_sum_sigma_hyper;
+  real<lower=0> beta_mu_sum_party_sigma_hyper;
+  real<lower=0> beta_mu_sum_house_sigma_hyper;
+
+  // Contrain kappa predictive distribution to sum to zero
+   int<lower=0, upper=1> use_constrained_party_kappa_pred;
+
+  // Estimate kappa_next
+  int<lower=0, upper=1> estimate_kappa_next;
+
+  real<lower=0> g_scale;
+
+  // nu_kappa prior
+  real<lower=0> nu_kappa_raw_alpha;
+  real<lower=0> nu_kappa_raw_beta;
+
+  // nu_lkj
+  real<lower=0> nu_lkj;
+
+  // x_{t=1} prior (Dirichlet(x1_prior_p, x1_prior_alpha0))
+  array[P + 1] real<lower=0, upper = 1> x1_prior_p;
+  real<lower=0> x1_prior_alpha0;
+
+  // use multivariate prior (0 is univariate, 1 is just one corr matrix, 2 is one per s, 3 use cov_reg_to_chol)
+  int<lower=0, upper=4> use_multivariate_version;
+  int<lower=0, upper=1> use_softmax; // use multivariate softmax
+
+  // alpha priors
+  real alpha_kappa_mean;
+  real<lower=0> alpha_kappa_sd;
+  real alpha_beta_mu_mean;
+  real<lower=0> alpha_beta_mu_sd;
+  real alpha_beta_sigma_mean;
+  real<lower=0> alpha_beta_sigma_sd;
+
+  // use_sigma_ep if 0, no election period effect, 1 one common sigma_ep, 2 one sigma_ep per party
+  int<lower=0, upper=2> use_sigma_ep; // Currently the prior is only handled for one sigma per party
+  array[T] int<lower=0> election_period; // indicator if by time point
+  real sigma_ep_mean; // prior mean for N+ prior
+  real<lower=0> sigma_ep_sd; // prior sd for N+ prior
+  vector[P] sigma_ep_mean_vector; // prior mean for N+ prior
+  vector<lower=0>[P] sigma_ep_sd_vector; // prior sd for N+ prior
+  int<lower=0> EP;
+  array[EP] vector[P] ep_inv_x;
+
+  // Structural bridge prior.
+  // 0 = no bridge
+  // 1 = state-dependent x-scale drift for selected parties
+  // 2 = constant-gain convex pull toward a structural x-scale path
+  int<lower=0, upper=2> structural_bridge_type;
+
+  // Whether the bridge applies at latent time t. This should be 1 only for
+  // unknown latent states in the inclusive global bridge window. Known states
+  // should always be 0.
+  array[T] int<lower=0, upper=1> structural_bridge_active_t;
+
+  // Number of parties receiving direct x-scale drift. Use 1 as the no-bridge
+  // default.
+  int<lower=1, upper=P> structural_bridge_B;
+
+  // Party indices receiving direct x-scale drift.
+  array[structural_bridge_B] int<lower=1, upper=P> structural_bridge_party;
+
+  // Party mask for the constant-gain pull. The reference/other category is
+  // never directly selected; it is rescaled with the non-selected parties.
+  array[P] int<lower=0, upper=1> structural_bridge_party_active_p;
+
+  // Stepwise vote-share drift for each pushed party. For pushed party b at
+  // time t, delta_x[t,b] is added to the current latent vote share before
+  // mapping back to eta.
+  matrix[T, structural_bridge_B] structural_bridge_delta_x;
+
+  // Structural vote-share target path used by the constant-gain pull.
+  // This is a full target-path matrix on the latent time grid. It may contain
+  // target values at dates where structural_bridge_active_t[t] == 0, especially
+  // the bridge origin. structural_bridge_active_t is the source of truth for
+  // whether the bridge prior is applied in the state equation at time t.
+  // Only columns with structural_bridge_party_active_p[p] == 1 are used.
+  matrix<lower=0, upper=1>[T, P] structural_bridge_x_target_t;
+
+  // Weekly gap-closing fraction for the constant-gain pull. The per-step gain
+  // is 1 - (1 - alpha_week)^(delta_days_t / 7).
+  real<lower=1e-12, upper=1> structural_bridge_alpha_week;
+
+  // Numerical floor used to keep the implied vote-share mean inside the
+  // simplex.
+  real<lower=0> structural_bridge_epsilon;
+
+  // Bridge-specific row scaling of the Cholesky factor during active bridge
+  // steps. If lambda_p < 1, the bridge is tighter for eta coordinate p. If
+  // lambda_p = 1, the bridge uses the ordinary latent innovation variance. If
+  // lambda_p > 1, the bridge is softer. Values must be strictly positive.
+  vector<lower=1e-12>[P] structural_bridge_sigma_scale;
+}
+
+transformed data {
+  // Compute hyperparameter based on time_scale_length
+  real<lower=0, upper=1> sigma_x_hyper = 0.25 * sqrt(time_scale_length / 30);
+  int<lower=0, upper=P> no_sigma_xc = 0;
+  int<lower=0, upper=P> no_sigma_ep = 0;
+  array[T] real<lower=0> gs_t;
+  array[N] real<lower=0> gs_i;
+  int Px = P;
+  int no_unknown_kappa = 0;
+  int use_jump_process = 0;
+  int t_start_all = min(t_start); // starting point for latent state
+  int t_end_all = max(t_end); // end point of latent state
+  int no_Omega = 1;
+  int no_Omega_ep = 0;
+  array[T] int s_t_Omega = rep_array(1, T); // map between time point and corr matrix
+  matrix[P,P] Omega_identity = diag_matrix(rep_vector(1.0, P));
+  int use_multivariate_model = 0;
+  int use_cholesky_factor_corr = 0;
+  int use_cov_reg = 0;
+  int use_sigma_psi = 0;
+  matrix[T_known, P] eta_known = rep_matrix(0.0, T_known, P);
+  array[T_known] real x_known_other =  rep_array(0.0, T_known);
+  array[T] int x_t_is_known =  rep_array(0, T);
+  row_vector[P] t1_prior_mu;
+  row_vector[P] t1_prior_sigma;
+
+  if(structural_bridge_type > 0) {
+    if(!(structural_bridge_epsilon > 0))
+      reject("structural_bridge_epsilon must be positive when structural_bridge_type > 0.");
+    if(!(structural_bridge_epsilon < 1.0 / (P + 1)))
+      reject("structural_bridge_epsilon must be less than 1 / (P + 1).");
+  }
+
+  if(use_multivariate_version > 0)
+    use_multivariate_model = 1;
+
+  if(use_sigma_ep == 1)
+    no_sigma_ep = 1;
+  if(use_sigma_ep == 2)
+    no_sigma_ep = P;
+
+  if(use_softmax){
+    // Compute known eta
+    Px = P + 1;
+    // Compute final element of x_known (sum to one constraint)
+    for(t in 1:T_known){
+      for(p in 1:P){
+        x_known_other[t] += x_known[t,p];}
+      x_known_other[t] = 1 - x_known_other[t];}
+
+    // Compute known eta and normalize with last value of x_known
+    // this create a softmax known value with other being a reference at 0
+    for(t in 1:T_known)
+      for(p in 1:P)
+        eta_known[t,p] = log(x_known[t,p]) - log(x_known_other[t]);
+  }
+
+  if(use_multivariate_version > 1){
+    no_Omega = S;
+    s_t_Omega = s_t;
+  }
+  if(use_sigma_ep > 0)
+    no_Omega_ep = 1;
+
+  if(use_multivariate_version < 3){
+    use_cholesky_factor_corr = 1;
+  }
+  if(use_multivariate_version == 3){
+    use_cov_reg = 1;
+  }
+  if(use_multivariate_version == 4){
+    use_cov_reg = 1;
+    use_sigma_psi = 1;
+  }
+
+
+  for(t in 1:T)
+    gs_t[t] = g_t[t]/g_scale;
+  for(i in 1:N)
+    gs_i[i] = g_i[i]/g_scale;
+
+  if(estimate_kappa_next == 1)
+    no_unknown_kappa = T_known + 1;
+  else
+    no_unknown_kappa = T_known;
+
+  // Compute normal approximation of Dirichlet
+  if(use_softmax){
+  // x_{t=1} prior (Dirichlet(x1_prior_p, x1_prior_alpha0))
+    for(p in 1:P){
+      t1_prior_mu[p] = digamma(x1_prior_p[p] * x1_prior_alpha0) - digamma(x1_prior_p[Px] * x1_prior_alpha0);
+      t1_prior_sigma[p] = sqrt(trigamma(x1_prior_p[p] * x1_prior_alpha0) + trigamma(x1_prior_p[Px] * x1_prior_alpha0));
+    }
+  } else {
+    for(p in 1:P){
+      t1_prior_mu[p] = x1_prior_p[p];
+      t1_prior_sigma[p] = sqrt(x1_prior_p[p] * (1 - x1_prior_p[p]) / (x1_prior_alpha0 + 1));
+    }
+  }
+
+  // Set known values as a binary vector of length T
+  for(i in 1:T_known)
+    x_t_is_known[x_known_t[i]] = 1;
+}
+
+parameters {
+  matrix<lower=0, upper=1>[use_softmax ? 0 : T - T_known, use_softmax ? 0 : Px] x_unknown; // unknown states (proportions)
+  matrix[use_softmax ? T - T_known : 0, use_softmax ? P : 0] eta_z_unknown; // unknown states (proportions)
+  vector<lower=0>[P] sigma_x; // dynamic movement
+  array[no_sigma_xc] real<lower=0> sigma_xc;
+  vector<lower=0>[no_sigma_ep] sigma_ep;
+  matrix[use_industry_bias ? no_unknown_kappa : 0, use_industry_bias ? P : 0] kappa_raw; // Industry bias
+  vector<lower=0>[use_industry_bias ? P : 0] sigma_kappa; // Industry bias effect
+  array[use_house_bias ? S : 0, use_house_bias ? H : 0, use_house_bias ? P : 0] real beta_mu;
+  array[use_house_bias ? 1 : 0] real<lower=0> sigma_beta_mu;
+  array[use_design_effects ? S : 0, use_design_effects ? H : 0] real beta_sigma;
+  array[use_design_effects ? 1 : 0] real<lower=0> sigma_beta_sigma;
+  array[estimate_alpha_kappa ? 1 : 0] real<lower=-1, upper=1> alpha_kappa_unknown;
+  array[estimate_alpha_beta_mu ? 1 : 0] real<lower=-1, upper=1> alpha_beta_mu_unknown;
+  array[estimate_alpha_beta_sigma ? 1 : 0] real<lower=-1, upper=1> alpha_beta_sigma_unknown;
+  vector<lower=0>[use_t_dist_industry_bias ? 1 : 0] nu_kappa_raw;
+  vector<lower=0>[use_t_dist_industry_bias ? 1 : 0] v_kappa;
+  matrix<lower=0>[use_jump_process ? T : 0, use_jump_process ? P : 0] V_noise;
+  vector<lower=2,upper=4>[use_jump_process ? P : 0] alpha_V; //shape of jumps
+  vector<lower=0,upper=1>[use_jump_process ? P : 0] ar_V; // AR component for jump
+  vector<lower=0,upper=1>[use_jump_process ? P : 0] theta_x; // proportion of jump vs Gauss
+  array[use_cholesky_factor_corr ? no_Omega : 0] cholesky_factor_corr[use_cholesky_factor_corr ? P : 0] L_Omega_x; // correlation matrix
+  matrix[use_cov_reg ? no_Omega : 0, use_cov_reg ? Pp : 0] psi; // psi params for constructing covariance
+  array[use_sigma_psi ? 1 : 0] real<lower=0> sigma_psi;
+}
+
+transformed parameters {
+  matrix[N, P] mu = rep_matrix(0, N, P);
+  // states (proportions)
+  matrix[T, Px] x = rep_matrix(0.0, T, Px);
+  matrix[use_softmax ? 0 : T, use_softmax ? 0 : P] x_z = rep_matrix(0.0, use_softmax ? 0 : T, use_softmax ? 0 : P);
+  matrix[use_softmax ? T : 0, use_softmax ? P : 0] eta_z = rep_matrix(0.0, use_softmax ? T : 0, use_softmax ? P : 0);
+  matrix[use_softmax ? T : 0, use_softmax ? P : 0] eta = rep_matrix(0.0, use_softmax ? T : 0, use_softmax ? P : 0);
+  matrix[use_softmax ? T : 0, use_softmax ? Px : 0] eta_full = rep_matrix(0.0, use_softmax ? T : 0, use_softmax ? Px : 0);
+  vector[use_constrained_party_kappa ? no_unknown_kappa : 0] kappa_sum_T_known_plus_1  = rep_vector(0, use_constrained_party_kappa ? no_unknown_kappa : 0);
+  matrix[use_constrained_party_house_bias ? S : 0, use_constrained_party_house_bias ? H : 0] beta_mu_sum_H = rep_matrix(0, use_constrained_party_house_bias ? S : 0, use_constrained_party_house_bias ? H : 0);
+  matrix[use_constrained_house_house_bias ? S : 0, use_constrained_house_house_bias ? P : 0] beta_mu_sum_P = rep_matrix(0, use_constrained_house_house_bias ? S : 0, use_constrained_house_house_bias ? P : 0);
+  matrix[use_industry_bias ? (T_known + 1) : 0, use_industry_bias ? P : 0] kappa; // Industry bias
+  array[1] real<lower=-1, upper=1> alpha_kappa = alpha_kappa_known;
+  array[1] real<lower=-1, upper=1> alpha_beta_mu = alpha_beta_mu_known;
+  array[1] real<lower=-1, upper=1> alpha_beta_sigma = alpha_beta_sigma_known;
+  vector<lower=1>[use_t_dist_industry_bias ? 1 : 0] nu_kappa = rep_vector(2, use_t_dist_industry_bias ? 1 : 0);
+  matrix<lower=0>[use_jump_process ? T : 0, use_jump_process ? P : 0] V;
+  array[no_Omega] cholesky_factor_cov[use_multivariate_model ? P : 0] L_Sigma;
+  array[no_Omega_ep] cholesky_factor_cov[use_multivariate_model ? P : 0] L_Sigma_ep; // Temp variable (overwritten)
+
+  // setup multivariate L_Sigma
+  for(i in 1:no_Omega){
+    if(use_multivariate_version == 0)
+      L_Sigma[i] = diag_pre_multiply(sigma_x, Omega_identity);
+    if(use_multivariate_version >= 1 && use_multivariate_version <= 2)
+      L_Sigma[i] = diag_pre_multiply(sigma_x, L_Omega_x[i]);
+    if(use_multivariate_version >= 3 && use_multivariate_version <= 4)
+      L_Sigma[i] = diag_pre_multiply(sigma_x, cov_reg_to_chol(P, to_vector(psi[i,])));
+  }
+
+  // setup x with known and unknown x
+  if(use_softmax){
+    // compute x based on softmax and assign known values to eta
+    eta_z[x_unknown_t, ] = eta_z_unknown;
+    eta[x_known_t, ] = eta_known;
+    // set prior
+    eta[1,] = t1_prior_mu + t1_prior_sigma .* eta_z[1,];
+    for(t in t_start_all:t_end_all){
+      if(x_t_is_known[t]){ // then eta_z_t is also known (see derivation)
+        if(election_period[t] > 0){
+          L_Sigma_ep[1] = diag_pre_multiply(election_period_transition_scale(eta[t-1,], sigma_x, use_sigma_ep, sigma_ep), L_Omega_x[s_t_Omega[t]]);
+
+          eta_z[t,] = to_row_vector((inverse(L_Sigma_ep[1]) / step_scale_t[t]) * to_vector((eta[t,] - eta[t-1,])));
+        } else {
+          eta_z[t,] = to_row_vector((inverse(L_Sigma[s_t_Omega[t]]) / step_scale_t[t]) * to_vector((eta[t,] - eta[t-1,])));
+        }
+      } else {
+        row_vector[P] eta_mean_t;
+        matrix[P, P] L_t;
+
+        eta_mean_t = eta[t-1,];
+        if(structural_bridge_active_t[t] == 1 && structural_bridge_type > 0){
+          if(structural_bridge_type == 1) {
+            eta_mean_t = structural_bridge_eta_mean(
+              eta[t-1,],
+              structural_bridge_B,
+              structural_bridge_party,
+              structural_bridge_delta_x[t,],
+              structural_bridge_epsilon
+            );
+          } else if(structural_bridge_type == 2) {
+            eta_mean_t = structural_bridge_constant_gain_eta_mean(
+              eta[t-1,],
+              structural_bridge_x_target_t[t,],
+              structural_bridge_party_active_p,
+              structural_bridge_alpha_week,
+              delta_days_t[t],
+              structural_bridge_epsilon
+            );
+          }
+        }
+
+        if(election_period[t] > 0){
+          L_Sigma_ep[1] = diag_pre_multiply(election_period_transition_scale(eta_mean_t, sigma_x, use_sigma_ep, sigma_ep), L_Omega_x[s_t_Omega[t]]);
+
+          L_t = L_Sigma_ep[1];
+        } else {
+          L_t = L_Sigma[s_t_Omega[t]];
+        }
+
+        if(structural_bridge_active_t[t] == 1 && structural_bridge_type > 0){
+          L_t = diag_pre_multiply(structural_bridge_sigma_scale, L_t);
+        }
+
+        eta[t,] = eta_mean_t + step_scale_t[t] * to_row_vector(L_t * to_vector(eta_z[t,]));
+      }
+    }
+
+    //  Tranform eta to x through softmax
+    eta_full = append_col(eta, rep_matrix(0.0, T, 1));
+    for(t in 1:T){
+      x[t, ] = to_row_vector(softmax(to_vector(eta_full[t, ])));
+    }
+  } else {
+    // Uses centered parametrization
+    // Cannot simply use non-centered without handling the constraints easily
+    x[x_unknown_t, ] = x_unknown;
+    x[x_known_t, ] = x_known;
+  }
+
+  // setup x with known x = 0 when parties does not exist
+  for(p in 1:P){
+    // we need to set values 2 steps before to 0,
+    // since the value before is used as a prior
+    // this could be handled in the model instead
+    // If set to 0, this forces the first time step to jump from 0
+    if(t_start[p] > 2){ // note: the first value is the state-space prior
+      for(t in 1:(t_start[p]-2))
+        x[t,p] = 0.0;
+    }
+    if(t_end[p] < T){
+      for(t in (t_end[p] + 1):T)
+        x[t,p] = 0.0;
+    }
+  }
+
+  // sum over period to handle weight periods
+  for(p in 1:P)
+    for(l in 1:L)
+      mu[tw_i[l], p] += tw[l] * x[tw_t[l], p];
+
+  // Add industry bias
+  if(use_industry_bias){
+    if(estimate_alpha_kappa){
+      alpha_kappa = alpha_kappa_unknown;
+    }
+    if(use_t_dist_industry_bias){
+      nu_kappa[1] = nu_kappa_raw[1] + 1.0;
+    }
+    for(p in 1:P){
+      // non-centering
+      if(use_ar_kappa){
+        if(use_t_dist_industry_bias){
+          kappa[1, p] = sqrt(v_kappa[1]) * kappa_raw[1, p] * kappa_1_sigma_hyper;
+          for(j in 2:no_unknown_kappa)
+            kappa[j, p] = alpha_kappa[1] * kappa[j-1, p] + sqrt(v_kappa[1]) * kappa_raw[j, p] * sigma_kappa[p];
+        } else {
+          kappa[1, p] = kappa_raw[1, p] * kappa_1_sigma_hyper;
+          for(j in 2:no_unknown_kappa)
+            kappa[j, p] = alpha_kappa[1] * kappa[j-1, p] + kappa_raw[j, p] * sigma_kappa[p];
+        }
+      } else {
+        if(use_t_dist_industry_bias){
+          for(j in 1:no_unknown_kappa)
+             kappa[j,p] = sqrt(v_kappa[1]) * kappa_raw[j, p] * sigma_kappa[p];
+        } else {
+          for(j in 1:no_unknown_kappa)
+             kappa[j,p] = kappa_raw[j, p] * sigma_kappa[p];
+        }
+      }
+      if(estimate_kappa_next == 0){
+          kappa[T_known + 1, p] = 0;
+      }
+
+      if(use_multiplicative_industry_bias){
+        // Using multiplicative (rather than additive) industry bias
+        for(i in 1:N)
+          if(y_missing[i, p] == 0)
+            mu[i,p] = mu[i,p] * exp(gs_i[i] * kappa[next_known_state_poll_index[i], p]);
+        }
+      else {
+        for(i in 1:N)
+          if(y_missing[i, p] == 0)
+            mu[i,p] = mu[i,p] + gs_i[i] * kappa[next_known_state_poll_index[i], p];
+        }
+      }
+
+    }
+
+  // Add house bias
+  if(use_house_bias){
+    if(estimate_alpha_beta_mu)
+      alpha_beta_mu = alpha_beta_mu_unknown;
+    for(p in 1:P)
+      for(i in 1:N)
+        if(y_missing[i, p] == 0)
+            mu[i,p] = mu[i,p] + beta_mu[s_i[i],h_i[i],p];
+    }
+
+  // Add design effects (mainly handled in model block)
+  if(use_design_effects)
+    if(estimate_alpha_beta_mu)
+      alpha_beta_sigma = alpha_beta_sigma_unknown;
+
+  // Add soft constrain over parties for Kappa
+  if(use_constrained_party_kappa)
+    for(t in 1:no_unknown_kappa)
+      for(p in 1:P)
+        kappa_sum_T_known_plus_1[t] += kappa[t,p];
+
+  // Add soft constrain over parties for beta_mu
+  if(use_constrained_party_house_bias)
+    for(s in 1:S)
+      for(h in 1:H)
+        for(p in 1:P)
+            beta_mu_sum_H[s,h] += beta_mu[s,h,p];
+
+  // Add soft constrain over houses for beta_mu
+  if(use_constrained_house_house_bias)
+    for(s in 1:S)
+      for(p in 1:P)
+        for(h in 1:H)
+          beta_mu_sum_P[s,p] += beta_mu[s,h,p];
+
+  if(use_jump_process){
+    for(p in 1:P){
+      V[t_start[p]-1, p] = V_noise[t_start[p]-1, p] ;
+      for(t in t_start[p]:t_end[p]) {
+        V[t, p] = V_noise[t, p] + ar_V[p] * V[t-1, p];
+  }}}
+
+}
+
+
+model {
+  // Priors
+  if(estimate_alpha_kappa)
+    target += normal_lpdf(alpha_kappa_unknown | alpha_kappa_mean, alpha_kappa_sd);
+  if(estimate_alpha_beta_mu)
+    target += normal_lpdf(alpha_beta_mu_unknown | alpha_beta_mu_mean, alpha_beta_mu_sd);
+  if(estimate_alpha_beta_sigma)
+    target += normal_lpdf(alpha_beta_sigma_unknown | alpha_beta_sigma_mean, alpha_beta_sigma_sd);
+
+  // Prior on Omega
+  if(use_multivariate_version > 0 && use_multivariate_version < 3)
+    for(i in 1:no_Omega)
+      target += lkj_corr_cholesky_lpdf(L_Omega_x[i] | nu_lkj);
+
+  if(use_multivariate_version == 3){
+    // psi ~ normal(0, 1);
+    for(i in 1:no_Omega)
+      target += normal_lpdf(psi[i,] | 0, psi_sigma_hyper);
+  }
+
+  if(use_multivariate_version == 4){
+    // psi ~ normal(0, 1);
+    target += normal_lpdf(psi[1,] | 0, psi_sigma_hyper);
+    if(no_Omega > 1){
+      for(i in 2:no_Omega)
+        target += normal_lpdf(psi[i,] | psi[i-1,], sigma_psi[1]);
+    }
+    target += normal_lpdf(sigma_psi[1] | 0, 1);
+  }
+
+  // sigma_x ~ normal(0, sigma_x_hyper);
+  target += normal_lpdf(sigma_x | 0, sigma_x_hyper);
+  if(use_sigma_ep == 2){
+    for(p in 1:P){
+      target += normal_lpdf(sigma_ep[p] | sigma_ep_mean_vector[p], sigma_ep_sd_vector[p]);
+    }
+  } else {
+    target += normal_lpdf(sigma_ep | sigma_ep_mean, sigma_ep_sd);
+  }
+
+
+  // latent state dynamics
+  if(use_softmax){
+    for(t in 1:T){
+      // print(target());
+      target += std_normal_lpdf(eta_z[t,]);
+//    equivalent to: target += multi_normal_cholesky_lpdf(eta[t, ] | eta[t-1, ], diag_pre_multiply(sigma_latent, L_Omega[s_t_Omega[t]]));
+    }
+  } else {
+    for(p in 1:P){ // t=1 prior
+      target += normal_lpdf(x[1,p] | t1_prior_mu[p], t1_prior_sigma[p]);
+    }
+    for(t in t_start_all:t_end_all){
+      target += multi_normal_cholesky_lpdf(x[t, ] | x[t-1, ], step_scale_t[t] * L_Sigma[s_t_Omega[t]]);
+    }
+  }
+
+  // Industry bias prior
+  if(use_industry_bias){
+    if(use_t_dist_industry_bias){
+      target += gamma_lpdf(nu_kappa_raw | nu_kappa_raw_alpha, nu_kappa_raw_beta);
+      target += inv_gamma_lpdf(v_kappa | nu_kappa, nu_kappa - 1);
+    }
+    for(p in 1:P){
+      for(j in 1:no_unknown_kappa) {
+        target += std_normal_lpdf(kappa_raw[j, p]);
+      }
+      target += normal_lpdf(sigma_kappa[p] | sigma_kappa_hyper_mean, sigma_kappa_hyper_sd);
+    }
+  }
+
+  // Add soft constraint prior for Kappa
+  if(use_constrained_party_kappa){
+    for(t in 1:no_unknown_kappa){
+        target += normal_lpdf(kappa_sum_T_known_plus_1[t] | 0, kappa_sum_sigma_hyper);
+    }
+  }
+  // Add soft constrain over parties for beta_mu
+  if(use_constrained_party_house_bias)
+    for(s in 1:S)
+      for(h in 1:H)
+        target += normal_lpdf(beta_mu_sum_H[s,h] | 0, beta_mu_sum_party_sigma_hyper);
+
+  // Add soft constrain over houses for beta_mu
+  if(use_constrained_house_house_bias)
+    for(s in 1:S)
+      for(p in 1:P)
+        target += normal_lpdf(beta_mu_sum_P[s,p] | 0, beta_mu_sum_house_sigma_hyper);
+
+  // House bias prior
+  if(use_house_bias){
+    for(p in 1:P){
+      for(h in 1:H) {
+        target += normal_lpdf(beta_mu[1,h,p] | 0, beta_mu_1_sigma_hyper);
+        if(S > 1){
+          for(s in 2:S) {
+            target += normal_lpdf(beta_mu[s, h, p] | alpha_beta_mu[1] * beta_mu[s - 1, h, p], sigma_beta_mu);
+          }
+        }
+      }
+    }
+    target += normal_lpdf(sigma_beta_mu | 0, sigma_beta_mu_sigma_hyper);
+  }
+
+  // Design effects prior
+  if(use_design_effects){
+    for(h in 1:H) {
+      target += normal_lpdf(beta_sigma[1,h] | 0, beta_sigma_1_sigma_hyper);
+      if(S > 1){
+        for(s in 2:S) {
+          target += normal_lpdf(beta_sigma[s, h] | alpha_beta_sigma[1] * beta_sigma[s - 1, h], sigma_beta_sigma);
+        }
+      }
+    }
+    target += normal_lpdf(sigma_beta_sigma | 0, sigma_beta_sigma_sigma_hyper);
+  }
+
+  // Observations with and without design effects
+  if(use_design_effects){
+    for(p in 1:P)
+      for(i in 1:N)
+        if(y_missing[i, p] == 0)
+          target += normal_lpdf(y[i,p] | mu[i,p], sigma_y[i,p] * exp(beta_sigma[s_i[i],h_i[i]]));
+  } else {
+    for(p in 1:P)
+      for(i in 1:N)
+        if(y_missing[i, p] == 0)
+          target += normal_lpdf(y[i,p] | mu[i,p], sigma_y[i,p]);
+  }
+  // print("Final target:", target());
+
+  // Add (prior) t-dist direct observations of x
+  if(use_obs_of_x){
+    for(r in 1:R){
+      target += student_t_lpdf(x[obs_of_x_t[r], obs_of_x_p[r]] | obs_of_x_nu[r], obs_of_x_mu[r], obs_of_x_sigma[r]);
+    }
+    // print("Final target:", target());
+  }
+}
+
+generated quantities{
+  matrix[use_industry_bias ? (T_known + 1) : 0, use_industry_bias ? P : 0] kappa_pred;
+  matrix[T, Px] x_pred; // Note that we do not limit draws with x_pred too low or too high
+  matrix[T, Px] x_pred_reject; // Used in rejection sampling
+  array[P] real min_x_pred; // Minimal x_pred to use for rejection sampling
+  real min_x_pred_all; // Minimal x_pred to use for rejection sampling
+  int max_it = 50; // Maximum iterations to try rejection sampling
+  real sum_kappa_pred_party = 0.0; // Used for constraining kappa_pred to sum to zero
+  real kappa_pred_mean = 0.0; // Used for constraining kappa_pred to sum to zero
+
+  kappa_pred = kappa;
+  x_pred = x;
+  x_pred_reject = x;
+
+  // Sample kappa_pred using rejection sampling
+  if(use_industry_bias){
+    min_x_pred_all = -1.0; // To start the for loop
+    for(i in 1:max_it) {
+      if(min_x_pred_all > 0) {break;} // rejection sampling - minimum x_pred needs to be larger than 0 for all parties
+
+      if(estimate_kappa_next == 0){
+        // Sample/use the predictive distribution of next kappa,
+        for(p in 1:P){
+          if(estimate_alpha_kappa){
+            if(use_t_dist_industry_bias){
+              kappa_pred[(T_known + 1), p] = student_t_rng(2 * nu_kappa[1], alpha_kappa[1] * kappa[no_unknown_kappa, p], sqrt(0.5 * (nu_kappa[1] - 1) / nu_kappa[1]) * sigma_kappa[p]);
+            } else {
+              kappa_pred[(T_known + 1), p] = normal_rng(alpha_kappa[1] * kappa[no_unknown_kappa, p], sigma_kappa[p]);
+            }
+          } else {
+            if(use_t_dist_industry_bias){
+              kappa_pred[(T_known + 1), p] = student_t_rng(2 * nu_kappa[1], 0, sqrt(0.5 * (nu_kappa[1] - 1) / nu_kappa[1]) * sigma_kappa[p]);
+            } else {
+              kappa_pred[(T_known + 1), p] = normal_rng(0, sigma_kappa[p]);
+            }
+          }
+        }
+        // Constrain kappa_pred to sum to 0
+        if(use_constrained_party_kappa_pred){
+          kappa_pred_mean = 0.0;
+          for(p in 1:P){
+            kappa_pred_mean += kappa_pred[(T_known + 1), p];
+          }
+          kappa_pred_mean = kappa_pred_mean / P;
+          for(p in 1:P){
+            kappa_pred[(T_known + 1), p] -= kappa_pred_mean;
+          }
+        }
+
+        // Check if kappa draw is valid (i.e. no x + kappa < 0)
+        for(p in 1:P){
+          if(use_multiplicative_industry_bias){
+            for(t in 1:T){
+              if(next_known_state_t_index[t] == (T_known + 1)){
+                x_pred_reject[t,p] = x[t,p] * exp(-gs_t[t] * kappa_pred[(T_known + 1), p]);
+                }
+              }
+          } else {
+            for(t in 1:T){
+              if(next_known_state_t_index[t] == (T_known + 1)){
+                x_pred_reject[t,p] = x[t,p] - gs_t[t] * kappa_pred[(T_known + 1), p];
+                }
+              }
+          }
+          min_x_pred[p] = min(x_pred_reject[,p]);
+        }
+        min_x_pred_all = min(min_x_pred);
+      } else {
+        min_x_pred_all = 1.0; //
+      }
+    }
+
+    // Compute x_pred
+    for(p in 1:P){
+      if(use_multiplicative_industry_bias){
+        for(t in 1:T){
+          if(next_known_state_t_index[t] == (T_known + 1)){
+            x_pred[t,p] = x[t,p] * exp(-gs_t[t] * kappa_pred[(T_known + 1), p]);
+          }
+        }
+      } else {
+        for(t in 1:T){
+          if(next_known_state_t_index[t] == (T_known + 1)){
+            x_pred[t,p] = x[t,p] - gs_t[t] * kappa_pred[(T_known + 1), p];
+            }
+          }
+      }
+    }
+  }
+
+}

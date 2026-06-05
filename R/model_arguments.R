@@ -15,6 +15,32 @@ model_config <- function(model, x = NULL, stan_data = NULL){
   checkmate::assert_choice(model, supported_pop_models())
   if (is.null(x)) x <- list()
   checkmate::assert_list(x, null.ok = FALSE)
+  if(!is.null(x$structural_bridge_type)){
+    x$structural_bridge_type <- normalize_structural_bridge_type(x$structural_bridge_type)
+  }
+  if(identical(model, "model8m9")){
+    model8m9_unsupported_bridge_args <- intersect(
+      names(x),
+      c("structural_bridge_party_active_p",
+        "structural_bridge_x_target_t",
+        "structural_bridge_alpha_week")
+    )
+    if(length(model8m9_unsupported_bridge_args) > 0L){
+      stop(
+        "model8m9 is the 0.9.1 drift-only bridge model and does not accept: ",
+        paste(model8m9_unsupported_bridge_args, collapse = ", "),
+        ".",
+        call. = FALSE
+      )
+    }
+    if(!is.null(x$structural_bridge_type) &&
+       !(as.integer(x$structural_bridge_type) %in% c(0L, 1L))){
+      stop(
+        "model8m9 only supports structural_bridge_type = 0/'none' or 1/'x_drift'.",
+        call. = FALSE
+      )
+    }
+  }
 
   mp <- model_arguments(model)
   mc <- as.character(names(x))
@@ -311,7 +337,7 @@ model_arguments <- function(model){
              "use_obs_of_x", "R", "obs_of_x_t", "obs_of_x_p", "obs_of_x_mu", "obs_of_x_sigma", "obs_of_x_nu",
              "use_sigma_ep", "election_period", "sigma_ep_mean", "sigma_ep_sd"
     ))
-  } else if(grepl(model, pattern = "^model8m1")) {
+  } else if(grepl(model, pattern = "^model8m1$")) {
     return(c("sigma_kappa_hyper", "kappa_1_sigma_hyper",
              "g_scale",
              "use_industry_bias", "use_house_bias", "use_design_effects",
@@ -369,8 +395,8 @@ model_arguments <- function(model){
              "use_sigma_ep", "election_period", "sigma_ep_mean", "sigma_ep_sd",
              "EP", "ep_inv_x"
     ))
-  } else if(grepl(model, pattern = "^model8m[3-9]$")) {
-    return(c("sigma_kappa_hyper_sd", "sigma_kappa_hyper_mean", "kappa_1_sigma_hyper",
+  } else if(grepl(model, pattern = "^model8m([3-9]|1[01])$")) {
+    args <- c("sigma_kappa_hyper_sd", "sigma_kappa_hyper_mean", "kappa_1_sigma_hyper",
              "g_scale",
              "use_industry_bias", "use_house_bias", "use_design_effects",
              "use_multiplicative_industry_bias",
@@ -397,7 +423,24 @@ model_arguments <- function(model){
              "use_obs_of_x", "R", "obs_of_x_t", "obs_of_x_p", "obs_of_x_mu", "obs_of_x_sigma", "obs_of_x_nu",
              "use_sigma_ep", "election_period", "sigma_ep_mean", "sigma_ep_sd", "sigma_ep_mean_vector", "sigma_ep_sd_vector",
              "EP", "ep_inv_x"
-    ))
+    )
+    if(model %in% c("model8m9", "model8m10", "model8m11")){
+      args <- c(args,
+                "structural_bridge_type",
+                "structural_bridge_active_t",
+                "structural_bridge_B",
+                "structural_bridge_party",
+                "structural_bridge_delta_x",
+                "structural_bridge_epsilon",
+                "structural_bridge_sigma_scale")
+      if(model %in% c("model8m10", "model8m11")){
+        args <- c(args,
+                  "structural_bridge_party_active_p",
+                  "structural_bridge_x_target_t",
+                  "structural_bridge_alpha_week")
+      }
+    }
+    return(args)
   } else if(model %in% c("model10d", "model10e")) {
     return(c("sigma_kappa_hyper", "kappa_1_sigma_hyper",
              "sigma_kappa_gamma_a_hyper", "sigma_kappa_gamma_b_hyper",
@@ -553,12 +596,101 @@ set_default_model_argument_value <- function(arg, x = NULL, stan_data = NULL){
     return(0L)
   } else if (arg %in% c("ep_inv_x")) {
     return(list())
+  } else if (arg %in% c("structural_bridge_type")) {
+    return(0L)
+  } else if (arg %in% c("structural_bridge_active_t")) {
+    if(is.null(stan_data)){
+      message("Using default value for T = 1 (in structural_bridge_active_t), as stan_data is not provided.")
+      return(0L)
+    } else {
+      return(rep(0L, stan_data$T))
+    }
+  } else if (arg %in% c("structural_bridge_B")) {
+    return(1L)
+  } else if (arg %in% c("structural_bridge_party")) {
+    return(1L)
+  } else if (arg %in% c("structural_bridge_party_active_p")) {
+    if(is.null(stan_data)){
+      message("Using default value for P = 1 (in structural_bridge_party_active_p), as stan_data is not provided.")
+      return(0L)
+    } else {
+      return(rep(0L, stan_data$P))
+    }
+  } else if (arg %in% c("structural_bridge_delta_x")) {
+    B <- if(!is.null(x$structural_bridge_B)) x$structural_bridge_B else 1L
+    if(is.null(stan_data)){
+      message("Using default value for T = 1 (in structural_bridge_delta_x), as stan_data is not provided.")
+      return(matrix(0.0, nrow = 1L, ncol = B))
+    } else {
+      return(matrix(0.0, nrow = stan_data$T, ncol = B))
+    }
+  } else if (arg %in% c("structural_bridge_x_target_t")) {
+    if(is.null(stan_data)){
+      message("Using default value for T = 1 and P = 1 (in structural_bridge_x_target_t), as stan_data is not provided.")
+      return(matrix(0.0, nrow = 1L, ncol = 1L))
+    } else {
+      return(matrix(0.0, nrow = stan_data$T, ncol = stan_data$P))
+    }
+  } else if (arg %in% c("structural_bridge_alpha_week")) {
+    if(!is.null(x$structural_bridge_type) &&
+       as.integer(x$structural_bridge_type) == 2L){
+      stop("structural_bridge_alpha_week is required when structural_bridge_type = 'constant_gain_pull'.", call. = FALSE)
+    }
+    return(1.0)
+  } else if (arg %in% c("structural_bridge_epsilon")) {
+    return(1e-6)
+  } else if (arg %in% c("structural_bridge_sigma_scale")) {
+    if(is.null(stan_data)){
+      message("Using default value for P = 1 (in structural_bridge_sigma_scale), as stan_data is not provided.")
+      return(1.0)
+    } else {
+      return(rep(1.0, stan_data$P))
+    }
   } else
   stop(arg, " is not implemented.")
 }
 
+#' Normalize a structural bridge type identifier
+#'
+#' @description
+#' Convert the user-facing `model8m10` structural bridge type value to the
+#' integer id used in Stan data.
+#'
+#' @details
+#' Character values are accepted for the public/high-level API:
+#' `"none"` and `"no_bridge"` map to `0L`, `"x_drift"` maps to `1L`, and
+#' `"constant_gain_pull"` maps to `2L`. Integerish values are returned as
+#' integers after validation. The helper is intentionally small and shared by
+#' `model_config()` and bridge parsing so direct Stan-data arguments and
+#' high-level bridge arguments use the same type vocabulary.
+#'
+#' @param value a scalar character or integerish bridge type.
+#'
+#' @return An integer bridge type id: `0L`, `1L`, or `2L`.
+#'
+#' @keywords internal
+#' @noRd
+normalize_structural_bridge_type <- function(value){
+  checkmate::assert_atomic(value, len = 1L, any.missing = FALSE, .var.name = "structural_bridge_type")
+  if(is.character(value)){
+    bridge_types <- c(
+      none = 0L,
+      no_bridge = 0L,
+      x_drift = 1L,
+      constant_gain_pull = 2L
+    )
+    checkmate::assert_choice(value, names(bridge_types), .var.name = "structural_bridge_type")
+    return(unname(bridge_types[[value]]))
+  }
+  checkmate::assert_integerish(value, len = 1L, any.missing = FALSE, .var.name = "structural_bridge_type")
+  as.integer(value)
+}
+
 assert_model_argument_value <- function(arg, value, x, stan_data){
   checkmate::assert_choice(arg, supported_model_arguments())
+  if(!is.null(x$structural_bridge_type)){
+    x$structural_bridge_type <- normalize_structural_bridge_type(x$structural_bridge_type)
+  }
   if(arg %in% c("sigma_kappa_hyper", "sigma_kappa_hyper_sd", "sigma_kappa_hyper_mean",
                 "beta_mu_1_sigma_hyper",
                 "sigma_beta_mu_sigma_hyper",
@@ -683,6 +815,100 @@ assert_model_argument_value <- function(arg, value, x, stan_data){
     checkmate::assert_list(value, .var.name = arg, len = x$EP)
     for(i in seq_along(value)){
       checkmate::assert_numeric(value[[i]], lower = 0, .var.name = arg, len = x$P)
+    }
+  } else if (arg %in% c("structural_bridge_type")) {
+    value <- normalize_structural_bridge_type(value)
+    if(!(as.integer(value) %in% c(0L, 1L, 2L))){
+      stop("structural_bridge_type must be one of 0/'none', 1/'x_drift', or 2/'constant_gain_pull'.", call. = FALSE)
+    }
+    if(as.integer(value) %in% c(1L, 2L)){
+      checkmate::assert_true(x$use_softmax == 1L, .var.name = paste0("use_softmax == 1 : ", arg))
+    }
+  } else if (arg %in% c("structural_bridge_active_t")) {
+    T <- if(!is.null(stan_data$T)) stan_data$T else length(value)
+    checkmate::assert_integerish(value, lower = 0L, upper = 1L, len = T, any.missing = FALSE, .var.name = arg)
+    if(!is.null(x$structural_bridge_type) && as.integer(x$structural_bridge_type) == 0L){
+      checkmate::assert_true(all(value == 0L), .var.name = paste0(arg, " when structural_bridge_type == 0"))
+    }
+    if(!is.null(x$structural_bridge_type) && as.integer(x$structural_bridge_type) %in% c(1L, 2L)){
+      checkmate::assert_true(any(value == 1L), .var.name = paste0(arg, " when structural_bridge_type is active"))
+    }
+    if(!is.null(stan_data$x_known_t) && length(stan_data$x_known_t) > 0){
+      checkmate::assert_true(all(value[stan_data$x_known_t] == 0L), .var.name = paste0(arg, " at known states"))
+    }
+    if(!is.null(stan_data$delta_days_t)){
+      checkmate::assert_true(all(value[stan_data$delta_days_t == 0L] == 0L), .var.name = paste0(arg, " where delta_days_t == 0"))
+    }
+  } else if (arg %in% c("structural_bridge_B")) {
+    P <- if(!is.null(stan_data$P)) stan_data$P else value
+    checkmate::assert_int(value, lower = 1L, upper = P, .var.name = arg)
+  } else if (arg %in% c("structural_bridge_party")) {
+    P <- if(!is.null(stan_data$P)) stan_data$P else max(value)
+    B <- if(!is.null(x$structural_bridge_B)) x$structural_bridge_B else length(value)
+    checkmate::assert_integerish(value, lower = 1L, upper = P, len = B, any.missing = FALSE, .var.name = arg)
+    checkmate::assert_true(!anyDuplicated(value), .var.name = arg)
+  } else if (arg %in% c("structural_bridge_party_active_p")) {
+    P <- if(!is.null(stan_data$P)) stan_data$P else length(value)
+    checkmate::assert_integerish(value, lower = 0L, upper = 1L, len = P, any.missing = FALSE, .var.name = arg)
+    if(!is.null(x$structural_bridge_type) && as.integer(x$structural_bridge_type) == 0L){
+      checkmate::assert_true(all(value == 0L), .var.name = paste0(arg, " when structural_bridge_type == 0"))
+    }
+    if(!is.null(x$structural_bridge_type) && as.integer(x$structural_bridge_type) == 2L){
+      checkmate::assert_true(any(value == 1L), .var.name = paste0(arg, " when structural_bridge_type == 2"))
+      if(!is.null(x$structural_bridge_party)){
+        checkmate::assert_true(
+          setequal(as.integer(x$structural_bridge_party), which(value == 1L)),
+          .var.name = paste0(arg, " matching structural_bridge_party")
+        )
+      }
+    }
+  } else if (arg %in% c("structural_bridge_delta_x")) {
+    T <- if(!is.null(stan_data$T)) stan_data$T else nrow(value)
+    B <- if(!is.null(x$structural_bridge_B)) x$structural_bridge_B else ncol(value)
+    checkmate::assert_matrix(value, nrows = T, ncols = B, any.missing = FALSE, .var.name = arg)
+    checkmate::assert_numeric(as.vector(value), any.missing = FALSE, .var.name = arg)
+    if(!is.null(x$structural_bridge_type) && as.integer(x$structural_bridge_type) == 0L){
+      checkmate::assert_true(all(value == 0), .var.name = paste0(arg, " when structural_bridge_type == 0"))
+    }
+    if(!is.null(x$structural_bridge_type) && as.integer(x$structural_bridge_type) == 2L){
+      checkmate::assert_true(all(value == 0), .var.name = paste0(arg, " when structural_bridge_type == 2"))
+    }
+    if(!is.null(x$structural_bridge_active_t)){
+      checkmate::assert_true(all(value[x$structural_bridge_active_t == 0L, , drop = FALSE] == 0), .var.name = paste0(arg, " at inactive bridge steps"))
+    }
+  } else if (arg %in% c("structural_bridge_x_target_t")) {
+    T <- if(!is.null(stan_data$T)) stan_data$T else nrow(value)
+    P <- if(!is.null(stan_data$P)) stan_data$P else ncol(value)
+    checkmate::assert_matrix(value, nrows = T, ncols = P, any.missing = FALSE, .var.name = arg)
+    checkmate::assert_numeric(as.vector(value), lower = 0, upper = 1, any.missing = FALSE, .var.name = arg)
+    if(!is.null(x$structural_bridge_type) && as.integer(x$structural_bridge_type) != 2L){
+      checkmate::assert_true(all(value == 0), .var.name = paste0(arg, " when structural_bridge_type != 2"))
+    }
+    if(!is.null(x$structural_bridge_type) && as.integer(x$structural_bridge_type) == 2L){
+      active_t <- if(!is.null(x$structural_bridge_active_t)) as.integer(x$structural_bridge_active_t) else rep(1L, T)
+      active_p <- if(!is.null(x$structural_bridge_party_active_p)) as.integer(x$structural_bridge_party_active_p) else rep(1L, P)
+      if(any(active_t == 1L) && any(active_p == 1L)){
+        active_target <- value[active_t == 1L, active_p == 1L, drop = FALSE]
+        checkmate::assert_true(all(active_target > 0), .var.name = paste0(arg, " at active bridge parties"))
+        checkmate::assert_true(all(rowSums(active_target) < 1), .var.name = paste0(arg, " selected-party sums"))
+      }
+    }
+  } else if (arg %in% c("structural_bridge_alpha_week")) {
+    checkmate::assert_number(value, lower = 0, upper = 1, .var.name = arg)
+    checkmate::assert_true(value > 0, .var.name = arg)
+  } else if (arg %in% c("structural_bridge_epsilon")) {
+    checkmate::assert_number(value, lower = 0, .var.name = arg)
+    if(!is.null(x$structural_bridge_type) && as.integer(x$structural_bridge_type) %in% c(1L, 2L)){
+      checkmate::assert_true(value > 0, .var.name = paste0(arg, " when structural_bridge_type > 0"))
+    }
+    if(!is.null(stan_data$P)){
+      checkmate::assert_true(value < 1 / (stan_data$P + 1), .var.name = arg)
+    }
+  } else if (arg %in% c("structural_bridge_sigma_scale")) {
+    P <- if(!is.null(stan_data$P)) stan_data$P else length(value)
+    checkmate::assert_numeric(value, len = P, any.missing = FALSE, .var.name = arg)
+    if(any(value < 1e-12)){
+      stop("structural_bridge_sigma_scale must be at least 1e-12 for every eta coordinate.", call. = FALSE)
     }
   } else {
     stop(arg, " is not implemented.")

@@ -9,3 +9,4 @@ TODO.*
 /tests/testthat/stan_code/*
 !/tests/testthat/stan_code/*.*
 
+.positai

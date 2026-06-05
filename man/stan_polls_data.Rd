@@ -149,6 +149,77 @@ Example: If only 2010-01-15 is used, all dates up to and including 2010-01-15, w
 Generate Stan Data from [polls_data] objects
 }
 \details{
+For `model8m10`, `hyper_parameters` can include `structural_bridge_type`,
+`structural_bridge_window`, `structural_bridge_x_target_path`,
+`structural_bridge_alpha_week`, `structural_bridge_sigma_scale`, and
+`structural_bridge_epsilon`.
+`structural_bridge_type = 0` means no bridge, while
+`structural_bridge_type = 1` or `"x_drift"` enables a state-dependent
+x-scale drift for selected parties. `structural_bridge_type = 2` or
+`"constant_gain_pull"` enables a constant-gain convex pull toward the
+structural vote-share path for selected parties. `structural_bridge_window`
+supplies one global inclusive calendar date range for both x-scale drift and
+bridge-specific sigma scaling. The high-level
+`structural_bridge_x_target_path` data frame should contain `y`, `from_x`,
+and `to_x`; party names are matched through `y_name`. For `"x_drift"`,
+`from_x` and `to_x` define the total x-scale drift size, `to_x - from_x`,
+which is allocated over active bridge steps in proportion to `delta_days_t`.
+They are not an attractor endpoint.
+For example, if the sampled party vote share at the bridge start is 0.028
+and `from_x = 0.025`, `to_x = 0.043`, the bridge adds 0.018, so absent
+innovations the drift points toward 0.046, not 0.043. For
+`"constant_gain_pull"`, `from_x` and `to_x` define the selected-party
+structural target path, and `structural_bridge_alpha_week` is the weekly
+gap-closing fraction. A half-life of `H` days corresponds to
+`1 - 2^(-7 / H)`. The derived low-level `structural_bridge_x_target_t`
+is a full target-path matrix on the latent time grid. It can contain target
+values at rows where `structural_bridge_active_t == 0`, especially the
+bridge origin. `structural_bridge_active_t` is the source of truth for where
+the bridge prior is applied in the state equation. Since the state
+transition is from `t - 1` into `t`, the bridge origin usually has
+`active_t = 0`, while dates after the origin and up to the target date have
+`active_t = 1`. For example:
+
+\preformatted{date          active_t   x_target_t[L]
+2026-06-08       0          0.026
+2026-06-09       1          0.0262
+...
+2026-09-13       1          0.044}
+
+The bridge window is
+inclusive in calendar time; the bridge prior is applied to latent transitions after
+`from` and through `to`. The `from` and `to` dates must be exact latent
+anchor dates in `time_line$time_line$date`; use `time_scale_overrides` when
+bridge endpoints need to be represented exactly on a coarser latent grid.
+Known states and zero-day steps are forced inactive. `structural_bridge_sigma_scale` is
+ordered by `y_name` when named, must be strictly positive, applies only
+during active bridge steps, and scales eta-coordinate innovations rather than
+vote-share points directly.
+
+Example `model8m10` bridge setup:
+
+\preformatted{time_scale_overrides <- tibble::tibble(
+  from = as.Date("2026-06-04"),
+  to = as.Date("2026-09-13"),
+  time_scale = "day"
+)
+
+hyper_parameters <- list(
+  structural_bridge_window = c(
+    as.Date("2026-06-04"),
+    as.Date("2026-09-13")
+  ),
+  structural_bridge_x_target_path = data.frame(
+    y = "L",
+    from_x = 0.025,
+    to_x = 0.043
+  ),
+  structural_bridge_sigma_scale = c(
+    M = 1, L = 0.5, C = 1, KD = 1,
+    S = 1, V = 1, MP = 1, SD = 1
+  )
+)}
+
 The returned object keeps the existing [stan_data] and [time_line] fields
 unchanged for current models. A parallel future path is attached in
 [stan_data_with_overrides] and [time_line_with_overrides], built using

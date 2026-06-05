@@ -167,8 +167,8 @@ The validator expects:
 `known_state` is a data frame with a `date` column and one column per modeled
 party. Election results are the usual known state.
 
-`time_scale` can be `"day"`, `"week"`, `"month"`, or `"year"`. Models that use
-`step_scale_t`, such as `model8k5`, can also use `time_scale_overrides` to fit
+`time_scale` can be `"day"`, `"week"`, `"month"`, or `"year"` (but only week has been rigorously tested). 
+Models that use `step_scale_t`, such as e.g. `model8k5`, can also use `time_scale_overrides` to fit
 a mostly coarse time grid with selected daily windows.
 
 ## Common tasks
@@ -199,7 +199,7 @@ pop2 <- refit_poll_of_polls(pop, polls_data = updated_polls)
 - `R/`: package functions, S3 methods, Stan data builders, diagnostics,
   plotting, backend adapters, save/load, and refit helpers.
 - `inst/stan_models/`: bundled Stan models. The current checked-in model files
-  include `model8k1`-`model8k5` and `model8m1`-`model8m5`.
+  include `model8k1`-`model8k9` and `model8m1`-`model8m10`.
 - `data/`: packaged `.rda` data, including curated poll and election datasets.
 - `data-raw/`: scripts and source files used to create package data.
 - `tests/testthat/`: unit tests plus optional Stan integration and backend

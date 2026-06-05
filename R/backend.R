@@ -12,6 +12,128 @@ assert_pop_backend <- function(backend){
   checkmate::assert_choice(backend, choices = supported_pop_backends())
 }
 
+#' RStan-only sampler arguments rejected for CmdStanR
+#'
+#' @description
+#' Returns the centrally owned list of RStan-style sampler argument names that
+#' [validate_backend_sample_arguments()] rejects when `backend = "cmdstanr"`.
+#' Users should call [validate_backend_sample_arguments()] rather
+#' than duplicating this list.
+#'
+#' @return Character vector of unsupported RStan-style argument names for
+#'   CmdStanR sampling.
+#'
+#' @keywords internal
+cmdstanr_rstan_only_sample_arguments <- function() {
+  c(
+    "file",
+    "model_name",
+    "control",
+    "iter",
+    "warmup",
+    "cores",
+    "algorithm",
+    "init_r"
+  )
+}
+
+#' CmdStanR-style sampler arguments rejected for RStan
+#'
+#' @description
+#' Returns the centrally owned list of CmdStanR-style sampler argument names
+#' that [validate_backend_sample_arguments()] rejects when `backend = "rstan"`.
+#' Users should call [validate_backend_sample_arguments()] rather
+#' than duplicating this list.
+#'
+#' @return Character vector of unsupported CmdStanR-style argument names for
+#'   RStan sampling.
+#'
+#' @keywords internal
+rstan_cmdstanr_only_sample_arguments <- function() {
+  c(
+    "save_latent_dynamics",
+    "output_dir",
+    "output_basename",
+    "sig_figs",
+    "parallel_chains",
+    "chain_ids",
+    "threads_per_chain",
+    "opencl_ids",
+    "iter_warmup",
+    "iter_sampling",
+    "max_treedepth",
+    "adapt_engaged",
+    "adapt_delta",
+    "step_size",
+    "metric",
+    "metric_file",
+    "inv_metric",
+    "init_buffer",
+    "term_buffer",
+    "window",
+    "fixed_param",
+    "show_messages",
+    "show_exceptions",
+    "diagnostics",
+    "save_metric",
+    "save_cmdstan_config"
+  )
+}
+
+#' Validate backend-specific sampler arguments
+#'
+#' @description
+#' Checks sampler arguments before a backend fit starts. This rejects common
+#' argument names from the other Stan backend so callers supply arguments in
+#' the style expected by the selected backend.
+#'
+#' @param backend Stan backend to validate against. Supported values are
+#'   [rstan] and [cmdstanr].
+#' @param sample_arguments A list of arguments intended for the backend
+#'   sampler.
+#'
+#' @return Invisibly returns `TRUE` when validation succeeds.
+#'
+#' @export
+validate_backend_sample_arguments <- function(backend, sample_arguments) {
+  assert_pop_backend(backend)
+  checkmate::assert_list(sample_arguments, null.ok = TRUE)
+  if(is.null(sample_arguments)) sample_arguments <- list()
+
+  if(backend == "cmdstanr"){
+    found_rstan_only_args <- intersect(
+      names(sample_arguments),
+      cmdstanr_rstan_only_sample_arguments()
+    )
+    if(length(found_rstan_only_args) > 0){
+      stop(
+        "With backend = 'cmdstanr', supply CmdStanR sample arguments directly in '...'. ",
+        "Unsupported RStan-style arguments: ",
+        paste0(found_rstan_only_args, collapse = ", "),
+        ". Use e.g. 'iter_warmup', 'iter_sampling', 'parallel_chains', and 'compile_args'.",
+        call. = FALSE
+      )
+    }
+  }
+  if(backend == "rstan"){
+    found_cmdstanr_only_args <- intersect(
+      names(sample_arguments),
+      rstan_cmdstanr_only_sample_arguments()
+    )
+    if(length(found_cmdstanr_only_args) > 0){
+      stop(
+        "With backend = 'rstan', supply RStan sample arguments directly in '...'. ",
+        "Unsupported CmdStanR-style arguments: ",
+        paste0(found_cmdstanr_only_args, collapse = ", "),
+        ". Use e.g. 'iter', 'warmup', 'chains', 'cores', and 'control'.",
+        call. = FALSE
+      )
+    }
+  }
+
+  invisible(TRUE)
+}
+
 backend_default <- function(x, default) {
   if(is.null(x)) default else x
 }
@@ -97,6 +219,7 @@ backend_sample_cmdstanr <- function(sample_arguments,
      !isTRUE(sample_arguments$fixed_param)) {
     sample_arguments$adapt_engaged <- FALSE
   }
+  sample_arguments <- backend_prepare_cmdstanr_sample_arguments(sample_arguments)
 
   model <- do.call(
     cmdstanr::cmdstan_model,
@@ -109,6 +232,30 @@ backend_sample_cmdstanr <- function(sample_arguments,
     )
   )
   do.call(model$sample, sample_arguments)
+}
+
+#' @keywords internal
+backend_prepare_cmdstanr_sample_arguments <- function(sample_arguments) {
+  checkmate::assert_list(sample_arguments)
+
+  if(is.null(sample_arguments$output_dir)) {
+    # A non-NULL output_dir keeps CmdStanR from treating the CSVs as
+    # finalizer-owned temp files.
+    sample_arguments$output_dir <- backend_new_cmdstanr_output_dir()
+  }
+
+  sample_arguments
+}
+
+#' @keywords internal
+backend_new_cmdstanr_output_dir <- function() {
+  output_dir <- tempfile(
+    pattern = "stanpop-cmdstanr-output-",
+    tmpdir = tempdir(check = TRUE)
+  )
+  dir.create(output_dir, recursive = TRUE, showWarnings = FALSE)
+  checkmate::assert_directory_exists(output_dir, access = "rw")
+  output_dir
 }
 
 #' Compute diagnostics for a backend fit object
