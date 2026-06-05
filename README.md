@@ -167,8 +167,8 @@ The validator expects:
 `known_state` is a data frame with a `date` column and one column per modeled
 party. Election results are the usual known state.
 
-`time_scale` can be `"day"`, `"week"`, `"month"`, or `"year"`. Models that use
-`step_scale_t`, such as `model8k5`, can also use `time_scale_overrides` to fit
+`time_scale` can be `"day"`, `"week"`, `"month"`, or `"year"` (but only week has been rigorously tested). 
+Models that use `step_scale_t`, such as e.g. `model8k5`, can also use `time_scale_overrides` to fit
 a mostly coarse time grid with selected daily windows.
 
 ## Common tasks
