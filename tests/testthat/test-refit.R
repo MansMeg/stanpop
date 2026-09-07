@@ -886,6 +886,61 @@ test_that("refit_poll_of_polls validates inv_metric against changed polls_data b
   )
 })
 
+test_that("refit RStan dimension probe encodes empty ep_inv_x when EP is zero", {
+  refit_prepare_rstan_dimension_probe_data <- get_internal("refit_prepare_rstan_dimension_probe_data")
+
+  stan_data <- list(
+    P = 8L,
+    EP = 0L,
+    ep_inv_x = list()
+  )
+  res <- refit_prepare_rstan_dimension_probe_data(stan_data)
+
+  expect_true(is.array(res$ep_inv_x))
+  expect_identical(dim(res$ep_inv_x), c(0L, 8L))
+  expect_type(res$ep_inv_x, "double")
+})
+
+test_that("refit expected-dimension probe passes sanitized ep_inv_x to RStan", {
+  refit_build_expected_parameter_dimensions <- get_internal("refit_build_expected_parameter_dimensions")
+  seen_data <- NULL
+  constructor_args <- list(
+    model = "model8m10",
+    polls_data = NULL,
+    y = "x",
+    time_scale = "day",
+    time_scale_overrides = NULL,
+    known_state = NULL,
+    model_time_range = NULL,
+    latent_time_ranges = NULL,
+    hyper_parameters = list(use_sigma_ep = 0L),
+    slow_scales = NULL
+  )
+
+  testthat::local_mocked_bindings(
+    stan = function(...) {
+      args <- list(...)
+      seen_data <<- args$data
+      structure(list(), class = "mock_stan_fit")
+    },
+    .package = "rstan"
+  )
+  testthat::local_mocked_bindings(
+    stan_polls_data = function(...) {
+      list(stan_data = list(P = 8L, EP = 0L, ep_inv_x = list()))
+    },
+    backend_get_num_upars = function(...) 42L,
+    backend_get_init_skeleton = function(...) list(list(theta = 0)),
+    .package = "stanpop"
+  )
+
+  res <- refit_build_expected_parameter_dimensions(constructor_args)
+
+  expect_identical(res$num_upars, 42L)
+  expect_true(is.array(seen_data$ep_inv_x))
+  expect_identical(dim(seen_data$ep_inv_x), c(0L, 8L))
+})
+
 test_that("refit_poll_of_polls gives a clear error when changed polls_data invalidates init reuse", {
   pop <- make_mock_pop_for_refit_helpers("rstan")
   new_polls_data <- polls_data(

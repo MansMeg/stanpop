@@ -1560,13 +1560,14 @@ refit_build_expected_parameter_dimensions <- function(constructor_args) {
     hyper_parameters = constructor_args$hyper_parameters,
     slow_scales = constructor_args$slow_scales
   )
+  rstan_data <- refit_prepare_rstan_dimension_probe_data(stan_data$stan_data)
 
   expected_fit <- suppressWarnings(
     utils::capture.output(
       fit <- rstan::stan(
         file = model_context$stan_file,
         model_name = model_context$model_name,
-        data = stan_data$stan_data,
+        data = rstan_data,
         iter = 1,
         warmup = 0,
         chains = 1,
@@ -1580,6 +1581,39 @@ refit_build_expected_parameter_dimensions <- function(constructor_args) {
     num_upars = backend_get_num_upars("rstan", fit),
     init_skeleton = backend_get_init_skeleton("rstan", fit)
   )
+}
+
+#' Prepare Stan data for the RStan refit-dimension probe
+#'
+#' @description
+#' RStan does not accept an empty R list for zero-sized Stan arrays of vectors.
+#' The normal CmdStanR path can handle the empty `ep_inv_x` representation used
+#' when `use_sigma_ep = 0`, but the RStan-only refit dimension probe needs an
+#' explicit zero-extent array.
+#'
+#' @keywords internal
+refit_prepare_rstan_dimension_probe_data <- function(stan_data) {
+  checkmate::assert_list(stan_data)
+
+  has_zero_ep <- !is.null(stan_data$EP) &&
+    length(stan_data$EP) == 1L &&
+    !is.na(stan_data$EP) &&
+    as.integer(stan_data$EP) == 0L
+  has_empty_ep_inv_x <- is.null(stan_data$ep_inv_x) ||
+    (is.list(stan_data$ep_inv_x) && length(stan_data$ep_inv_x) == 0L)
+
+  if(has_zero_ep && has_empty_ep_inv_x) {
+    checkmate::assert_integerish(
+      stan_data$P,
+      len = 1L,
+      lower = 1L,
+      any.missing = FALSE,
+      .var.name = "P"
+    )
+    stan_data$ep_inv_x <- array(0, dim = c(0L, as.integer(stan_data$P)))
+  }
+
+  stan_data
 }
 
 #' Resolve Stan model context for expected-dimension validation
